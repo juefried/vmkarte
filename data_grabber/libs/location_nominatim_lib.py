@@ -10,7 +10,7 @@ from libs.location_mapping_rules_lib import analyze_location_for_country, analyz
 import diskcache as dc
 
 # Diskcache for persistent LRU-Cache
-cache = dc.Cache('location_cache')
+cache = dc.Cache('cache')
 
 # Read configuration file
 with open('config.json', 'r', encoding='utf-8') as f:
@@ -24,8 +24,6 @@ session = requests.Session()
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }
-
-
 
 @cache.memoize(name='nominatim')
 def query_nominatim(searchstring, country_code):
@@ -78,7 +76,7 @@ def examine_locations(members):
             if country_code is not None:
                 nominatim_data = query_nominatim(search_string, country_code)
             else:
-                for cc_try in['de', 'at', 'ch', 'dk', 'fr', None]:
+                for cc_try in['de', 'at,ch', 'dk,fr,nl', None]:
                     nominatim_data = query_nominatim(search_string, cc_try)
                     if nominatim_data:
                         break
