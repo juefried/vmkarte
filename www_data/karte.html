@@ -56,13 +56,10 @@
 		document.getElementById("map").style.marginBottom = "0px";
 	}
 
-	// Replace the usual three characters, but try to recover HTML entities (numerical or named).
-	function html_escape(s) {
-		return s
-			.replace('<', '&lt;')
-			.replace('>', '&gt;')
-			.replace('&', '&amp;')
-			.replace(/&amp;(#[x0-9a-fA-F]+|[a-zA-Z]+);/, '&$1;');
+	function html_escape(str) {
+		var tempDiv = document.createElement('div');
+		tempDiv.textContent = str;
+		return tempDiv.innerHTML;
 	}
 
 	// Search for all tags in the "other" field of member pages, sort them by occurrence, and add them to autocompletion.
@@ -206,7 +203,7 @@
 						+ (v.lr ? '<br /><b>Liegerad:</b> ' + html_escape(v.lr) : '')
 						+ (v.tr ? '<br /><b>Trike:</b> ' + html_escape(v.tr) : '')
 						+ (v.other
-							? '<br />' + html_escape(v.other).replace(hashtag_regex, match => '<a href="https://christoph-moder.de/vmforum-karte/karte.html?other=' + encodeURIComponent(match) + '" title="alle mit diesem Hashtag anzeigen">' + match + '</a>')
+							? '<br />' + html_escape(v.other).replace(hashtag_regex, match => '<a href="karte.html?other=' + encodeURIComponent(match) + '" title="alle mit diesem Hashtag anzeigen">' + match + '</a>')
 							: ''),
 						{ 'closeOnEscapeKey': true }	// Seems to be broken.
 						)
@@ -251,9 +248,11 @@
 
 		// Install protocol handler for geo: protocol; must be a local script, which reformats the coordinates and redirects to BRouter
 		try {
-			window.navigator.registerProtocolHandler('geo', location.protocol + '//christoph-moder.de/vmforum-karte/geo-handler.php?l=%s', 'BRouter-Web');
+			window.navigator.registerProtocolHandler('geo', 'https://christoph-moder.de/vmforum-karte/geo-handler.php?l=%s', 'BRouter-Web');
 		}
-		catch (e) {}
+		catch (e) {
+			console.error(e)
+		}
 
 		form_select = document.getElementById('form_select');
 		form_search = document.getElementById('form_search');
