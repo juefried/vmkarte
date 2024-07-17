@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+	<title>Velomobil-Forum Karte</title>
+
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+	<meta http-equiv="Expires" content="1" />
+	<meta name="viewport" content="width=device-width, user-scalable=yes" />
+	<meta name="HandheldFriendly" content="true" />
+
+	<link rel="stylesheet" type="text/css" href="leaflet/leaflet.css" />
+	<link rel="stylesheet" type="text/css" href="markercluster/MarkerCluster.css" />
+	<link rel="stylesheet" type="text/css" href="markercluster/MarkerCluster.Default.css" />
+	<style type="text/css">
+	/*<![CDATA[*/
+		body { max-width: initial; margin: 0; padding: 0; }
+
+		.leaflet-control-zoom a[href]	{ color: black; text-decoration: inherit; }	/* zoom buttons: black, instead of links */
+		.leaflet-control-layers	{ text-align: left; }			/* layer control: show the layer names left aligned */
+		.leaflet-popup-content	{ font-size: initial; }			/* larger font in popups */
+		.leaflet-div-icon	{ border: none; background: none; }	/* remove DIV of icons */
+	
+		/* make the search controls more beautiful: white background, rounded corners, shadow, a bit padding */
+		#search_controls	{ background-color: #fff; border-radius: 5px; box-shadow: 0 1px 7px rgba(0,0,0,0.65); padding: 6px; }
+		
+		/* red circles for hashtags */
+		.tag_circle	{ stroke: red; fill: red; }
+	/*]]>*/
+	</style>
+
+	<script src="leaflet/leaflet.js" type="text/javascript"></script>
+	<script src="markercluster/leaflet.markercluster.js" type="text/javascript"></script>
+	<script src="vmforum_members.js" type="text/javascript"></script>
+
+	<script type="text/javascript">
+	// <![CDATA[
+
+	// Global variables
+	var map;
+	var markers;
+	var tags = Array();
+	var error_circle;
+	var layer_circles;
+	var form_select;
+	var form_search;
+	const hashtag_regex = RegExp(/(#[a-zA-Z]\w+)/, 'g');
+
+
+	// Make the div element #map cover the whole window.
+	function resize_map_to_full_window()
+	{
+		document.getElementById("map").style.position = "absolute";
+		document.getElementById("map").style.left = "0px";
+		document.getElementById("map").style.width = window.innerWidth + "px";
+		document.getElementById("map").style.height = window.innerHeight + "px";
+		document.getElementById("map").style.marginBottom = "0px";
+	}
+
+	// Replace the usual three characters, but try to recover HTML entities (numerical or named).
+	function html_escape(s) {
+		return s
+			.replace('<', '&lt;')
+			.replace('>', '&gt;')
+			.replace('&', '&amp;')
+			.replace(/&amp;(#[x0-9a-fA-F]+|[a-zA-Z]+);/, '&$1;');
+	}
+
+	// Search for all tags in the "other" field of member pages, sort them by occurrence, and add them to autocompletion.
+	function add_vmforum_tags() {
+
+		let frag = document.createDocumentFragment();
+
+		// Extract hashtags from entries in "other".
+		members
+			// Get all members with text in 'other'
+			.filter(v => v['other'] && v['other'].match(hashtag_regex))
+			// There: search for all hashtags and add them to associative array.
+			.forEach(v => v['other']
+				.match(hashtag_regex)
+				.forEach(w => { s = w.toLowerCase(); tags[s] = tags[s] + 1 || 1; }));
+
+		// Iterate over hashtags, sort them according to descending occurence, and add them to the datalist.
+		Object
+			.keys(tags)
+			.sort((a, b) => tags[b] - tags[a])
+			.forEach(v => frag
+				.appendChild(document.createElement('option'))
+				.appendChild(document.createTextNode(html_escape(v)))
+			);
+		
+		document.getElementById("tags").appendChild(frag);
+	}
+
+	// Make markers not selectable by tab, since there are too many. The tooltip content can still be selected via tab.
+	function remove_tabindex() {
+		Object
+			.values(document.getElementsByClassName('leaflet-marker-icon'))
+			.filter(v => v.tabIndex === 0)
+			.forEach(v => v.tabIndex = -1);
+	}
+
+	function add_vmforum_members() {
+
+		let found_hashtag;
+
+		// First, remove all members.
+		map.eachLayer(l => (l instanceof L.MarkerClusterGroup) && map.removeLayer(l));
+
+		// Clear the hashtag circles, and fill them again.
+		layer_circles.clearLayers();
+
+		// Get URL parameters.
+		urlparams = new URL(window.location).searchParams;
+
+		// If there is a tag parameter, add it to the search for others (with # prepended).
+		if (urlparams.has('tag') && urlparams.get('tag').match(/[a-zA-Z]\w+/))
+			urlparams.set('other', (urlparams.has('other') ? urlparams.get('other') + ' ' : '') + '#' + urlparams.get('tag'));
+	
+		// A circle showing the size of the bounding box given by Nominatim.
+		// Create only one circle and move it to the current marker.
+		error_circle = L.circle([0, 0]).addTo(map);
+
+		// Look if we have a hashtag (take only the first one):
+		// * If we a searching in the free-text field (bit 4 = other and bit 5 = search), look there.
+		// * If there is an URL parameter 'other', look there.
+		// * Otherwise, no hashtag possible.
+		found_tag = (form_select.value & (2**4 + 2**5))
+			? form_search.value.match(hashtag_regex)
+			: urlparams.has('other') 
+			? urlparams.get('other').match(hashtag_regex)
+			: null;
+
+		// Create a markerClusterGroup.
+		markers = L
+				// Cluster all markers within the given radius; by default, the radius is 80 px.
+				// Instead use a user-defined function which decreases the radius with increasing zoom level.
+				.markerClusterGroup({
+					'maxClusterRadius': x => 40 - 3 * (map.getZoom() - 6),
+					'zoomToBoundsOnClick': true
+				})
+
+				// When hovering with the mouse, show all markers of the cluster, but remove their tabindex.
+				.on('clustermouseover', c => { c.layer.spiderfy(); remove_tabindex(); });
+
+		// Create markers from the members array.
+		members
+			// Filter 1: URL parameters
+			// * Iterate over all properties.
+			// * Exclude the member if any of the property checks fail (= the returned array from the inner filter has a non-zero length).
+			// * The check fails if the URL parameter of the current property is set, but the current member does not have this property or the regex match (case insensitive) fails.
+			// * The check succeeds if the property is not in the URL parameters or if the current member has this property and it matches the search if present.
+			.filter(
+				v => !['name', 'vm', 'lr', 'tr', 'other'].filter(n =>
+					urlparams.has(n) && (
+						!v[n] ||
+						!v[n].match(RegExp(urlparams.get(n), 'i'))
+					)
+				).length
+			)
+
+			// Filter 2: input form (input field + dropdown button)
+			// * Iterate over all properties.
+			// * Include the member if any of the property checks succeed.
+			// * The check succeeds if the bit of the dropdown value that corresponds to the current property is set and the current member has this property.
+			// * If the search bit is set (bit 5), evaluate also the search (by matching the current property of the current member with the regex from the input field (case insensitive)).
+			// * By default, the dropdown button has the value 1 which corresponds to the name property; since all members have names, this makes all members appear on the map.
+			.filter(
+				v => ['name', 'vm', 'lr', 'tr', 'other'].filter((n, i) => 
+					(form_select.value & 2**i) &&
+					v[n] &&
+					(form_select.value & 2**5
+						? v[n].match(RegExp(form_search.value, 'i'))
+						: true
+					)
+				).length
+			)
+
+			// Add a marker with popup to the markerClusterGroup for each remaining member.
+			.forEach( function(v) {
+				markers.addLayer(
+					L
+					// Add the marker on the member’s address.
+					.marker(
+						[v.lat, v.lon],
+						{
+							// Set the name + bikes as tooltip (separate name and bikes with newline, separate bikes with comma, surround bike string with parentheses).
+							'title': [
+								html_escape(v.name),
+								['vm', 'lr', 'tr']
+									.filter(n => v[n])
+									.map(n => html_escape(v[n]))
+									.join(', ')
+									.replace(/^.+$/, '($&)')
+								].join('\n')
+						})
+
+					// Format the popup.
+					.bindPopup(
+						'<a href="https://www.velomobilforum.de/forum/index.php?members/'
+						+ v.id
+						+ '/" title="Mitglieder-Profil im Forum"><b>'
+						+ html_escape(v.name)
+						+ '</b></a>'
+						+ ' <a href="geo:' + v.lat + ',' + v.lon + '" title="Koordinaten, z.B. für BRouter">🌐</a>'
+						+ (v.vm ? '<br /><b>Velomobil:</b> ' + html_escape(v.vm) : '')
+						+ (v.lr ? '<br /><b>Liegerad:</b> ' + html_escape(v.lr) : '')
+						+ (v.tr ? '<br /><b>Trike:</b> ' + html_escape(v.tr) : '')
+						+ (v.other
+							? '<br />' + html_escape(v.other).replace(hashtag_regex, match => '<a href="https://christoph-moder.de/vmforum-karte/karte.html?other=' + encodeURIComponent(match) + '" title="alle mit diesem Hashtag anzeigen">' + match + '</a>')
+							: ''),
+						{ 'closeOnEscapeKey': true }	// Seems to be broken.
+						)
+					// Close popup when Escape key is pressed.
+					.on('keydown', e => e.originalEvent.key === 'Escape' && e.target.closePopup() )
+
+					// When hovering over the marker, move the error circle there and set its radius;
+					// when moving away, set stroke and fill to false.
+					.on('mouseover', x => error_circle
+								.setLatLng([v.lat, v.lon])
+								.setRadius(v.radius)
+								.setStyle({'stroke': true, 'fill': true}))
+					.on('mouseout', x => error_circle
+								.setStyle({'stroke': false, 'fill': false}))
+				);
+				
+				// If a hashtag has been found, look if:
+				// * the current member has it.
+				// * it has a radius attached.
+				// Then, add a circle.
+				if (found_tag) {
+
+					// Search for a radius after the hashtag, and add a circle if found.
+					if (tag_radius = v.other.match(RegExp(found_tag[0] + '=([0-9.]+)km', 'i'))) {
+						layer_circles.addLayer(
+							L.circle([v.lat, v.lon], 
+							{
+								'radius': tag_radius[1] * 1000,
+								'className': 'tag_circle'
+							}));
+					}
+				}
+			});
+
+		map.addLayer(markers);
+
+		remove_tabindex();
+	}
+
+	function create_map() {
+
+		// Install protocol handler for geo: protocol; must be a local script, which reformats the coordinates and redirects to BRouter
+		try {
+			window.navigator.registerProtocolHandler('geo', location.protocol + '//christoph-moder.de/vmforum-karte/geo-handler.php?l=%s', 'BRouter-Web');
+		}
+		catch (e) {}
+
+		form_select = document.getElementById('form_select');
+		form_search = document.getElementById('form_search');
+
+		// Make the map container cover the whole browser window.
+		resize_map_to_full_window();
+
+		// Create map, without animations and without attribution line.
+		map = L.map('map', {
+			'attributionControl': false,
+			'zoomAnimation': false,
+			'fadeAnimation': false,
+
+			// Use Openstreetmap as tile layer.
+			}).addLayer(
+				L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {'useCache': true})
+			
+			// Set initial view to Germany.
+			).setView([50, 11], 7);
+
+		// Add the input form as a Leaflet control into the top right corner.
+		search_control = new L.Control({ position: 'topright'});
+		search_control.onAdd = map => document.getElementById('search_controls');
+		search_control.addTo(map);
+		
+		// Attach events to the input form: Update the member markers if the dropdown is clicked or changed or Enter is pressed in the search field.
+		L.DomEvent.on(document.getElementById('form_select'), 'click change', add_vmforum_members);
+
+		// Enter key: perform the search; already at keydown, but also when selecting from autocomplete, value is only available after keyup.
+		L.DomEvent.on(form_search, 'keydown keyup', e => e.key === 'Enter' && add_vmforum_members());
+
+		// Switch search type, but only after key is released, when the value has been updated.
+		L.DomEvent.on(form_search, 'keyup', function(e) {
+			// First character = "#": switch to hashtag search.
+			if (form_search.value.match(/^#/))
+				form_select.selectedIndex = 7;
+			// Other first character: switch to general search if first character entered or in hashtag search
+			else if ((form_search.value.match(/^[^#]$/) && e.key !== 'Backspace' && e.key !== 'Delete')
+				|| (form_search.value.match(/^[^#]/) && form_select.selectedIndex === 7))
+				form_select.selectedIndex = 8;
+		});
+	
+		// Add a layerGroup for all hashtag circles; empty at the beginning.
+		layer_circles = L.layerGroup();
+		map.addLayer(layer_circles);
+
+		// Add all markers at the beginning.
+		add_vmforum_members();
+	
+		// Add the tags to the search field.
+		add_vmforum_tags();
+
+		// Add the accessKey of the element to its tooltip.
+		Object
+			.values(document.getElementsByTagName('*'))
+			.filter(v => v.accessKey)
+			.forEach(v => v.title += '\n[' + (v.accessKeyLabel ? v.accessKeyLabel : 'Taste: ' + v.accessKey) + ']');
+	}
+
+	// ]]>
+	</script>
+
+</head>
+
+<body onLoad="create_map();" onResize="resize_map_to_full_window(); if (map) map.invalidateSize();">
+	<div id="map" name="map"></div>
+	<div id="search_controls">
+		<input id="form_search" list="tags" title="Suche (siehe Auswahl rechts) (Regex);&#10;abschicken = Eingabetaste oder klick rechts" autocomplete="off" enterkeyhint="search" accesskey="f">
+		<select id="form_select" title="Auswahl oder Textsuche" accesskey="s">
+			<option value="1" selected="selected">alle</option>
+			<option value="2" title="Velomobil angegeben">nur mit Velomobil</option>
+			<option value="4" title="Liegerad angegeben">nur mit Liegerad</option>
+			<option value="8" title="Trike angegeben">nur mit Trike</option>
+			<option value="16" title="Inhalt im Freitext-Feld">nur Sonstiges</option>
+			<option value="33" title="mit Suchfeld links, nach Benutzername (Regex)">suche Namen</option>
+			<option value="46" title="mit Suchfeld links; VM, Liegerad oder Trike (Regex)">suche Fahrrad</option>
+			<option value="48" title="mit Suchfeld links; Freitext und Tags (Regex)">suche Hashtags/Sonstiges</option>
+			<option value="63" title="mit Suchfeld links; überall (Regex)">suche überall</option>
+		</select>
+		<datalist id="tags">
+		</datalist>
+	</div>
+</body>
+</html>
+

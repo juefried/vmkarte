@@ -1,0 +1,116 @@
+{
+  "de": [
+    "D",
+    "DE",
+    "Deutschland",
+    "Germany"
+  ],
+  "at": [
+    "A",
+    "Austria",
+    "Österreich",
+    "Wien",
+    "Graz"
+  ],
+  "ch": [
+    "CH",
+    "Schweiz",
+    "Suisse",
+    "Helvecia",
+    "Switzerland"
+  ],
+  "it": [
+    "I",
+    "Italien",
+    "Italia",
+    "Italy"
+  ],
+  "nl": [
+    "NL",
+    "Niederlande",
+    "Netherlands",
+    "Holland"
+  ],
+  "be": [
+    "B",
+    "Belgien",
+    "Belgie"
+  ],
+  "fr": [
+    "F",
+    "FR",
+    "Frankreich",
+    "France"
+  ],
+  "gb": [
+    "UK",
+    "U.K.",
+    "GB",
+    "Großbritannien",
+    "England",
+    "Schottland",
+    "Scotland",
+    "Scotlands",
+    "Brittany"
+  ],
+  "dk": [
+    "DK",
+    "Dänemark",
+    "Denmark",
+    "Danmark"
+  ],
+  "no": [
+    "N",
+    "Norwegen",
+    "Norge",
+    "Norway"
+  ],
+  "se": [
+    "S",
+    "Schweden",
+    "Sverige",
+    "Sweden",
+    "Uppsala"
+  ],
+  "fi": [
+    "FIN",
+    "Finnland",
+    "Finland"
+  ],
+  "pl": [
+    "Polen"
+  ],
+  "es": [
+    "Spanien",
+    "Spain"
+  ],
+  "sk": [
+    "SK",
+    "Slowakei"
+  ],
+  "si": [
+    "Slowenien"
+  ],
+  "us": [
+    "USA"
+  ],
+  "ca": [
+    "CAN",
+    "Kanada",
+    "Canada"
+  ],
+  "au": [
+    "Australien",
+    "Australia"
+  ],
+  "hu": [
+    "HUN",
+    "Ungarn",
+    "Magyarország",
+    "Budapest"
+  ],
+  "kr": [
+    "Kroatien",
+    "Croatia"
+  ]
+}
