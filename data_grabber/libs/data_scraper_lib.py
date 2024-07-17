@@ -1,6 +1,9 @@
 import json
 import requests
 from bs4 import BeautifulSoup
+import diskcache as dc
+
+cache = dc.Cache('cache')
 
 # Read configuration file
 with open('config.json', 'r', encoding='utf-8') as f:
@@ -59,16 +62,19 @@ def download_members():
     members = []
 
     for i in range(1, pages + 1):
-        try:
-            print(f"Downloading member list page {i}/{pages} ...")
-            page = session.get(f'https://www.velomobilforum.de/forum/index.php?members/list/&page={i}', headers=headers)
-            page.raise_for_status()
-            soup = BeautifulSoup(page.text, 'html.parser')
-            members.extend(parse_members(soup))
-        except Exception as e:
-            print(f"An error occurred while downloading page {i}: {e}")
-
+        print(f"Processing member list page {i}/{pages} ...")
+        members.extend(download_page(i))
     return members
+
+@cache.memoize(name='member_page', expire=60*60*24)
+def download_page(page):
+    try:
+        page = session.get(f'https://www.velomobilforum.de/forum/index.php?members/list/&page={page}', headers=headers)
+        page.raise_for_status()
+        soup = BeautifulSoup(page.text, 'html.parser')
+        return parse_members(soup)
+    except Exception as e:
+        print(f"An error occurred while downloading page {page}: {e}")
 
 def parse_members(soup):
     members = []
@@ -85,11 +91,12 @@ def parse_members(soup):
             member_data['location'] = location_div.find('a').get_text()
 
         profile_url = f"https://www.velomobilforum.de{user['href']}about"
-        fetch_user_details(profile_url, member_data)
+        user_details = fetch_user_details(profile_url, member_data)
 
-        members.append(member_data)
+        members.append(user_details)
     return members
 
+@cache.memoize(name='user_details', expire=60*60*24)
 def fetch_user_details(profile_url, member):
     try:
         response = session.get(profile_url, headers=headers)
@@ -111,3 +118,4 @@ def fetch_user_details(profile_url, member):
                 member['other'] = dd
     except Exception as e:
         print(f"An error occurred while fetching user details from {profile_url}: {e}")
+    return member
