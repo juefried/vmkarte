@@ -66,7 +66,7 @@ def download_members():
         members.extend(download_page(i))
     return members
 
-@cache.memoize(name='member_page', expire=60*60*24)
+@cache.memoize(name='member_page', expire=60*60*23)
 def download_page(page):
     try:
         page = session.get(f'https://www.velomobilforum.de/forum/index.php?members/list/&page={page}', headers=headers)
@@ -96,7 +96,7 @@ def parse_members(soup):
         members.append(user_details)
     return members
 
-@cache.memoize(name='user_details', expire=60*60*24)
+@cache.memoize(name='user_details', expire=60*60*23)
 def fetch_user_details(profile_url, member):
     try:
         response = session.get(profile_url, headers=headers)
