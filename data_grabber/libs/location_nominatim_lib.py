@@ -59,8 +59,10 @@ def calculate_radius(boundingbox):
 def examine_locations(members):
     updated_members = []
     total_members = len(members)
-    for index, member in enumerate(members):
-        location = member.get('location')
+
+    for index, uid in enumerate(members, start=1):
+        member = members[uid]
+        location = member.get('location', "").lower()
         postal_code = None
         country_code = None
         if location:
@@ -76,7 +78,7 @@ def examine_locations(members):
             if country_code is not None:
                 nominatim_data = query_nominatim(search_string, country_code)
             else:
-                for cc_try in['de', 'at,ch', 'dk,fr,nl', None]:
+                for cc_try in['de','at','ch','dk','fr','nl', None]:
                     nominatim_data = query_nominatim(search_string, cc_try)
                     if nominatim_data:
                         break
@@ -91,6 +93,6 @@ def examine_locations(members):
             member['country_code'] = country_code
             updated_members.append(member)
 
-        print(f"Datensatz {index + 1} / {total_members} verarbeitet")
+        print(f"Datensatz {index} / {total_members} verarbeitet")
 
     return updated_members
