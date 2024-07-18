@@ -10,7 +10,7 @@ def list_cache_contents(cache, cache_names=None):
 
         # Print the header
         print(f"{'Key':<30} {'Size (Bytes)':<15}")
-        print("="*70)
+        print("="*45)
 
         # Funktion zur Größenberechnung
         def get_item_size(item):
@@ -59,38 +59,67 @@ def delete_random_data(cache, cache_name, percentage):
 def print_cache_names(cache):
     cache_keys = cache.iterkeys()
 
-    # Dictionary zum Speichern der Größe der benannten Caches
+    # Dictionary to store the size and count of items in named caches
     named_caches = {}
 
     for key in cache_keys:
-        # Schlüssel können Tuples sein, bei denen der erste Teil der Name des benannten Caches ist
+        # Keys can be tuples where the first part is the name of the named cache
         if isinstance(key, tuple) and len(key) > 1:
             cache_name = key[0]
             item = cache.get(key, read=False)
             size = len(item) if item else 0
             if cache_name in named_caches:
-                named_caches[cache_name] += size
+                named_caches[cache_name]['size'] += size
+                named_caches[cache_name]['count'] += 1
             else:
-                named_caches[cache_name] = size
+                named_caches[cache_name] = {'size': size, 'count': 1}
 
     if not named_caches:
         print("No named caches found.")
     else:
-        print(f"{'Named Cache':<30} {'Size (Bytes)':<15}")
-        print("="*45)
-        for name, size in named_caches.items():
-            print(f"{name:<30} {size:<15}")
+        print(f"{'Named Cache':<30} {'Size (Bytes)':<15} {'Item Count':<15}")
+        print("="*60)
+        for name, info in named_caches.items():
+            print(f"{name:<30} {info['size']:<15} {info['count']:<15}")
+        print()
+
+def delete_named_cache(cache, cache_name):
+    named_cache_keys = [key for key in cache.iterkeys() if isinstance(key, tuple) and key[0] == cache_name]
+
+    total_items = len(named_cache_keys)
+
+    if total_items == 0:
+        print(f"No items found in named cache '{cache_name}'.")
+        return
+
+    print(f"Found {total_items} items in named cache '{cache_name}'.")
+
+    # Delete all keys
+    for key in named_cache_keys:
+        try:
+            print(f"Deleting key: {key}")
+            del cache[key]
+        except KeyError:
+            print(f"Key not found: {key}")
+        except Exception as e:
+            print(f"Error deleting key {key}: {e}")
+
+    print(f"All items deleted from named cache '{cache_name}'.")
 
 
 
 # Specify the directory containing the disk cache
 # Öffnen des Disk-Cache
-cache = dc.Cache('cache')
+cache = dc.Cache('../cache')
 
+
+#del cache[('nominatim','5020 salzburg','de',None)]
 print_cache_names(cache)
-#list_cache_contents(cache, 'user_details')
+#delete_named_cache(cache, "user_details")
 #delete_random_data(cache, "member_page", 100)
 #delete_random_data(cache, "user_details", 100)
-#delete_random_data(cache, "nominatim", 0)
+#delete_random_data(cache, "nominatim", 100)
+#delete_random_data(cache, "members_dict", 100)
+list_cache_contents(cache, 'nominatim')
 
 cache.close()
