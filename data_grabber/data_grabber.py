@@ -1,12 +1,11 @@
 import json
 
-from libs.data_scraper_lib import login, get_pages, download_members, parse_members, fetch_user_details
+from libs.data_scraper_lib import get_member_data
 from libs.location_nominatim_lib import examine_locations
 
 def main():
 
-    login()
-    members = download_members()
+    members = get_member_data()
     print(f"Total members parsed: {len(members)}")  # Print the total number of members parsed
 
     members = examine_locations(members)
