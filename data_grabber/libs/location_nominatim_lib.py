@@ -71,13 +71,9 @@ def examine_locations(members):
             postal_code = analyze_location_for_postal_code(location)
 
             nominatim_data = None
-            search_string = location
-
-            if (country_code is not None and country_code == 'de' and postal_code is not None):
-                search_string = postal_code
 
             if country_code is not None:
-                nominatim_data = query_nominatim(search_string, country_code)
+                nominatim_data = query_nominatim(location, country_code)
             else:
                 cc_try_list = None
                 if postal_code is not None:
@@ -89,7 +85,7 @@ def examine_locations(members):
                     cc_try_list = ['de', 'at', 'ch', None]
 
                 for cc_try in cc_try_list:
-                    nominatim_data = query_nominatim(search_string, cc_try)
+                    nominatim_data = query_nominatim(location, cc_try)
                     if nominatim_data:
                         break
 

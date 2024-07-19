@@ -17,6 +17,7 @@ def get_country_code(country_name, country_mapping):
 def prepare_location(location):
     location = location.lower()
     location = location.replace("(centro storico)", "")
+    location = location.replace("ottenhofen b. münchen", "ottenhofen")
     location = ' '.join(location.strip().split())
     return location
 
