@@ -2,6 +2,7 @@
 
 import argparse
 import diskcache as dc
+import os
 
 def main():
     # Argument parser für die Befehlszeilenparameter
@@ -11,10 +12,14 @@ def main():
     args = parser.parse_args()
 
     uid = args.uid
-    cache_name = 'my_named_cache'  # Fester Name des Caches
+    cache_name = 'user_details'  # Fester Name des Caches
+
+    # Berechne den Pfad zum Cache relativ zum Skript
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    cache_path = os.path.join(script_dir, '../cache')
 
     # Öffne den benannten Cache
-    cache = dc.Cache('../cache')
+    cache = dc.Cache(cache_path)
 
     # Schlüssel für die uid im Cache
     key = ('user_details', uid)
