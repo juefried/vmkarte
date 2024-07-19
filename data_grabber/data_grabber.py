@@ -1,15 +1,22 @@
-import json
+#!/usr/bin/python3
 
+import json
+import argparse
 from libs.data_scraper_lib import get_member_data
 from libs.location_nominatim_lib import examine_locations
 from libs.cache_thinning_lib import delete_random_cache_data
 
 def main():
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--fast', action='store_true', help='nutze den cache maximal aus')
+    args = parser.parse_args()
+
     # Mischt den Cache auf, um eine bessere Verteilung der Ablaufdaten zu erzielen.
     # Kann nach ein paar Monaten wieder entfernt werden.
-    delete_random_cache_data("user_details", 1)
-    delete_random_cache_data("nominatim", 1)
+    if not args.fast:
+        delete_random_cache_data("user_details", 1)
+        delete_random_cache_data("nominatim", 1)
 
     members = get_member_data()
     print(f"Total members parsed: {len(members)}")  # Print the total number of members parsed
