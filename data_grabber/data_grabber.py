@@ -2,15 +2,19 @@ import json
 
 from libs.data_scraper_lib import get_member_data
 from libs.location_nominatim_lib import examine_locations
+from libs.cache_thinning_lib import delete_random_cache_data
 
 def main():
+
+    # Mischt den Cache auf, um eine bessere Verteilung der Ablaufdaten zu erzielen.
+    # Kann nach ein paar Monaten wieder entfernt werden.
+    delete_random_cache_data("user_details", 1)
+    delete_random_cache_data("nominatim", 1)
 
     members = get_member_data()
     print(f"Total members parsed: {len(members)}")  # Print the total number of members parsed
 
     members = examine_locations(members)
-    with open('members_examined.json', 'w', encoding='utf-8') as file:
-        json.dump(members, file, ensure_ascii=False, indent=4)
 
     vmforum_members = []
     for member in members:
