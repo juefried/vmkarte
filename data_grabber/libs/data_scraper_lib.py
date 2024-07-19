@@ -62,7 +62,7 @@ def get_members_from_dictionary_soup(soup):
         members.append(member)
     return members
 
-@cache.memoize(name='members_dict', expire=60*60*24*14-60*60)
+@cache.memoize(name='members_dict', expire=60*60*24-60*60)
 def get_members_dictionary():
 
     members_dict = {}

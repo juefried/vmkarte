@@ -25,7 +25,7 @@ headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
 }
 
-@cache.memoize(name='nominatim')
+@cache.memoize(name='nominatim', expire=60*60*24*365)
 def query_nominatim(searchstring, country_code):
     try:
         if searchstring is not None:
@@ -79,17 +79,19 @@ def examine_locations(members):
             if country_code is not None:
                 nominatim_data = query_nominatim(search_string, country_code)
             else:
+                cc_try_list = None
                 if postal_code is not None:
-                    cc_try_list = None
                     if len(postal_code) == 5:
                         cc_try_list = ['de', 'fr', 'fi', 'it', None]
                     else:
                         cc_try_list = ['at', 'ch', 'dk', 'nl', None]
+                else:
+                    cc_try_list = ['de', 'at', 'ch', None]
 
-                    for cc_try in cc_try_list:
-                        nominatim_data = query_nominatim(search_string, cc_try)
-                        if nominatim_data:
-                            break
+                for cc_try in cc_try_list:
+                    nominatim_data = query_nominatim(search_string, cc_try)
+                    if nominatim_data:
+                        break
 
             if nominatim_data:
                 member['lat'] = nominatim_data.get('lat', 'N/A')
