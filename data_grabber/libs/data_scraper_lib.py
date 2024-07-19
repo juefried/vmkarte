@@ -103,7 +103,7 @@ def get_member_data():
     num_members = len(members_dict)
     for i, uid in enumerate(members_dict, start=1):
         member = members_dict[uid]
-        print(f'Processing Member "{member['name']}" {i}/{num_members}')
+        print(f'Processing Member {member["name"]}   {i} / {num_members}')
         member = {key: member[key] for key in sorted(member)}
         members_dict[uid]=fetch_user_details(member)
     return members_dict
