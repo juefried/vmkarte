@@ -18,9 +18,13 @@ def prepare_location(location):
     location = location.lower()
     location = location.replace("(centro storico)", "")
     location = location.replace("ottenhofen b. münchen", "ottenhofen")
+    location = location.replace("86399 landkreis augsburg", "86399 bobingen")
+    location = location.replace("kreis ludwigsburg", "landkreis ludwigsburg")
+    location = location.replace("großraum ", "")
+    location = location.replace("umland ", "")
+    location = location.replace("(15 km no von stuttgart)", "")
     location = ' '.join(location.strip().split())
     return location
-
 
 def analyze_location_for_country(location):
     location = location.lower()
