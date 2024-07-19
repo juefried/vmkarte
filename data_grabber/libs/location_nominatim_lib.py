@@ -6,7 +6,7 @@ import requests
 from urllib.parse import quote
 from time import sleep
 from geopy.distance import geodesic
-from libs.location_mapping_rules_lib import analyze_location_for_country, analyze_location_for_postal_code
+from libs.location_mapping_rules_lib import analyze_location_for_country, analyze_location_for_postal_code, prepare_location
 import diskcache as dc
 
 # Diskcache for persistent LRU-Cache
@@ -63,6 +63,7 @@ def examine_locations(members):
     for index, uid in enumerate(members, start=1):
         member = members[uid]
         location = member.get('location', "").lower()
+        location = prepare_location(location)
         postal_code = None
         country_code = None
         if location:
@@ -72,16 +73,23 @@ def examine_locations(members):
             nominatim_data = None
             search_string = location
 
-            if (country_code is not None and postal_code is not None):
+            if (country_code is not None and country_code == 'de' and postal_code is not None):
                 search_string = postal_code
 
             if country_code is not None:
                 nominatim_data = query_nominatim(search_string, country_code)
             else:
-                for cc_try in['de','at','ch','dk','fr','nl', None]:
-                    nominatim_data = query_nominatim(search_string, cc_try)
-                    if nominatim_data:
-                        break
+                if postal_code is not None:
+                    cc_try_list = None
+                    if len(postal_code) == 5:
+                        cc_try_list = ['de', 'fr', 'fi', 'it', None]
+                    else:
+                        cc_try_list = ['at', 'ch', 'dk', 'nl', None]
+
+                    for cc_try in cc_try_list:
+                        nominatim_data = query_nominatim(search_string, cc_try)
+                        if nominatim_data:
+                            break
 
             if nominatim_data:
                 member['lat'] = nominatim_data.get('lat', 'N/A')

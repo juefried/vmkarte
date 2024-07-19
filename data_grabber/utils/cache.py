@@ -113,12 +113,12 @@ def delete_named_cache(cache, cache_name):
 cache = dc.Cache('../cache')
 
 
-#del cache[('nominatim','5020 salzburg','de',None)]
+#del cache[('nominatim', 'venezia (centro storico) - italia', 'it', None)]
 print_cache_names(cache)
 #delete_named_cache(cache, "user_details")
-#delete_random_data(cache, "member_page", 100)
-#delete_random_data(cache, "user_details", 100)
-#delete_random_data(cache, "nominatim", 100)
+#delete_random_data(cache, "member_page", 1)
+#delete_random_data(cache, "user_details", 1)
+#delete_random_data(cache, "nominatim", 1)
 #delete_random_data(cache, "members_dict", 100)
 list_cache_contents(cache, 'nominatim')
 

@@ -14,6 +14,12 @@ def get_country_code(country_name, country_mapping):
             return country_code
     return None
 
+def prepare_location(location):
+    location = location.lower()
+    location = location.replace("(centro storico)", "")
+    location = ' '.join(location.strip().split())
+    return location
+
 
 def analyze_location_for_country(location):
     location = location.lower()
