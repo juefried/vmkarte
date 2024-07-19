@@ -14,6 +14,12 @@ def get_country_code(country_name, country_mapping):
             return country_code
     return None
 
+def prepare_location(location):
+    location = location.lower()
+    location = location.replace("(centro storico)", "")
+    location = ' '.join(location.strip().split())
+    return location
+
 
 def analyze_location_for_country(location):
     location = location.lower()
@@ -23,7 +29,6 @@ def analyze_location_for_country(location):
     match = re.match(r'^([A-Za-z]{1,3})[ -](\d{4,5})', location)
     if match:
         country_code = get_country_code(match.group(1), country_mapping)
-        postal_code = match.group(2)
         if country_code is not None:
             return country_code
 
@@ -46,9 +51,6 @@ def analyze_location_for_country(location):
     match = re.match(r'^[0-9]{4,5}$', words[0])
     if match and len(words[0]) != 5:
         return None
-
-    #if len(words) <= 4:
-    #    return get_country_code("Deutschland", country_mapping)
 
     return None
 

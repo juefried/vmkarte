@@ -10,7 +10,8 @@
     "Austria",
     "Österreich",
     "Wien",
-    "Graz"
+    "Graz",
+    "Salzburg"
   ],
   "ch": [
     "CH",
@@ -112,5 +113,10 @@
   "kr": [
     "Kroatien",
     "Croatia"
+  ],
+  "jp": [
+    "Japan",
+    "Tokyo",
+    "Yokohama"
   ]
 }
