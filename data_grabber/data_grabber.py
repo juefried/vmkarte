@@ -5,14 +5,8 @@ from libs.location_nominatim_lib import examine_locations
 
 def main():
 
-    #members = get_member_data()
-    #print(f"Total members parsed: {len(members)}")  # Print the total number of members parsed
-
-    #with open('members.json', 'w', encoding='utf-8') as file:
-    #    json.dump(members, file, ensure_ascii=False, indent=4)
-
-    with open('members.json', 'r', encoding='utf-8') as file:
-        members = json.load(file)
+    members = get_member_data()
+    print(f"Total members parsed: {len(members)}")  # Print the total number of members parsed
 
     members = examine_locations(members)
     with open('members_examined.json', 'w', encoding='utf-8') as file:
