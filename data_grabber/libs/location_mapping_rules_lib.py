@@ -24,6 +24,7 @@ def prepare_location(location):
     location = location.replace("umland ", "")
     location = location.replace("(15 km no von stuttgart)", "")
     location = location.replace("bei tü", "tübingen")
+    location = location.replace("01099 - doppel-d", "dresden")
     if location.startswith("bei "):
         location = location[len("bei "):]
     location = location.replace("ffb", "Fürstenfeldbruck")
