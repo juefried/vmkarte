@@ -26,6 +26,7 @@ def prepare_location(location):
     location = location.replace("bei tü", "tübingen")
     if location.startswith("bei "):
         location = location[len("bei "):]
+    location = location.replace("ffb", "Fürstenfeldbruck")
     location = ' '.join(location.strip().split())
     return location
 
