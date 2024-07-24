@@ -1,5 +1,6 @@
 import diskcache as dc
 import random
+import os
 
 def list_cache_contents(cache, cache_names=None):
     try:
@@ -106,11 +107,12 @@ def delete_named_cache(cache, cache_name):
 
     print(f"All items deleted from named cache '{cache_name}'.")
 
+# Berechne den Pfad zum Cache relativ zum Skript
+script_dir = os.path.dirname(os.path.abspath(__file__))
+cache_path = os.path.join(script_dir, '../cache')
 
-
-# Specify the directory containing the disk cache
-# Öffnen des Disk-Cache
-cache = dc.Cache('../cache')
+# Öffne den benannten Cache
+cache = dc.Cache(cache_path)
 
 
 #del cache[('nominatim', 'warwickshire.   uk', 'gb', None)]

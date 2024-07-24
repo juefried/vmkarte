@@ -23,6 +23,9 @@ def prepare_location(location):
     location = location.replace("großraum ", "")
     location = location.replace("umland ", "")
     location = location.replace("(15 km no von stuttgart)", "")
+    location = location.replace("bei tü", "tübingen")
+    if location.startswith("bei "):
+        location = location[len("bei "):]
     location = ' '.join(location.strip().split())
     return location
 
