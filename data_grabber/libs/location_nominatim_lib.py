@@ -38,7 +38,7 @@ def query_nominatim(searchstring, country_code):
             response.raise_for_status()
             data = response.json()
             if data:
-                return data[0]
+                return next((entry for entry in data if entry['type'] == 'administrative'), data[0])
     except requests.RequestException as e:
         print(f"An error occurred while fetching location details for \"{searchstring}\", country_code={country_code}: {e}")
     return None
