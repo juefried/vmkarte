@@ -2,11 +2,12 @@ import diskcache as dc
 import random
 import os
 
+
 def list_cache_contents(cache, cache_names=None):
     try:
         # Überprüfen, ob der Cache leer ist
         if len(cache) == 0:
-            print(f"No entries found in the cache directory {cache_dir}.")
+            print(f"No entries found in the cache directory {cache_path}.")
             return
 
         # Print the header
