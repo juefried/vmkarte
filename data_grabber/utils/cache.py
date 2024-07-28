@@ -123,6 +123,10 @@ print_cache_names(cache)
 #delete_random_data(cache, "user_details", 1)
 #delete_random_data(cache, "nominatim", 1)
 #delete_random_data(cache, "members_dict", 100)
+#for key in list(cache.iterkeys()):
+#    if any('berlin' in str(k).lower() for k in key):
+#        del cache[key]
+
 list_cache_contents(cache, 'nominatim')
 
 cache.close()
