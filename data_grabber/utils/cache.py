@@ -172,6 +172,6 @@ print_cache_names(cache)
 #delete_random_data(cache, "nominatim", 1)
 #delete_random_data(cache, "members_dict", 100)
 #list_cache_contents(cache, 'nominatim')
-#delete_from_cache(cache,['stuttgart','nürnberg','augsburg','hamburg','köln','berlin','mainz','düsseldorf','essen','dortmund','duisburg'],"nominatim")
+#delete_from_cache(cache,['stuttgart','nürnberg','augsburg','hamburg','köln','berlin','mainz','düsseldorf','essen','dortmund','duisburg', 'frankfurt', 'leipzig'],"nominatim")
 
 cache.close()
