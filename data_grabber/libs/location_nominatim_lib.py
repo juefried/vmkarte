@@ -39,10 +39,10 @@ def query_nominatim(searchstring, country_code):
             data = response.json()
             if data:
                 for entry in data:
-                    if entry['type'] == 'administrative':
+                    if entry['type'] =='postal_code':
                         return entry
                 for entry in data:
-                    if entry['type'] =='postal_code':
+                    if entry['type'] == 'administrative':
                         return entry
                 return data[0]
 
