@@ -155,6 +155,55 @@ def delete_from_cache(cache, suchstrings, cachename=None):
     except Exception as e:
         print(f"Ein Fehler ist aufgetreten: {e}")
 
+def delete_keys_with_short_strings(cache, cachename=None):
+    """
+    Löscht alle Einträge aus dem Cache, deren Schlüssel aus 1 bis 3 Buchstaben besteht
+    und optional zu einem bestimmten Cachename gehören.
+
+    :param cache: Das Cache-Objekt.
+    :param cachename: Optionaler Name des spezifischen Caches. Wenn angegeben, werden nur die Schlüssel geprüft, die diesem Cachename entsprechen.
+    """
+    try:
+        # Überprüfen, ob der Cache leer ist
+        if len(cache) == 0:
+            print("Der Cache ist leer.")
+            return
+
+        # Schlüssel, die gelöscht werden sollen, finden
+        keys_to_delete = []
+        for key in cache:
+            # Überprüfe das zweite Element im Tupel-Schlüssel, falls vorhanden
+            if isinstance(key, tuple):
+                if len(key) > 1 and isinstance(key[1], str):
+                    second_element = key[1]
+                    # Überprüfen, ob der Cachename übereinstimmt, falls angegeben
+                    if cachename and key[0] != cachename:
+                        continue
+                    # Überprüfen, ob das zweite Element aus 1 bis 3 Buchstaben besteht
+                    if len(second_element) <= 3 and second_element.isalpha():
+                        keys_to_delete.append(key)
+                        print(f"Zu löschender Schlüssel gefunden: {key}")
+            elif isinstance(key, str) and len(key) <= 3 and key.isalpha():
+                if cachename:
+                    # Wenn der Cachename gegeben ist, überspringe nicht-Tupel-Schlüssel
+                    continue
+                keys_to_delete.append(key)
+                print(f"Zu löschender Schlüssel gefunden: {key}")
+
+        # Lösche die gefundenen Schlüssel
+        for key in keys_to_delete:
+            try:
+                del cache[key]
+                print(f"Schlüssel gelöscht: {key}")
+            except KeyError:
+                print(f"Schlüssel nicht gefunden oder bereits gelöscht: {key}")
+
+        if not keys_to_delete:
+            print("Keine passenden Schlüssel zum Löschen gefunden.")
+
+    except Exception as e:
+        print(f"Ein Fehler ist aufgetreten: {e}")
+
 
 # Berechne den Pfad zum Cache relativ zum Skript
 script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -171,7 +220,9 @@ print_cache_names(cache)
 #delete_random_data(cache, "user_details", 1)
 #delete_random_data(cache, "nominatim", 1)
 #delete_random_data(cache, "members_dict", 100)
-#list_cache_contents(cache, 'nominatim')
+list_cache_contents(cache, 'nominatim')
 #delete_from_cache(cache,['stuttgart','nürnberg','augsburg','hamburg','köln','berlin','mainz','düsseldorf','essen','dortmund','duisburg', 'frankfurt', 'leipzig'],"nominatim")
+#delete_from_cache(cache, 'kreis', 'nominatim')
+#delete_keys_with_short_strings(cache, 'nominatim')
 
 cache.close()
