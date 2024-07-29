@@ -7,9 +7,9 @@ with open('libs/country_mapping.json', 'r', encoding='utf-8') as f:
     country_mapping = {k.lower(): [loc.lower() for loc in v] for k, v in country_mapping.items()}
     f.close()
 
-with open('libs/kennzeichen_mapping.json', 'r', encoding='utf-8') as f:
-    kennzeichen_mapping = json.load(f)
-    kennzeichen_mapping = {k.lower(): v.lower() for k, v in kennzeichen_mapping.items()}
+with open('libs/kuerzel_mapping.json', 'r', encoding='utf-8') as f:
+    kuerzel_mapping = json.load(f)
+    kuerzel_mapping = {k.lower(): v.lower() for k, v in kuerzel_mapping.items()}
     f.close()
 
 def get_country_code(country_name, country_mapping):
@@ -35,10 +35,10 @@ def prepare_location(location):
     match = re.match(r'^(\d{5})(\s+bei)?\s+([a-zäöüß]{1,3})$', location)
     if match:
         plz, bei, code = match.groups()
-        if code in kennzeichen_mapping:
-            location = f"{plz} {kennzeichen_mapping[code]}".lower()
-    if len(location) >= 1 and len(location) <= 3 and location.isalpha() and location in kennzeichen_mapping:
-        location = kennzeichen_mapping.get(location, location)
+        if code in kuerzel_mapping:
+            location = f"{plz} {kuerzel_mapping[code]}".lower()
+    if len(location) >= 1 and len(location) <= 3 and location.isalpha() and location in kuerzel_mapping:
+        location = kuerzel_mapping.get(location, location)
 
     location = location.replace("(15 km no von stuttgart)", "")
     location = location.replace("01099 - doppel-d", "dresden")
