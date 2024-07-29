@@ -60,6 +60,7 @@ def query_nominatim(searchstring, country_code):
                 'protected_area',
                 'county',
                 'government',
+                'residential'
                 'ceremonial',
                 'island',
                 'station',
