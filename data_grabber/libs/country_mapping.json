@@ -10,11 +10,13 @@
     "Austria",
     "Österreich",
     "Wien",
+    "Vienna",
     "Graz",
     "Salzburg",
     "Innsbruck",
     "Klagenfurt",
-    "Dornbirn"
+    "Dornbirn",
+    "Hohenems"
   ],
   "ch": [
     "CH",
@@ -27,7 +29,14 @@
     "Basel",
     "Schaffhausen",
     "Genf",
-    "Geneva"
+    "Geneva",
+    "Bern",
+    "Biel",
+    "Grenchen",
+    "Granges",
+    "Luzern",
+    "Lausanne",
+    "Winterthur"
   ],
   "it": [
     "I",
@@ -44,7 +53,7 @@
     "Roma",
     "Verona",
     "Turin",
-    "Turino",
+    "Torino",
     "Neapel",
     "Napoli",
     "Genua",
@@ -67,13 +76,17 @@
     "Tilburg",
     "Almere",
     "Breda",
-    "Delft"
+    "Delft",
+    "Zetten",
+    "Ameland"
   ],
   "be": [
     "B",
     "Belgien",
     "Belgie",
-    "Bruxelles"
+    "Bruxelles",
+    "Sankt Vith",
+    "Belgium"
   ],
   "fr": [
     "F",
@@ -92,19 +105,24 @@
     "Scotland",
     "Scotlands",
     "Brittany",
-    "united kingdom"
-  ],
+    "united kingdom",
+    "London"
+   ],
   "dk": [
     "DK",
     "Dänemark",
     "Denmark",
-    "Danmark"
+    "Danmark",
+    "Kopenhagen",
+    "Arhus",
+    "Rye"
   ],
   "no": [
     "N",
     "Norwegen",
     "Norge",
-    "Norway"
+    "Norway",
+    "Oslo"
   ],
   "se": [
     "S",
@@ -141,7 +159,13 @@
   ],
   "us": [
     "USA",
-    "tacoma"
+    "tacoma",
+    "New York",
+    "Los Angeles",
+    "Chicago",
+    "Houston",
+    "Phoenix",
+    "Austin"
   ],
   "ca": [
     "CAN",
@@ -176,5 +200,23 @@
   "uy": [
     "Uruguay",
     "URY"
+  ],
+  "lu": [
+    "Luxenburg",
+    "Luxembourg",
+    "LUX"
+  ],
+  "ru": [
+    "Russian Federation",
+    "Russische Förderation",
+    "Russland",
+    "Russia",
+    "Moskau",
+    "Moskow"
+  ],
+  "bu": [
+    "Bulgarien",
+    "Bulgaria",
+    "Sofia"
   ]
 }

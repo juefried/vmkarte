@@ -24,27 +24,42 @@ def prepare_location(location):
     location = location.lower()
 
     while True:
-        new_location = re.sub(r'^(bei |nähe |von )', '', location)
+        new_location = re.sub(r'^(bei|nähe|nahe|von|in|im) +', '', location)
         if new_location == location:
             break
         location = new_location
 
-    location = location.replace("u.k.", "uk")
-    location = location.replace("united kingdom", "uk")
     location = location.replace("(centro storico)", "")
     location = location.replace("black forest", "schwarzwald")
     location = location.replace("s-h", "schleswig-holstein")
     location = location.replace("b. münchen", "")
     location = location.replace("südhessen", "hessen")
+    location = location.replace("nordhessen", "hessen")
+    location = location.replace("ostbayern", "bayern")
+    location = location.replace("in niederösterreich", "österreich")
+    location = location.replace("süd brandenburg", "brandenburg")
+    location = location.replace("unter- mittelfranken", "mittelfranken")
     location = location.replace("/ hunsrück", "")
+    location = location.replace("/main", "am main")
     location = location.replace("86399 landkreis augsburg", "86399 bobingen")
     location = location.replace("leipziger land", "")
+    location = location.replace("n.r.w", "nrw")
+    location = location.replace("st.vith", "Sankt Vith, Belgien")
     location = location.replace("nürtingen a. n.", "nürtingen")
+    location = location.replace("schwabenländle", "baden würtemberg")
     location = location.replace("ruhrhalbinsel", "überruhr")
+    location = location.replace("umgebung", "")
     location = location.replace("südlicher wienerwald", "wienerwald, austria")
+    location = location.replace("markgräfler land", "markgräflerland")
     location = location.replace("stuttgart-vaihingen", "vaihingen")
+    location = location.replace("40000 germany", "düssedorf")
+    location = location.replace("in obb", "in oberbayern")
+    location = location.replace("79***", "schwarzwald")
+    location = location.replace("75... enzkreis", "enzkreis")
     location = re.sub(r'\bkreis\b(?=\s+[a-zäöüß\-]+)', 'landkreis', location)
     location = re.sub(r'\b((groß)?raum|umland)\b(?=\s+[a-zäöüß\-]+)', '', location)
+    location = location.replace("landkreis plön, sh", "kreis plön")
+    location = location.replace("landkreis waf", "kreis warendorf")
 
     match = re.match(r'^(\d{5})(\s+bei)?\s+([a-zäöüß]{1,3})$', location)
     if match:
@@ -57,7 +72,10 @@ def prepare_location(location):
     location = location.replace("(15 km no von stuttgart)", "")
     location = location.replace("01099 - doppel-d", "dresden")
 
-    if re.match(r'^(hier|an der isar|im norden|nichts)$', location):
+    if re.match(r'^(hier|an der isar|norden|nichts|süden|104x|zentral|tor zur welt|süd-?westen|bird mountains)$', location):
+        return None
+
+    if location.isdigit() and len(location) <= 3:
         return None
 
     location = ' '.join(location.strip().split())
@@ -66,33 +84,34 @@ def prepare_location(location):
 def analyze_location_for_country(location):
     location = location.lower()
 
-    # find country-code with postal code
-    # ^{A-Za-z}{1,3}[ -][a-z]{3,50}
-    match = re.match(r'^([A-Za-z]{1,3})[ -](\d{4,5})', location)
+    # Entferne alle Sonderzeichen außer Buchstaben, Zahlen und Leerzeichen
+    clean_location = re.sub(r'[^\w\s]', '', location)
+
+    # Finde country-code mit Postleitzahl
+    match = re.match(r'^([A-Za-z]{1,3})[ -](\d{4,5})', clean_location)
     if match:
         country_code = get_country_code(match.group(1), country_mapping)
         if country_code is not None:
             return country_code
 
-    words = re.findall(r'\w+', location, re.UNICODE)
+    # Suche nach Ländercode anhand der Wörter im clean_location-String
+    words = re.findall(r'\w+', clean_location, re.UNICODE)
     for word in words:
         if len(word) > 1:
             country_code = get_country_code(word, country_mapping)
             if country_code is not None:
                 return country_code
 
+    # Suche nach Ländercode anhand des gesamten Strings, um Städte wie "New York" zu erkennen
+    for code, names in country_mapping.items():
+        for name in names:
+            if re.search(r'\b' + re.escape(name.lower()) + r'\b', clean_location):
+                return code
+
+    # Standardfall für PLZ in Deutschland
     for word in words:
-        match = re.match(r'^[0-9]{5}$', word)
-        if match:
-            return get_country_code("Deutschland", country_mapping)
-
-    if len(words) == 0:
-        return None
-
-    # Wenn erster Wert eine PLZ ist, aber keine fünf Zeichen hat
-    match = re.match(r'^[0-9]{4,5}$', words[0])
-    if match and len(words[0]) != 5:
-        return None
+        if re.match(r'^[0-9]{5}$', word):
+            return get_country_code("deutschland", country_mapping)
 
     return None
 

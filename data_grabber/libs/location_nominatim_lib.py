@@ -53,10 +53,19 @@ def query_nominatim(searchstring, country_code):
                 'city',
                 'town',
                 'village',
+                'suburb',
                 'region',
                 'hamlet',
                 'political',
-                'protected_area'
+                'protected_area',
+                'county',
+                'government',
+                'ceremonial',
+                'island',
+                'station',
+                'post_office',
+                'motorway_junction',
+                'bus_stop'
             ]
             for entry_type in types_to_check:
                 for entry in data:
