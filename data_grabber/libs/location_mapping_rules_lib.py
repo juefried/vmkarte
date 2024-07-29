@@ -5,7 +5,12 @@ with open('libs/country_mapping.json', 'r', encoding='utf-8') as f:
     country_mapping = json.load(f)
     # Lowercase the country codes and their location names
     country_mapping = {k.lower(): [loc.lower() for loc in v] for k, v in country_mapping.items()}
+    f.close()
 
+with open('libs/kennzeichen_mapping.json', 'r', encoding='utf-8') as f:
+    kennzeichen_mapping = json.load(f)
+    kennzeichen_mapping = {k.lower(): v.lower() for k, v in kennzeichen_mapping.items()}
+    f.close()
 
 def get_country_code(country_name, country_mapping):
     country_name = country_name.lower()
@@ -15,19 +20,29 @@ def get_country_code(country_name, country_mapping):
     return None
 
 def prepare_location(location):
+    location = ' '.join(location.strip().split())
     location = location.lower()
-    location = location.replace("(centro storico)", "")
-    location = location.replace("ottenhofen b. münchen", "ottenhofen")
-    location = location.replace("86399 landkreis augsburg", "86399 bobingen")
-    location = location.replace("kreis ludwigsburg", "landkreis ludwigsburg")
-    location = location.replace("großraum ", "")
-    location = location.replace("umland ", "")
-    location = location.replace("(15 km no von stuttgart)", "")
-    location = location.replace("bei tü", "tübingen")
-    location = location.replace("01099 - doppel-d", "dresden")
+
     if location.startswith("bei "):
         location = location[len("bei "):]
-    location = location.replace("ffb", "Fürstenfeldbruck")
+    location = location.replace("(centro storico)", "")
+    location = location.replace("s-h", "schleswig-holstein")
+    location = location.replace("ottenhofen b. münchen", "ottenhofen")
+    location = location.replace("86399 landkreis augsburg", "86399 bobingen")
+    location = re.sub(r'\bkreis\b(?=\s+[a-zäöüß\-]+)', 'landkreis', location)
+    location = re.sub(r'\b((groß)?raum|umland)\b(?=\s+[a-zäöüß\-]+)', '', location)
+
+    match = re.match(r'^(\d{5})(\s+bei)?\s+([a-zäöüß]{1,3})$', location)
+    if match:
+        plz, bei, code = match.groups()
+        if code in kennzeichen_mapping:
+            location = f"{plz} {kennzeichen_mapping[code]}".lower()
+    if len(location) >= 1 and len(location) <= 3 and location.isalpha() and location in kennzeichen_mapping:
+        location = kennzeichen_mapping.get(location, location)
+
+    location = location.replace("(15 km no von stuttgart)", "")
+    location = location.replace("01099 - doppel-d", "dresden")
+
     location = ' '.join(location.strip().split())
     return location
 
