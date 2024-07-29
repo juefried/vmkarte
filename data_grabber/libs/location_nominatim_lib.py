@@ -8,6 +8,7 @@ from time import sleep
 from geopy.distance import geodesic
 from libs.location_mapping_rules_lib import analyze_location_for_country, analyze_location_for_postal_code, prepare_location
 import diskcache as dc
+import re
 
 # Diskcache for persistent LRU-Cache
 cache = dc.Cache('cache')
@@ -27,29 +28,47 @@ headers = {
 
 @cache.memoize(name='nominatim', expire=60*60*24*365)
 def query_nominatim(searchstring, country_code):
+    if searchstring is None:
+        return None
+    searchstring = searchstring.strip(', ')
     try:
-        if searchstring is not None:
-            searchstring = searchstring.strip(', ')
-            url = f"https://nominatim.openstreetmap.org/search?q={quote(searchstring)}&format=json&addressdetails=1&email={EMAIL}"
-            if country_code is not None:
-                url += f"&countrycodes={country_code}"
-            response = requests.get(url)
-            sleep(1)  # Be polite and do not overwhelm the API with requests
-            response.raise_for_status()
-            data = response.json()
-            if data:
+        if country_code is not None:
+            match = re.match(r'^[a-z]{1,3}-(\d{4,5}.*)$', searchstring)
+            if match:
+                searchstring = match.group(1)
+
+        url = f"https://nominatim.openstreetmap.org/search?q={quote(searchstring)}&format=json&addressdetails=1&email={EMAIL}"
+        if country_code is not None:
+            url += f"&countrycodes={country_code}"
+
+        response = requests.get(url)
+        sleep(1)  # Be polite and do not overwhelm the API with requests
+        response.raise_for_status()
+        data = response.json()
+        if data:
+            types_to_check = [
+                'postal_code',
+                'administrative',
+                'post_box',
+                'city',
+                'town',
+                'village',
+                'region',
+                'hamlet',
+                'political',
+                'protected_area'
+            ]
+            for entry_type in types_to_check:
                 for entry in data:
-                    if entry['type'] =='postal_code':
+                    if entry['type'] == entry_type:
                         return entry
-                for entry in data:
-                    if entry['type'] == 'administrative':
-                        return entry
-                return data[0]
+
+            type = entry['type']
+            return data[0]
 
     except requests.RequestException as e:
         print(f"An error occurred while fetching location details for \"{searchstring}\", country_code={country_code}: {e}")
     return None
-
 
 
 def calculate_radius(boundingbox):

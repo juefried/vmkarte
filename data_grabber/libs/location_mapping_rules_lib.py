@@ -23,12 +23,26 @@ def prepare_location(location):
     location = ' '.join(location.strip().split())
     location = location.lower()
 
-    if location.startswith("bei "):
-        location = location[len("bei "):]
+    while True:
+        new_location = re.sub(r'^(bei |nähe |von )', '', location)
+        if new_location == location:
+            break
+        location = new_location
+
+    location = location.replace("u.k.", "uk")
+    location = location.replace("united kingdom", "uk")
     location = location.replace("(centro storico)", "")
+    location = location.replace("black forest", "schwarzwald")
     location = location.replace("s-h", "schleswig-holstein")
-    location = location.replace("ottenhofen b. münchen", "ottenhofen")
+    location = location.replace("b. münchen", "")
+    location = location.replace("südhessen", "hessen")
+    location = location.replace("/ hunsrück", "")
     location = location.replace("86399 landkreis augsburg", "86399 bobingen")
+    location = location.replace("leipziger land", "")
+    location = location.replace("nürtingen a. n.", "nürtingen")
+    location = location.replace("ruhrhalbinsel", "überruhr")
+    location = location.replace("südlicher wienerwald", "wienerwald, austria")
+    location = location.replace("stuttgart-vaihingen", "vaihingen")
     location = re.sub(r'\bkreis\b(?=\s+[a-zäöüß\-]+)', 'landkreis', location)
     location = re.sub(r'\b((groß)?raum|umland)\b(?=\s+[a-zäöüß\-]+)', '', location)
 
@@ -42,6 +56,9 @@ def prepare_location(location):
 
     location = location.replace("(15 km no von stuttgart)", "")
     location = location.replace("01099 - doppel-d", "dresden")
+
+    if re.match(r'^(hier|an der isar|im norden|nichts)$', location):
+        return None
 
     location = ' '.join(location.strip().split())
     return location

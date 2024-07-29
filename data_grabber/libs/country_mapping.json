@@ -23,7 +23,11 @@
     "Helvecia",
     "Switzerland",
     "Zürich",
-    "Zurich"
+    "Zurich",
+    "Basel",
+    "Schaffhausen",
+    "Genf",
+    "Geneva"
   ],
   "it": [
     "I",
@@ -62,7 +66,8 @@
     "Eindhoven",
     "Tilburg",
     "Almere",
-    "Breda"
+    "Breda",
+    "Delft"
   ],
   "be": [
     "B",
@@ -86,7 +91,8 @@
     "Schottland",
     "Scotland",
     "Scotlands",
-    "Brittany"
+    "Brittany",
+    "united kingdom"
   ],
   "dk": [
     "DK",
@@ -118,7 +124,13 @@
   ],
   "es": [
     "Spanien",
-    "Spain"
+    "Spain",
+    "Madrid",
+    "Barcelona",
+    "Malaga",
+    "Sevilla",
+    "Valencia",
+    "Granada"
   ],
   "sk": [
     "SK",
@@ -128,12 +140,15 @@
     "Slowenien"
   ],
   "us": [
-    "USA"
+    "USA",
+    "tacoma"
   ],
   "ca": [
     "CAN",
     "Kanada",
-    "Canada"
+    "Canada",
+    "Montreal",
+    "Quebec"
   ],
   "au": [
     "Australien",
