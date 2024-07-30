@@ -7,6 +7,21 @@ with open('libs/country_mapping.json', 'r', encoding='utf-8') as f:
     country_mapping = {k.lower(): [loc.lower() for loc in v] for k, v in country_mapping.items()}
     f.close()
 
+# Erzeuge eine neue Struktur mit umgekehrten Schlüssel-Wert-Paaren
+country_mapping_reverse = {}
+for code, names in country_mapping.items():
+    # Ländercode als Schlüssel hinzufügen
+    country_mapping_reverse[code.lower()] = code
+
+    # Namen der Städte/Länder hinzufügen
+    for name in names:
+        country_mapping_reverse[name.lower()] = code
+
+# Sortiere die neuen Schlüssel nach der Länge, längere zuerst
+country_mapping_reverse = dict(
+    sorted(country_mapping_reverse.items(), key=lambda item: len(item[0]), reverse=True)
+)
+
 with open('libs/kuerzel_mapping.json', 'r', encoding='utf-8') as f:
     kuerzel_mapping = json.load(f)
     kuerzel_mapping = {k.lower(): v.lower() for k, v in kuerzel_mapping.items()}
@@ -81,6 +96,7 @@ def prepare_location(location):
     location = ' '.join(location.strip().split())
     return location
 
+
 def analyze_location_for_country(location):
     location = location.lower()
 
@@ -88,30 +104,17 @@ def analyze_location_for_country(location):
     location = re.sub(r'[^\w\s-]', '', location)
 
     # Finde country-code mit Postleitzahl
-    match = re.match(r'^([A-Za-z]{1,3})[ -](\d{4,5})', location)
+    match = re.match(r'^([a-z]{1,3})[ -](\d{4,5})', location)
     if match:
         country_code = get_country_code(match.group(1), country_mapping)
         if country_code is not None:
             return country_code
 
-    # Suche nach Ländercode anhand der Wörter im location-String
-    words = re.findall(r'\b\w+(?:-\w+)*\b', location, re.UNICODE)
-    for word in words:
-        if len(word) > 1:
-            country_code = get_country_code(word, country_mapping)
-            if country_code is not None:
-                return country_code
-
-    # Suche nach Ländercode anhand des gesamten Strings, um Städte wie "New York" zu erkennen
-    for code, names in country_mapping.items():
-        for name in names:
-            if re.search(r'\b' + re.escape(name.lower()) + r'\b', location):
-                return code
-
-    # Standardfall für PLZ in Deutschland
-    for word in words:
-        if re.match(r'^[0-9]{5}$', word):
-            return get_country_code("deutschland", country_mapping)
+    for name, code in country_mapping_reverse.items():
+        # Erstelle einen regulären Ausdruck, der sicherstellt, dass der gesuchte Name von Wortgrenzen umgeben ist
+        pattern = r'\b' + re.escape(name) + r'\b'
+        if re.search(pattern, location):
+            return code
 
     return None
 

@@ -118,7 +118,7 @@ def examine_locations(members):
                     else:
                         cc_try_list = ['at', 'ch', 'dk', 'nl', None]
                 else:
-                    cc_try_list = ['de', 'at', 'ch', None]
+                    cc_try_list = ['de,at,ch', None]
 
                 for cc_try in cc_try_list:
                     nominatim_data = query_nominatim(location, cc_try)
