@@ -85,17 +85,17 @@ def analyze_location_for_country(location):
     location = location.lower()
 
     # Entferne alle Sonderzeichen außer Buchstaben, Zahlen und Leerzeichen
-    clean_location = re.sub(r'[^\w\s]', '', location)
+    location = re.sub(r'[^\w\s-]', '', location)
 
     # Finde country-code mit Postleitzahl
-    match = re.match(r'^([A-Za-z]{1,3})[ -](\d{4,5})', clean_location)
+    match = re.match(r'^([A-Za-z]{1,3})[ -](\d{4,5})', location)
     if match:
         country_code = get_country_code(match.group(1), country_mapping)
         if country_code is not None:
             return country_code
 
-    # Suche nach Ländercode anhand der Wörter im clean_location-String
-    words = re.findall(r'\w+', clean_location, re.UNICODE)
+    # Suche nach Ländercode anhand der Wörter im location-String
+    words = re.findall(r'\b\w+(?:-\w+)*\b', location, re.UNICODE)
     for word in words:
         if len(word) > 1:
             country_code = get_country_code(word, country_mapping)
@@ -105,7 +105,7 @@ def analyze_location_for_country(location):
     # Suche nach Ländercode anhand des gesamten Strings, um Städte wie "New York" zu erkennen
     for code, names in country_mapping.items():
         for name in names:
-            if re.search(r'\b' + re.escape(name.lower()) + r'\b', clean_location):
+            if re.search(r'\b' + re.escape(name.lower()) + r'\b', location):
                 return code
 
     # Standardfall für PLZ in Deutschland
