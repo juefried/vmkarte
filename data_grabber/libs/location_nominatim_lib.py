@@ -114,9 +114,9 @@ def examine_locations(members):
                 cc_try_list = None
                 if postal_code is not None:
                     if len(postal_code) == 5:
-                        cc_try_list = ['de', 'fr', 'fi', 'it', None]
+                        cc_try_list = ['de', 'fr,fi,it', None]
                     else:
-                        cc_try_list = ['at', 'ch', 'dk', 'nl', None]
+                        cc_try_list = ['at,ch', 'dk,nl', None]
                 else:
                     cc_try_list = ['de,at,ch', None]
 
