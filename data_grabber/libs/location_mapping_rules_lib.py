@@ -39,7 +39,7 @@ def prepare_location(location):
     location = location.lower()
 
     while True:
-        new_location = re.sub(r'^(bei|nähe|nahe|von|in|im) +', '', location)
+        new_location = re.sub(r'^(bei|nähe|nahe|von|in|im|der) +', '', location)
         if new_location == location:
             break
         location = new_location
@@ -55,7 +55,7 @@ def prepare_location(location):
     location = location.replace("süd brandenburg", "brandenburg")
     location = location.replace("unter- mittelfranken", "mittelfranken")
     location = location.replace("/ hunsrück", "")
-    location = location.replace("/main", "am main")
+    location = location.replace("/main", " am main")
     location = location.replace("86399 landkreis augsburg", "86399 bobingen")
     location = location.replace("leipziger land", "")
     location = location.replace("n.r.w", "nrw")
@@ -75,6 +75,9 @@ def prepare_location(location):
     location = re.sub(r'\b((groß)?raum|umland)\b(?=\s+[a-zäöüß\-]+)', '', location)
     location = location.replace("landkreis plön, sh", "kreis plön")
     location = location.replace("landkreis waf", "kreis warendorf")
+    location = location.replace("(15 km no von stuttgart)", "")
+    location = location.replace("01099 - doppel-d", "dresden")
+    location = re.sub(r'\bbei\b [\wäöüß\-]+', '', location)
 
     match = re.match(r'^(\d{5})(\s+bei)?\s+([a-zäöüß]{1,3})$', location)
     if match:
@@ -83,9 +86,6 @@ def prepare_location(location):
             location = f"{plz} {kuerzel_mapping[code]}".lower()
     if len(location) >= 1 and len(location) <= 3 and location.isalpha() and location in kuerzel_mapping:
         location = kuerzel_mapping.get(location, location)
-
-    location = location.replace("(15 km no von stuttgart)", "")
-    location = location.replace("01099 - doppel-d", "dresden")
 
     if re.match(r'^(hier|an der isar|norden|nichts|süden|104x|zentral|tor zur welt|süd-?westen|bird mountains)$', location):
         return None
@@ -98,6 +98,8 @@ def prepare_location(location):
 
 
 def analyze_location_for_country(location):
+    if location is None:
+        return None
     location = location.lower()
 
     # Entferne alle Sonderzeichen außer Buchstaben, Zahlen und Leerzeichen

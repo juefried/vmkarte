@@ -98,13 +98,17 @@ def examine_locations(members):
 
     for index, uid in enumerate(members, start=1):
         member = members[uid]
-        location = member.get('location', "").lower()
-        location = prepare_location(location)
+        location = member.get('location', "").lower().strip()
+
         postal_code = None
         country_code = None
         if location:
             country_code = analyze_location_for_country(location)
             postal_code = analyze_location_for_postal_code(location)
+            new_location = prepare_location(location)
+            if country_code is None and new_location != location:
+                country_code = analyze_location_for_country(new_location)
+            location=new_location
 
             nominatim_data = None
 
