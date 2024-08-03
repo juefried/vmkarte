@@ -43,6 +43,11 @@ def main():
     members = get_member_data()
     print(f"Total members parsed: {len(members)}")  # Print the total number of members parsed
 
+    # Write the data to a JSON file / just for debug purposes
+    with open('shared/members.json', 'w', encoding='utf-8') as file:
+        json.dump(members, file, ensure_ascii=False, indent=4)
+    file.close()
+
     # Examine locations
     members = examine_locations(members)
 
@@ -64,9 +69,9 @@ def main():
         vmforum_members.append(data)
 
     # Write the data to a JSON file
-    with open('../www_data/vmforum_members.json', 'w', encoding='utf-8') as vmforumfile:
+    with open('shared/vmforum_members.json', 'w', encoding='utf-8') as vmforumfile:
         json.dump(vmforum_members, vmforumfile, ensure_ascii=False, indent=2)
-
+    vmforumfile.close()
 
 if __name__ == "__main__":
     main()

@@ -44,7 +44,7 @@
 	var form_search;
 	const hashtag_regex = RegExp(/(#[a-zA-Z]\w+)/, 'g');
 
-	let members = fetch('vmforum_members.json').then(r => r.json());
+	let members = fetch('shared/vmforum_members.json').then(r => r.json());
 
 	// Make the div element #map cover the whole window.
 	function resize_map_to_full_window()
