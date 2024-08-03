@@ -1,0 +1,22 @@
+
+services:
+
+  web:
+    build:
+      context: docker/webserver
+    ports:
+      - "80"
+    volumes:
+      - ./config/.htpasswd:/etc/nginx/.htpasswd
+      - ./volumes/shared:/www_data/shared:ro
+    restart: unless-stopped
+
+  cron:
+    build:
+      context: .
+      dockerfile: docker/cron/Dockerfile
+    volumes:
+      - ./config/config.json:/app/config.json
+      - ./volumes/cron/cache:/app/cache
+      - ./volumes/shared:/app/shared
+    restart: unless-stopped
