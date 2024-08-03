@@ -1,9 +1,7 @@
 {
-  "de": [
-    "D",
-    "DE",
-    "Deutschland",
-    "Germany"
+  "ar": [
+    "Argentinien",
+    "Argentina"
   ],
   "at": [
     "A",
@@ -16,6 +14,30 @@
     "Innsbruck",
     "Klagenfurt",
     "Dornbirn"
+  ],
+  "au": [
+    "Australien",
+    "Australia"
+  ],
+  "be": [
+    "B",
+    "Belgien",
+    "Belgie",
+    "Bruxelles",
+    "Sankt Vith",
+    "Belgium"
+  ],
+  "bu": [
+    "Bulgarien",
+    "Bulgaria",
+    "Sofia"
+  ],
+  "ca": [
+    "CAN",
+    "Kanada",
+    "Canada",
+    "Montreal",
+    "Quebec"
   ],
   "ch": [
     "CH",
@@ -36,6 +58,62 @@
     "Luzern",
     "Lausanne",
     "Winterthur"
+  ],
+  "de": [
+    "D",
+    "DE",
+    "Deutschland",
+    "Germany"
+  ],
+  "dk": [
+    "DK",
+    "Dänemark",
+    "Denmark",
+    "Danmark",
+    "Kopenhagen",
+    "Arhus",
+    "Rye"
+  ],
+  "es": [
+    "Spanien",
+    "Spain",
+    "Madrid",
+    "Barcelona",
+    "Malaga",
+    "Sevilla",
+    "Valencia",
+    "Granada"
+  ],
+  "fi": [
+    "FIN",
+    "Finnland",
+    "Finland"
+  ],
+  "fr": [
+    "F",
+    "FR",
+    "Frankreich",
+    "France",
+    "Normandie"
+  ],
+  "gb": [
+    "UK",
+    "U.K.",
+    "GB",
+    "Großbritannien",
+    "England",
+    "Schottland",
+    "Scotland",
+    "Scotlands",
+    "Brittany",
+    "united kingdom",
+    "London"
+  ],
+  "hu": [
+    "HUN",
+    "Ungarn",
+    "Magyarország",
+    "Budapest"
   ],
   "it": [
     "I",
@@ -59,6 +137,20 @@
     "Meran",
     "Merano"
   ],
+  "jp": [
+    "Japan",
+    "Tokyo",
+    "Yokohama"
+  ],
+  "kr": [
+    "Kroatien",
+    "Croatia"
+  ],
+  "lu": [
+    "Luxenburg",
+    "Luxembourg",
+    "LUX"
+  ],
   "nl": [
     "NL",
     "Niederlande",
@@ -79,49 +171,24 @@
     "Zetten",
     "Ameland"
   ],
-  "be": [
-    "B",
-    "Belgien",
-    "Belgie",
-    "Bruxelles",
-    "Sankt Vith",
-    "Belgium"
-  ],
-  "fr": [
-    "F",
-    "FR",
-    "Frankreich",
-    "France",
-    "Normandie"
-  ],
-  "gb": [
-    "UK",
-    "U.K.",
-    "GB",
-    "Großbritannien",
-    "England",
-    "Schottland",
-    "Scotland",
-    "Scotlands",
-    "Brittany",
-    "united kingdom",
-    "London"
-   ],
-  "dk": [
-    "DK",
-    "Dänemark",
-    "Denmark",
-    "Danmark",
-    "Kopenhagen",
-    "Arhus",
-    "Rye"
-  ],
   "no": [
     "N",
     "Norwegen",
     "Norge",
     "Norway",
     "Oslo"
+  ],
+  "pl": [
+    "Polen",
+    "Poland"
+  ],
+  "ru": [
+    "Russian Federation",
+    "Russische Förderation",
+    "Russland",
+    "Russia",
+    "Moskau",
+    "Moskow"
   ],
   "se": [
     "S",
@@ -130,31 +197,12 @@
     "Sweden",
     "Uppsala"
   ],
-  "fi": [
-    "FIN",
-    "Finnland",
-    "Finland"
-  ],
-  "pl": [
-    "Polen",
-    "Poland"
-  ],
-  "es": [
-    "Spanien",
-    "Spain",
-    "Madrid",
-    "Barcelona",
-    "Malaga",
-    "Sevilla",
-    "Valencia",
-    "Granada"
+  "si": [
+    "Slowenien"
   ],
   "sk": [
     "SK",
     "Slowakei"
-  ],
-  "si": [
-    "Slowenien"
   ],
   "us": [
     "USA",
@@ -166,56 +214,8 @@
     "Phoenix",
     "Austin"
   ],
-  "ca": [
-    "CAN",
-    "Kanada",
-    "Canada",
-    "Montreal",
-    "Quebec"
-  ],
-  "au": [
-    "Australien",
-    "Australia"
-  ],
-  "hu": [
-    "HUN",
-    "Ungarn",
-    "Magyarország",
-    "Budapest"
-  ],
-  "kr": [
-    "Kroatien",
-    "Croatia"
-  ],
-  "jp": [
-    "Japan",
-    "Tokyo",
-    "Yokohama"
-  ],
-  "ar": [
-    "Argentinien",
-    "Argentina"
-  ],
   "uy": [
     "Uruguay",
     "URY"
-  ],
-  "lu": [
-    "Luxenburg",
-    "Luxembourg",
-    "LUX"
-  ],
-  "ru": [
-    "Russian Federation",
-    "Russische Förderation",
-    "Russland",
-    "Russia",
-    "Moskau",
-    "Moskow"
-  ],
-  "bu": [
-    "Bulgarien",
-    "Bulgaria",
-    "Sofia"
   ]
 }
