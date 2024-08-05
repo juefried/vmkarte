@@ -48,7 +48,6 @@ def query_nominatim(searchstring, country_code):
     searchstring = searchstring.strip(', ')
 
     try:
-
         # Check if country_code is not None
         if country_code is not None:
             # Check if searchstring matches the pattern '^[a-z]{1,3}-(\d{4,5}.*)$'
@@ -72,30 +71,29 @@ def query_nominatim(searchstring, country_code):
         response.raise_for_status()
         # Parse the response JSON data
         data = response.json()
+
+        if len(data) == 1:
+            # Perform another search excluding the found place ID
+            exclude_place_id = data[0]['place_id']
+            url_exclude = f"{url}&exclude_place_ids={exclude_place_id}"
+            response_exclude = requests.get(url_exclude)
+
+            # Sleep for 1 second to avoid overwhelming the API with requests
+            time.sleep(1)
+            response_exclude.raise_for_status()
+            data_exclude = response_exclude.json()
+
+            # Add the new data to the original data
+            data.extend(data_exclude)
+
         if data:
             # Define the types of locations to check
             types_to_check = [
-                'postal_code',
-                'administrative',
-                'post_box',
-                'city',
-                'town',
-                'village',
-                'suburb',
-                'region',
-                'hamlet',
-                'political',
-                'protected_area',
-                'county',
-                'government',
-
-                'residential',
-                'ceremonial',
-                'island',
-                'station',
-                'post_office',
-                'motorway_junction',
-                'bus_stop'
+                'postal_code', 'administrative', 'post_box', 'city', 'town',
+                'village', 'suburb', 'region', 'hamlet', 'political',
+                'protected_area', 'county', 'government', 'residential',
+                'ceremonial', 'island', 'station', 'post_office',
+                'motorway_junction', 'bus_stop'
             ]
             # Check if any of the entries in the data match the types_to_check
             for entry_type in types_to_check:
@@ -104,7 +102,6 @@ def query_nominatim(searchstring, country_code):
                         return entry
 
             # If no match is found, return the first entry in the data
-            type = entry['type']
             return data[0]
 
     except requests.RequestException as e:
