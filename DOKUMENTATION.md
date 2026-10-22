@@ -292,6 +292,107 @@ Hinweise:
 - Nur Mitglieder mit nicht-leerer Ortsangabe und erfolgreichem Nominatim-Treffer werden aufgenommen.
 - Bei ca. 6.948 Mitgliedern enthielten die vorhandenen Ausgabedateien ca. 3.167 Einträge mit Koordinaten.
 
+### 6.3 Algorithmus: Vom Profileintrag zu Koordinaten
+
+#### Kurz erklärt
+
+Die Karte verwendet nicht die Wohnadresse, sondern die freiwillige Ortsangabe aus dem Forenprofil. Diese Angabe ist Freitext und wird in mehreren Schritten normalisiert, auf Land und Postleitzahl geprüft und anschließend an Nominatim/OpenStreetMap übergeben. Aus dem besten Treffer werden Breiten- und Längengrad sowie ein grober Radius berechnet. Nur Mitglieder mit einer erfolgreich aufgelösten Ortsangabe erscheinen auf der Karte.
+
+#### Technischer Ablauf
+
+1. **Ort aus der Mitgliederliste lesen**
+
+   Der Scraper liest auf der Mitgliederliste den Benutzernamen, die `uid`, den Profil-Link und – falls vorhanden – den Text aus `div.contentRow-lesser a`. Dieser Text ist die Ortsangabe, z. B. `90469 Nürnberg`, `Wien` oder `bei Hamburg`.
+
+   Die Fahrzeugfelder `Velomobil`, `Liegerad`, `Trike` und `sonstige Fahrzeuge/Bemerkungen` kommen von der „Über“-Seite des Profils. Sie werden nicht für das Geocoding verwendet, sondern nur in der Karte angezeigt und gefiltert.
+
+2. **Ortsangabe normalisieren**
+
+   `prepare_location()` in `location_mapping_rules_lib.py` bereinigt den Text:
+
+   - Kleinschreibung und Vereinheitlichung von Leerzeichen.
+   - Entfernen führender Füllwörter wie `bei`, `nähe`, `nahe`, `von`, `in`, `im`, `der`.
+   - Ersetzen bekannter Sonderfälle, z. B. `black forest` → `schwarzwald`, `s-h` → `schleswig-holstein`, `südhessen` → `hessen`.
+   - `kreis` wird in bestimmten Kontexten zu `landkreis`; `großraum` und `umland` werden entfernt.
+   - Kombinationen aus Postleitzahl und Kürzel werden über `kuerzel_mapping.json` aufgelöst, z. B. `90469 n` → `90469 nürnberg`.
+   - Besteht die gesamte Angabe nur aus einem 1- bis 3-Buchstaben-Kürzel, wird sie ebenfalls über `kuerzel_mapping.json` ersetzt, z. B. `A` → `Augsburg`.
+   - Allgemeine Angaben wie `hier`, `norden`, `süden`, `zentral` oder rein numerische Kurzangaben werden verworfen.
+
+3. **Land und Postleitzahl erkennen**
+
+   `analyze_location_for_country()` sucht nach einem Ländercode oder Ländernamen. Dafür wird `country_mapping.json` verwendet. Das Format `d-90469 ...` wird als deutsches Kürzel erkannt. Zusätzlich enthält das Mapping einige Städte, z. B. Wien für Österreich oder Zürich für die Schweiz. Wird im ursprünglichen Text kein Land erkannt, versucht der Code es nach der Normalisierung erneut.
+
+   `analyze_location_for_postal_code()` sucht die erste vier- oder fünfstellige Zahl und verwendet sie als Postleitzahl.
+
+4. **Suchstrategie festlegen**
+
+   Ist ein Land bekannt, wird direkt mit diesem Ländercode gesucht. Sonst probiert der Code mehrere plausible Länderkombinationen durch und nimmt den ersten Treffer:
+
+   - fünfstellige Postleitzahl: `de`, dann `fr,fi,it`, dann ohne Länderfilter
+   - sonstige Postleitzahl: `at,ch`, dann `dk,nl`, dann ohne Länderfilter
+   - keine Postleitzahl: `de,at,ch`, dann ohne Länderfilter
+
+   Diese Reihenfolge ist auf die überwiegend deutschsprachige Forengemeinde zugeschnitten.
+
+5. **Nominatim abfragen**
+
+   `query_nominatim()` entfernt zunächst ein eventuell vorhandenes Länderpräfix wie `d-` und prüft den lokalen Cache. Nur erfolgreiche Ergebnisse werden gespeichert. Danach wird die Anfrage an
+
+   ```text
+   https://nominatim.openstreetmap.org/search?q=<Ort>&format=json&addressdetails=1&email=<konfiguriert>&countrycodes=<Land>
+   ```
+
+   gesendet. Die Anfrage enthält einen konfigurierbaren User-Agent und einen Timeout; zwischen zwei Anfragen wird mindestens eine Sekunde gewartet.
+
+   Liefert Nominatim genau einen Treffer, wird ein zweiter Request mit `exclude_place_ids` ausgeführt. Damit werden Alternativen sichtbar, die Nominatim sonst hinter dem ersten Treffer zurückhält.
+
+6. **Besten Treffer auswählen**
+
+   Die Treffer werden nicht einfach in der Reihenfolge von Nominatim übernommen. Der Code bevorzugt bestimmte OSM-Typen in dieser Reihenfolge:
+
+   ```text
+   postal_code, administrative, post_box, city, town, village, suburb,
+   region, hamlet, political, protected_area, county, government,
+   residential, ceremonial, island, station, post_office,
+   motorway_junction, bus_stop
+   ```
+
+   Der erste Treffer, dessen `type` in dieser Liste am weitesten vorn steht, gewinnt. Gibt es keinen passenden Typ, wird der erste Treffer verwendet.
+
+7. **Koordinaten und Radius berechnen**
+
+   Aus dem gewählten Treffer werden `lat` und `lon` übernommen. Für den Radius wird die Bounding Box `[south, north, west, east]` verwendet:
+
+   - Mittelpunkt: `((south + north) / 2, (west + east) / 2)`
+   - Nordwest-Ecke: `(north, west)`
+   - Radius: geodätische Distanz zwischen Mittelpunkt und Nordwest-Ecke in Metern
+
+   Der Radius ist damit ein grober Anhaltspunkt für die Ausdehnung des gefundenen Gebiets, keine exakte Genauigkeitsangabe.
+
+8. **Filtern und ausgeben**
+
+   Mitglieder ohne Ortsangabe oder ohne Nominatim-Treffer werden übersprungen. Für die übrigen entsteht ein Datensatz mit `id`, `name`, `lat`, `lon`, `radius` und optional `vm`, `lr`, `tr`, `other`. Die Karte setzt den Marker auf `lat`/`lon` und zeigt den Radius beim Hover als Kreis.
+
+#### Beispiele
+
+| Profileintrag | Verarbeitung | Ergebnis |
+|---|---|---|
+| `90469 Nürnberg` | PLZ 90469 erkannt, Land unbekannt, Versuch mit `de` | Koordinaten von Nürnberg |
+| `A` | Kürzel `A` → `Augsburg`, kein Land/PLZ, Versuch mit `de,at,ch` | Koordinaten von Augsburg |
+| `Wien` | `Wien` ist im Länder-Mapping Österreich zugeordnet | Koordinaten von Wien |
+| `d-90469 Nürnberg` | Präfix `d` → Land `de`, Präfix wird vor der Abfrage entfernt | Koordinaten von Nürnberg |
+| `irgendwo` | kein Land, keine PLZ, mehrere Versuche ohne eindeutigen Treffer | wird nicht auf die Karte aufgenommen |
+
+#### Grenzen und Besonderheiten
+
+- Die Ortsangabe ist Freitext. Der Algorithmus ist eine Heuristik und garantiert keine korrekte Zuordnung.
+- `country_mapping.json` enthält derzeit 27 Länder; `kuerzel_mapping.json` enthält 452 deutsche Orts- und Regionalkürzel. Orte außerhalb dieser Listen können fehlschlagen oder falsch interpretiert werden.
+- Die Typ-Priorisierung bevorzugt größere Einheiten wie Postleitzahlen, Verwaltungsgebiete und Städte. Exakte Hausadressen sind dadurch unwahrscheinlicher, aber nicht ausgeschlossen.
+- Der Marker liegt auf dem gefundenen Nominatim-Punkt, häufig auf einem Stadt- oder PLZ-Zentrum. Das ist nicht zwingend die tatsächliche Wohnadresse.
+- Der Radius ist die halbe Diagonale der Bounding Box und keine echte Fehlertoleranz.
+- Der Ort wird über `user_details` 14 Tage gecacht. Ändert ein Mitglied seinen Ort, kann die Karte daher bis zu 14 Tage lang den alten Ort anzeigen. Nominatim-Ergebnisse werden bis zu 365 Tage gecacht.
+- Eine explizite `"location": null`-Angabe würde derzeit einen Fehler auslösen, weil der Code `.lower()` direkt aufruft. Aktuell enthält `members.json` keine solchen Werte.
+
 ---
 
 ## 7. Konfiguration
