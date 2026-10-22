@@ -260,18 +260,24 @@
 		// Make the map container cover the whole browser window.
 		resize_map_to_full_window();
 
-		// Create map, without animations and without attribution line.
+		// Create map, without animations but with OSM/Nominatim attribution.
 		map = L.map('map', {
-			'attributionControl': false,
 			'zoomAnimation': false,
 			'fadeAnimation': false,
 
 			// Use Openstreetmap as tile layer.
 			}).addLayer(
-				L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {'useCache': true})
+				L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+					'attribution': '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-Mitwirkende, <a href="https://opendatacommons.org/licenses/odbl/1-0/" target="_blank" rel="noopener">ODbL</a>',
+					'useCache': true
+				})
 
 			// Set initial view to Germany.
 			).setView([50, 11], 7);
+
+		map.attributionControl.addAttribution(
+			'Geocoding: <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a>'
+		);
 
 		// Add the input form as a Leaflet control into the top right corner.
 		search_control = new L.Control({ position: 'topright'});

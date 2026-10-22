@@ -1,5 +1,6 @@
 {
   "username": "velomobilforum-username",
   "password": "velomobilforum-password",
-  "email": "email-address-for-nominatim"
+  "email": "email-address-for-nominatim",
+  "nominatim_user_agent": "vmkarte/1.0 (+https://github.com/??????/vmkarte)"
 }

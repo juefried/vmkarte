@@ -2,6 +2,7 @@
 python location_nominatim_lib.py
 """
 import json
+import os
 import time
 
 import requests
@@ -19,19 +20,67 @@ with open('config.json', 'r', encoding='utf-8') as f:
     config = json.load(f)
 EMAIL = config['email']
 
-# Start a session
-session = requests.Session()
+# Default User-Agent for Nominatim; override per deployment via config or environment
+DEFAULT_NOMINATIM_USER_AGENT = 'vmkarte/1.0 (+https://github.com/juefried/vmkarte)'
 
-# Headers to mimic a browser
-headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+
+def _resolve_nominatim_user_agent(config_data):
+    """
+    Resolves the Nominatim User-Agent from environment, configuration or default.
+
+    Args:
+        config_data (dict): The loaded configuration dictionary.
+
+    Returns:
+        str: The User-Agent to send to Nominatim.
+    """
+    config_user_agent = config_data.get('nominatim_user_agent')
+    if not isinstance(config_user_agent, str):
+        config_user_agent = ''
+    return (
+        os.environ.get('NOMINATIM_USER_AGENT', '').strip()
+        or config_user_agent.strip()
+        or DEFAULT_NOMINATIM_USER_AGENT
+    )
+
+
+NOMINATIM_USER_AGENT = _resolve_nominatim_user_agent(config)
+
+# Headers with a descriptive User-Agent as required by the Nominatim usage policy
+NOMINATIM_HEADERS = {
+    'User-Agent': NOMINATIM_USER_AGENT,
+    'Accept': 'application/json',
 }
 
+# Timeout for Nominatim requests in seconds
+NOMINATIM_TIMEOUT = 30
 
-@cache.memoize(name='nominatim', expire=60*60*24*365-60*60)
+# Cache successful results, but never cache failed lookups
+NOMINATIM_CACHE_TTL = 60*60*24*365-60*60
+
+
+def _get_nominatim(url):
+    """
+    Sends a GET request to Nominatim and enforces the 1 request/second policy.
+
+    Args:
+        url (str): The Nominatim URL to request.
+
+    Returns:
+        requests.Response: The HTTP response.
+    """
+    try:
+        return requests.get(url, headers=NOMINATIM_HEADERS, timeout=NOMINATIM_TIMEOUT)
+    finally:
+        time.sleep(1)
+
+
 def query_nominatim(searchstring, country_code):
     """
-    Memoized function that queries the Nominatim API for location details based on the search string and country code.
+    Queries the Nominatim API for location details based on the search string and country code.
+
+    Successful lookups are cached. Negative or failed lookups are not cached so that
+    temporary errors (for example HTTP 403 or 429) do not poison the cache.
 
     Args:
         searchstring (str): The location to search for.
@@ -47,15 +96,21 @@ def query_nominatim(searchstring, country_code):
     # Remove leading and trailing commas and spaces from searchstring
     searchstring = searchstring.strip(', ')
 
-    try:
-        # Check if country_code is not None
-        if country_code is not None:
-            # Check if searchstring matches the pattern '^[a-z]{1,3}-(\d{4,5}.*)$'
-            match = re.match(r'^[a-z]{1,3}-(\d{4,5}.*)$', searchstring)
-            if match:
-                # Extract the matched group from searchstring
-                searchstring = match.group(1)
+    # Check if country_code is not None
+    if country_code is not None:
+        # Check if searchstring matches the pattern '^[a-z]{1,3}-(\d{4,5}.*)$'
+        match = re.match(r'^[a-z]{1,3}-(\d{4,5}.*)$', searchstring)
+        if match:
+            # Extract the matched group from searchstring
+            searchstring = match.group(1)
 
+    # Reuse a previously successful lookup
+    cache_key = ('nominatim', searchstring, country_code)
+    cached_result = cache.get(cache_key)
+    if cached_result is not None:
+        return cached_result
+
+    try:
         # Construct the URL for the Nominatim API request
         url = f"https://nominatim.openstreetmap.org/search?q={quote(searchstring)}&format=json&addressdetails=1&email={EMAIL}"
         if country_code is not None:
@@ -63,10 +118,8 @@ def query_nominatim(searchstring, country_code):
             url += f"&countrycodes={country_code}"
 
         # Send a GET request to the Nominatim API
-        response = requests.get(url)
+        response = _get_nominatim(url)
 
-        # Sleep for 1 second to avoid overwhelming the API with requests
-        time.sleep(1)
         # Raise an exception if the response status code is not 200
         response.raise_for_status()
         # Parse the response JSON data
@@ -76,16 +129,15 @@ def query_nominatim(searchstring, country_code):
             # Perform another search excluding the found place ID
             exclude_place_id = data[0]['place_id']
             url_exclude = f"{url}&exclude_place_ids={exclude_place_id}"
-            response_exclude = requests.get(url_exclude)
+            response_exclude = _get_nominatim(url_exclude)
 
-            # Sleep for 1 second to avoid overwhelming the API with requests
-            time.sleep(1)
             response_exclude.raise_for_status()
             data_exclude = response_exclude.json()
 
             # Add the new data to the original data
             data.extend(data_exclude)
 
+        result = None
         if data:
             # Define the types of locations to check
             types_to_check = [
@@ -99,12 +151,22 @@ def query_nominatim(searchstring, country_code):
             for entry_type in types_to_check:
                 for entry in data:
                     if entry['type'] == entry_type:
-                        return entry
+                        result = entry
+                        break
+                if result is not None:
+                    break
 
-            # If no match is found, return the first entry in the data
-            return data[0]
+            # If no match is found, use the first entry in the data
+            if result is None:
+                result = data[0]
 
-    except requests.RequestException as e:
+        if result is not None:
+            # Only cache successful lookups
+            cache.set(cache_key, result, expire=NOMINATIM_CACHE_TTL)
+
+        return result
+
+    except (requests.RequestException, ValueError) as e:
         # Print an error message if an exception occurs while fetching location details
         print(f"An error occurred while fetching location details for \"{searchstring}\", country_code={country_code}: {e}")
     return None
