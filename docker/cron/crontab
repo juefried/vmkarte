@@ -2,7 +2,4 @@
 MAILTO = ""
 SHELL=/bin/sh
 BASH_ENV=/etc/profile
-33 3 * * * sh -c 'cd /app && /usr/local/bin/python3 /app/data_grabber.py'
-
-
-
+33 3 * * * sh -c 'cd /app && /usr/local/bin/python3 /app/data_grabber.py --fast'
