@@ -1,5 +1,5 @@
 # Use the official Python image from the Docker Hub
-FROM python:3.9-slim
+FROM python:3.14-slim
 
 # Install cron
 RUN apt-get update && apt-get install -y \

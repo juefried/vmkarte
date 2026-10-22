@@ -220,7 +220,7 @@ Nur `user_details` (14 Tage) und `nominatim` (365 Tage) entlasten im Produktivbe
 
 **Cron-Container** (`docker/cron/Dockerfile`)
 
-- Basis: `python:3.9-slim`
+- Basis: `python:3.14-slim`
 - Kopiert:
   - `src/data_grabber/data_grabber.py` → `/app/data_grabber.py`
   - `src/data_grabber/libs/*` → `/app/libs/`
@@ -373,7 +373,7 @@ Geplanter Betrieb: ein Server im Docker-Container, ein zweiter Server direkt auf
 - Jede Instanz fragt Nominatim selbst ab. Der Rate-Limit von 1 Request/Sekunde gilt pro Instanz und sollte eingehalten werden. Beide Instanzen brauchen einen identifizierbaren User-Agent mit Kontaktangabe; dieser kann pro Server über `config.json` oder `NOMINATIM_USER_AGENT` gesetzt werden.
 - Auf dem zweiten Server muss die Ausgabe in ein vom Webserver lesbares Verzeichnis geschrieben werden. Der Pfad sollte konfigurierbar sein, damit Docker-Volume und Systempfad ohne Codeänderung funktionieren.
 - Logging unterscheidet sich: Docker über `docker logs`, Systeminstallation über Cron-Mail, systemd-Journal oder eine Logdatei. Ohne Benachrichtigung bleiben Fehler leicht unbemerkt.
-- Das Docker-Image basiert auf Python 3.9; Python 3.9 ist seit Oktober 2025 End-of-Life. Die Systeminstallation sollte dieselbe oder eine gemeinsam getestete, aktuelle Python-Version verwenden.
+- Das Docker-Image basiert auf Python 3.14 und entspricht damit der lokal getesteten Version. Python 3.9 ist seit Oktober 2025 End-of-Life und sollte nicht mehr verwendet werden. Die Systeminstallation sollte eine gemeinsam getestete, aktuelle Python-Version verwenden.
 
 ---
 
@@ -740,6 +740,7 @@ Die früheren Debug-Abweichungen (deaktivierter Scraper, falscher Ausgabepfad, f
 - `src/data_grabber/utils/clear_nominatim_cache.py`: neues Hilfsskript zum Bereinigen des `nominatim`-Caches.
 - `src/data_grabber/smoke_test.py`: schneller Lokaltest für Login, Mitgliederliste, Profile und Nominatim.
 - `src/data_grabber/config.example.json` und `config/config.json.sample`: optionales Feld `nominatim_user_agent`.
+- `docker/cron/Dockerfile`: Basis-Image auf `python:3.14-slim` aktualisiert.
 - `docker/webserver/www_data/karte.html`: OSM/ODbL- und Nominatim-Attribution im Leaflet-Control aktiviert.
 - `.gitignore`: Laufzeit- und Konfigurationsdateien werden nicht mehr erfasst.
 - `DOKUMENTATION.md`: Analyse, Architektur, Betrieb und Verifikation.
