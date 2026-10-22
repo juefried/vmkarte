@@ -451,6 +451,16 @@ python smoke_test.py
 
 Das Arbeitsverzeichnis muss `src/data_grabber` sein, damit `config.json` und `libs/` gefunden werden. Der Test dauert wenige Sekunden.
 
+### Karte in der IDE anzeigen
+
+Die Karte lädt `shared/vmforum_members.json` relativ zu `karte.html`. Für einen Test über den IDE-Webserver muss die Datei daher unter `docker/webserver/www_data/shared/vmforum_members.json` liegen:
+
+```powershell
+copy src\data_grabber\shared\vmforum_members.json docker\webserver\www_data\shared\vmforum_members.json
+```
+
+Danach `docker/webserver/www_data/karte.html` über den IDE-Server öffnen und mit `Strg+F5` neu laden. Fehlt die Datei, bricht `create_map()` beim `await members` ab und es bleibt eine leere Seite. Der Ordner ist in `.gitignore` eingetragen und über `docker/webserver/.dockerignore` vom Web-Image ausgeschlossen.
+
 ### Docker
 
 ```bash

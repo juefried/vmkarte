@@ -166,6 +166,7 @@ cython_debug/
 /src/data_grabber/config.json
 /src/data_grabber/members.json
 /src/data_grabber/vmforum_members.json
+/docker/webserver/www_data/shared/
 /cache/
 /members.json
 /vmforum_members.json
