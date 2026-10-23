@@ -150,6 +150,27 @@ cd /pfad/zu/vmkarte/src/data_grabber
 
 Karte im Browser mit `Strg+F5` bzw. `Cmd+Shift+R` neu laden. In den Popups muss `Stand: TT.MM.JJJJ` erscheinen. Bei Einträgen ohne Profilabruf steht `Stand: unbekannt`.
 
+## Troubleshooting: „Stand: unbekannt“ bei allen Profilen
+
+Wenn in `src/data_grabber/shared/vmforum_members.json` Zeitstempel stehen, die Karte aber überall `Stand: unbekannt` zeigt, liefert der Webserver sehr wahrscheinlich eine andere oder ältere JSON-Datei aus.
+
+1. Im Browser die Entwicklerwerkzeuge öffnen: `Netzwerk` → `vmforum_members.json` → Antwort ansehen. Enthält die Antwort `profile_updated_at`?
+2. Wenn nein, die vom Webserver ausgelieferte Datei prüfen:
+   ```bash
+   grep -m1 profile_updated_at /var/www/vmforum-karte/shared/vmforum_members.json
+   ```
+   Pfad entsprechend dem eigenen Web-Root anpassen. Fehlt das Feld, die Datei aus dem Scraper-Ausgabeverzeichnis kopieren:
+   ```bash
+   cd /pfad/zu/vmkarte
+   cp src/data_grabber/shared/vmforum_members.json /var/www/vmforum-karte/shared/vmforum_members.json
+   ```
+   Alternativ kann ein Symlink verwendet werden, damit künftige Läufe automatisch sichtbar sind:
+   ```bash
+   ln -sf /pfad/zu/vmkarte/src/data_grabber/shared/vmforum_members.json /var/www/vmforum-karte/shared/vmforum_members.json
+   ```
+3. Wenn die Antwort `profile_updated_at` enthält, die Karte aber weiterhin `unbekannt` zeigt: Browser-Konsole öffnen. Die Karte gibt dort aus, wie viele Einträge mit Zeitstempel geladen wurden. Bei `0/...` ist die falsche JSON-Datei im Browser; bei einem Wert größer 0 ist die `karte.html` veraltet und muss neu ausgeliefert werden.
+4. Die Karte lädt die JSON-Datei mit `cache: 'no-store'`. Zusätzlich hilft ein Hard-Refresh (`Strg+F5` bzw. `Cmd+Shift+R`), um eine alte `karte.html` zu verwerfen.
+
 ## Rollback
 
 ```bash

@@ -512,7 +512,7 @@ Die Karte lädt `shared/vmforum_members.json` relativ zu `karte.html`. Für eine
 copy src\data_grabber\shared\vmforum_members.json docker\webserver\www_data\shared\vmforum_members.json
 ```
 
-Danach `docker/webserver/www_data/karte.html` über den IDE-Server öffnen und mit `Strg+F5` neu laden. Fehlt die Datei, bricht `create_map()` beim `await members` ab und es bleibt eine leere Seite. Der Ordner ist in `.gitignore` eingetragen und über `docker/webserver/.dockerignore` vom Web-Image ausgeschlossen.
+Danach `docker/webserver/www_data/karte.html` über den IDE-Server öffnen und mit `Strg+F5` neu laden. Der Kopiervorgang muss nach jedem Scraper-Lauf wiederholt werden; sonst zeigt die Karte alte Daten und gegebenenfalls überall `Stand: unbekannt`. Fehlt die Datei, bricht `create_map()` beim `await members` ab und es bleibt eine leere Seite. Der Ordner ist in `.gitignore` eingetragen und über `docker/webserver/.dockerignore` vom Web-Image ausgeschlossen.
 
 ### Docker
 
@@ -951,7 +951,8 @@ Die früheren Debug-Abweichungen (deaktivierter Scraper, falscher Ausgabepfad, f
 - `src/data_grabber/data_grabber.py`: Thinning entfernt, `--fast` als No-op, `profile_updated_at` in der Ausgabe.
 - `src/data_grabber/libs/cache_thinning_lib.py`: entfernt.
 - `src/data_grabber/smoke_test.py`: gibt `profile_updated_at` mit aus.
-- `docker/webserver/www_data/karte.html`: Datenstand im Popup.
+- `docker/webserver/www_data/karte.html`: Datenstand im Popup, JSON-Abruf ohne Browser-Cache und Konsolen-Diagnose für fehlende Zeitstempel.
+- `docs/upgrade-docker.md`, `docs/upgrade-native.md`: Troubleshooting für `Stand: unbekannt`.
 - `docker/cron/Dockerfile` und `docker-compose.yml.sample`: Default-`cache_config.json` und Mount.
 - `config/cache_config.json.sample`: Docker-Vorlage.
 - `docs/upgrade-docker.md`, `docs/upgrade-native.md`: Upgrade-Anleitungen für Docker und native Server.

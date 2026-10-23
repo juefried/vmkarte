@@ -134,6 +134,23 @@ docker compose exec cron python3 -c "import json; data=json.load(open('/app/shar
 
 Karte im Browser mit `Strg+F5` bzw. `Cmd+Shift+R` neu laden. In den Popups muss `Stand: TT.MM.JJJJ` erscheinen. Bei Einträgen ohne Profilabruf steht `Stand: unbekannt`.
 
+## Troubleshooting: „Stand: unbekannt“ bei allen Profilen
+
+Wenn in der JSON-Datei Zeitstempel stehen, die Karte aber überall `Stand: unbekannt` zeigt, lädt der Browser sehr wahrscheinlich eine andere oder ältere JSON-Datei als die geprüfte.
+
+1. Im Browser die Entwicklerwerkzeuge öffnen: `Netzwerk` → `vmforum_members.json` → Antwort ansehen. Enthält die Antwort `profile_updated_at`?
+2. Wenn nein, liefert der Webserver eine alte Datei. Im Docker-Betrieb prüfen:
+   ```bash
+   docker compose exec cron ls -l /app/shared/vmforum_members.json
+   docker compose exec web ls -l /www_data/shared/vmforum_members.json
+   ```
+   Beide Pfade müssen auf dasselbe Volume zeigen. Wurde der Scraper außerhalb des Containers ausgeführt, schreibt er nach `src/data_grabber/shared/vmforum_members.json` und nicht in das Docker-Volume `volumes/shared`. In diesem Fall den Lauf im Cron-Container ausführen:
+   ```bash
+   docker compose exec cron python3 /app/data_grabber.py
+   ```
+3. Wenn die Antwort `profile_updated_at` enthält, die Karte aber weiterhin `unbekannt` zeigt: Browser-Konsole öffnen. Die Karte gibt dort aus, wie viele Einträge mit Zeitstempel geladen wurden. Bei `0/...` ist die falsche JSON-Datei im Browser; bei einem Wert größer 0 ist die `karte.html` veraltet und muss neu ausgeliefert werden.
+4. Die Karte lädt die JSON-Datei mit `cache: 'no-store'`. Zusätzlich hilft ein Hard-Refresh (`Strg+F5` bzw. `Cmd+Shift+R`), um eine alte `karte.html` zu verwerfen.
+
 ## Rollback
 
 ```bash

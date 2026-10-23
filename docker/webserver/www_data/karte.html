@@ -47,7 +47,7 @@
 	var form_search;
 	const hashtag_regex = RegExp(/(#[a-zA-Z]\w+)/, 'g');
 
-	let members = fetch('shared/vmforum_members.json').then(r => r.json());
+	let members = fetch('shared/vmforum_members.json', { cache: 'no-store' }).then(r => r.json());
 
 	// Make the div element #map cover the whole window.
 	function resize_map_to_full_window()
@@ -257,6 +257,12 @@
 
 	async function create_map() {
 		members = await members;
+
+		const timestamped_members = members.filter(v => v.profile_updated_at);
+		console.log(`vmforum_members: ${timestamped_members.length}/${members.length} Einträge mit profile_updated_at`);
+		if (timestamped_members.length === 0) {
+			console.warn('Keine profile_updated_at-Werte geladen. Vermutlich wird eine alte vmforum_members.json ausgeliefert.');
+		}
 
 		// Install protocol handler for geo: protocol; must be a local script, which reformats the coordinates and redirects to BRouter
 		try {
