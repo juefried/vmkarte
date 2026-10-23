@@ -8,7 +8,7 @@ import time
 import requests
 from urllib.parse import quote
 from geopy.distance import geodesic
-from libs.cache_config_lib import get_ttl_seconds
+from libs.cache_config_lib import get_negative_ttl_seconds, get_ttl_seconds
 from libs.location_mapping_rules_lib import analyze_location_for_country, analyze_location_for_postal_code, prepare_location
 from libs.paths_lib import CACHE_DIR, CONFIG_PATH
 import diskcache as dc
@@ -16,6 +16,9 @@ import re
 
 # Diskcache for persistent LRU-Cache
 cache = dc.Cache(str(CACHE_DIR))
+
+# Marks a successful Nominatim request that returned no result
+NOMINATIM_NEGATIVE = '__nominatim_negative__'
 
 # Read configuration file
 with CONFIG_PATH.open('r', encoding='utf-8') as f:
@@ -78,8 +81,10 @@ def query_nominatim(searchstring, country_code):
     """
     Queries the Nominatim API for location details based on the search string and country code.
 
-    Successful lookups are cached. Negative or failed lookups are not cached so that
-    temporary errors (for example HTTP 403 or 429) do not poison the cache.
+    Successful lookups are cached with the configured positive TTL. A successful
+    request that returns no result is cached with the configured negative TTL, so
+    permanently unresolvable locations are not queried on every run. Exceptions
+    (for example HTTP 403, 429 or timeouts) are never cached.
 
     Args:
         searchstring (str): The location to search for.
@@ -103,10 +108,12 @@ def query_nominatim(searchstring, country_code):
             # Extract the matched group from searchstring
             searchstring = match.group(1)
 
-    # Reuse a previously successful lookup
+    # Reuse a previously successful or negative lookup
     cache_key = ('nominatim', searchstring, country_code)
     cached_result = cache.get(cache_key)
     if cached_result is not None:
+        if cached_result == NOMINATIM_NEGATIVE:
+            return None
         return cached_result
 
     try:
@@ -160,8 +167,11 @@ def query_nominatim(searchstring, country_code):
                 result = data[0]
 
         if result is not None:
-            # Only cache successful lookups
             cache.set(cache_key, result, expire=get_ttl_seconds('nominatim'))
+        else:
+            negative_ttl = get_negative_ttl_seconds('nominatim')
+            if negative_ttl > 0:
+                cache.set(cache_key, NOMINATIM_NEGATIVE, expire=negative_ttl)
 
         return result
 

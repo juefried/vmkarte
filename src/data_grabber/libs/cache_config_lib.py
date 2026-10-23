@@ -12,6 +12,7 @@ DEFAULT_CACHE_CONFIG = {
     'nominatim': {
         'ttl_days_min': 180.0,
         'ttl_days_max': 365.0,
+        'negative_ttl_days': 30.0,
     },
 }
 
@@ -83,6 +84,10 @@ def load_cache_config(path=None):
                 f"'{cache_name}.ttl_days_max' in {config_path} must be "
                 f"greater than or equal to ttl_days_min."
             )
+        if 'negative_ttl_days' in values and values['negative_ttl_days'] < 0:
+            raise ValueError(
+                f"'{cache_name}.negative_ttl_days' in {config_path} must be 0 or greater."
+            )
 
     return config
 
@@ -104,3 +109,17 @@ def get_ttl_seconds(cache_name):
 
     days = random.uniform(values['ttl_days_min'], values['ttl_days_max'])
     return days * 24 * 60 * 60
+
+
+def get_negative_ttl_seconds(cache_name):
+    """
+    Returns the configured negative-cache TTL in seconds.
+
+    A value of 0 disables negative caching.
+    """
+    try:
+        values = CACHE_CONFIG[cache_name]
+    except KeyError as error:
+        raise KeyError(f"Unknown cache '{cache_name}'.") from error
+
+    return values.get('negative_ttl_days', 0.0) * 24 * 60 * 60

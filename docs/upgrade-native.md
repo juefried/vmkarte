@@ -13,7 +13,9 @@ Diese Anleitung beschreibt das Upgrade einer Installation, bei der der Datengrab
 - Jedes Mitglied erhält `profile_updated_at`. Die Karte zeigt im Popup `Stand: TT.MM.JJJJ`; der exakte Zeitstempel steht im Tooltip.
 - Alte Cacheeinträge bleiben gültig. Bei `user_details`-Einträgen ohne Zeitstempel wird der Abrufzeitpunkt aus dem bisherigen Ablaufdatum rekonstruiert.
 - Die neuen TTLs gelten nur für neu geschriebene Cacheeinträge. Der erste Lauf nach dem Upgrade erzwingt keine vollständige Aktualisierung.
+- Erfolgreiche Nominatim-Abfragen ohne Treffer werden 30 Tage negativ gecacht (`negative_ttl_days` in `cache_config.json`). Exceptions werden weiterhin nicht gecacht.
 - `utils/clear_nominatim_cache.py` muss für dieses Upgrade **nicht** erneut ausgeführt werden.
+- `utils/cache.py` wurde entfernt.
 - Es werden keine neuen Python-Pakete benötigt; `requirements.txt` bleibt unverändert.
 - Alle Laufzeitpfade werden script-relativ aufgelöst. Die Kartendaten gehen standardmäßig nach `<repo>/docker/webserver/www_data/shared`; für einen separaten Web-Root kann `VMKARTE_SHARED_DIR` gesetzt werden.
 - Das Debug-`members.json` wird nur mit `--debug` nach `src/data_grabber/members.json` geschrieben. Ohne `--debug` wird die Datei nicht erzeugt; vorhandene Kopien am aktuellen Pfad sowie in alten Shared-Verzeichnissen werden beim nächsten Lauf gelöscht.
@@ -92,7 +94,8 @@ Alternativ kann sie mit den Default-Werten neu angelegt werden. Die Default-Wert
   },
   "nominatim": {
     "ttl_days_min": 180,
-    "ttl_days_max": 365
+    "ttl_days_max": 365,
+    "negative_ttl_days": 30
   }
 }
 ```

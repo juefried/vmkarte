@@ -25,12 +25,13 @@ Die TTL-Bereiche der Caches stehen in `cache_config.json`:
   },
   "nominatim": {
     "ttl_days_min": 180,
-    "ttl_days_max": 365
+    "ttl_days_max": 365,
+    "negative_ttl_days": 30
   }
 }
 ```
 
-Fehlende Datei oder fehlende Werte verwenden diese Defaults. Die TTL wird pro Cacheeintrag zufällig gezogen, damit sich die Aktualisierungen über die Zeit verteilen.
+Fehlende Datei oder fehlende Werte verwenden diese Defaults. Die TTL wird pro Cacheeintrag zufällig gezogen, damit sich die Aktualisierungen über die Zeit verteilen. `negative_ttl_days` cacht „kein Treffer“ für 30 Tage; Exceptions werden nicht gecacht.
 
 ## Datenpfade
 

@@ -29,7 +29,7 @@ Zusätzlich wurden fehlgeschlagene Nominatim-Abfragen als `None` mit einer TTL v
 **Umgesetzt am 22.10.2026:**
 
 - Nominatim-Requests senden jetzt einen konfigurierbaren, identifizierenden User-Agent und verwenden einen Timeout.
-- Nur erfolgreiche Nominatim-Ergebnisse werden gecacht; Fehler und negative Treffer nicht mehr.
+- Nur erfolgreiche Nominatim-Ergebnisse werden dauerhaft gecacht; Fehler und negative Treffer werden zunächst nicht dauerhaft gespeichert (seit 23.10.2026 gibt es einen befristeten Negativ-Cache).
 - Ein Hilfsskript zum Leeren des `nominatim`-Caches wurde ergänzt und auf die vorhandenen lokalen Caches angewendet.
 
 **Umgesetzt am 23.10.2026:**
@@ -37,6 +37,7 @@ Zusätzlich wurden fehlgeschlagene Nominatim-Abfragen als `None` mit einer TTL v
 - Die TTL-Bereiche für `user_details` und `nominatim` stehen in der eingecheckten `cache_config.json` und werden pro Eintrag zufällig gezogen.
 - Das 1-%-Thinning entfällt; `--fast` wird nur noch aus Kompatibilitätsgründen akzeptiert.
 - Jedes Mitglied erhält `profile_updated_at`; die Karte zeigt den Stand im Popup als Datum.
+- Erfolgreiche Nominatim-Abfragen ohne Treffer werden 30 Tage negativ gecacht; Exceptions werden nicht gecacht.
 
 ---
 
@@ -65,7 +66,7 @@ vmkarte/
 │   │   ├── country_mapping.json        # Ländernamen/-kürzel → Ländercode
 │   │   └── kuerzel_mapping.json        # Deutsche Kfz-/Ortskürzel → Ortsname
 │   └── utils/
-│       ├── cache.py                    # Interaktives Cache-Verwaltungsskript
+│       ├── clear_nominatim_cache.py    # Löscht den Nominatim-Cache
 │       └── delete_user_cash_entry.py   # Löscht einen user_details-Cacheeintrag
 ├── docker/
 │   ├── cron/                           # Cron-Container für den Datengrabber
@@ -165,9 +166,12 @@ Verantwortlich für Login und HTML-Parsing.
 |---|---|---|---|
 | `members_dict` | `('members_dict',)` | 23 h | komplettes Mitglieder-Dictionary |
 | `user_details` | `('user_details', uid)` | 7–14 Tage (konfigurierbar) | angereichertes Mitgliedsobjekt inkl. `profile_updated_at` |
-| `nominatim` | `('nominatim', searchstring, country_code)` | 180–365 Tage (konfigurierbar) | nur erfolgreiche Nominatim-Antworten |
+| `nominatim` | `('nominatim', searchstring, country_code)` | 180–365 Tage (konfigurierbar) | erfolgreiche Nominatim-Antworten |
+| `nominatim` (negativ) | `('nominatim', searchstring, country_code)` | 30 Tage (konfigurierbar) | Sentinel für „erfolgreich abgefragt, kein Treffer“ |
 
-Die TTL wird für jeden neuen Cacheeintrag zufällig aus dem in `cache_config.json` konfigurierten Bereich gezogen. Dadurch verteilen sich die Profil- und Geocoding-Aktualisierungen über die Zeit. Sind `ttl_days_min` und `ttl_days_max` gleich, ist die TTL fest.
+Die TTL wird für jeden neuen positiven Cacheeintrag zufällig aus dem in `cache_config.json` konfigurierten Bereich gezogen. Dadurch verteilen sich die Profil- und Geocoding-Aktualisierungen über die Zeit. Sind `ttl_days_min` und `ttl_days_max` gleich, ist die TTL fest.
+
+Negativ-Treffer werden mit `negative_ttl_days` (Default 30 Tage) gecacht. Damit werden dauerhaft unauflösbare Orte nicht bei jedem Lauf erneut an Nominatim geschickt. **Exceptions** wie HTTP 403/429, Timeouts oder JSON-Fehler werden weiterhin **nicht** gecacht.
 
 **Wichtig zur Wirkung:** Der `members_dict`-Cache ist als **Entwicklungshilfe** gedacht. Bei mehreren Läufen innerhalb von 23 Stunden spart er die 345 Mitgliederseiten. Im täglichen Produktivbetrieb (Cron alle 24 h) ist die TTL dagegen vor jedem Lauf abgelaufen, sodass die Mitgliederliste ohnehin neu geladen wird. Das ist kein Fehler, sondern der bewusste Kompromiss zugunsten täglicher Aktualität.
 
@@ -185,8 +189,9 @@ Die TTL wird für jeden neuen Cacheeintrag zufällig aus dem in `cache_config.js
 - Bei genau einem Treffer wird ein zweiter Request mit `exclude_place_ids` ausgeführt (`location_nominatim_lib.py:105`), ebenfalls mit Header und Timeout.
 - Bevorzugt bestimmte OSM-Typen (PLZ, administrative Grenzen, Stadt, Dorf usw.).
 - Gibt `None` zurück, wenn kein Treffer oder ein Request-Fehler auftritt.
-- Cacht **nur erfolgreiche Treffer**; `None` und Fehler werden nicht gespeichert.
-- Die TTL für neue Treffer stammt aus `cache_config.json` (Default 180–365 Tage, zufällig pro Eintrag).
+- Cacht erfolgreiche Treffer mit der positiven TTL (Default 180–365 Tage, zufällig pro Eintrag).
+- Cacht „erfolgreich abgefragt, aber kein Treffer“ mit `negative_ttl_days` (Default 30 Tage).
+- **Exceptions** (HTTP 403/429, Timeouts, JSON-Fehler) werden nicht gecacht, damit temporäre Störungen den Cache nicht vergiften.
 
 **`calculate_radius(boundingbox)`**
 
@@ -217,9 +222,10 @@ Die TTL wird für jeden neuen Cacheeintrag zufällig aus dem in `cache_config.js
 - `cache_config_lib.load_cache_config()` liest `cache_config.json` relativ zum `data_grabber`-Verzeichnis.
 - Fehlende Datei oder fehlende Werte führen zu den Defaults; ungültige Werte lösen eine klare `ValueError`-Meldung aus.
 - `get_ttl_seconds(cache_name)` zieht bei jedem Cache-Schreibvorgang eine zufällige TTL aus dem konfigurierten Bereich.
+- `get_negative_ttl_seconds(cache_name)` liefert die TTL für negative Nominatim-Treffer (Default 30 Tage; `0` deaktiviert den Negativ-Cache).
 - Das frühere `cache_thinning_lib.delete_random_cache_data()` und der 1-%-Thinning-Aufruf sind entfallen. Die Verteilung erfolgt über die zufällige TTL.
 - `--fast` wird zwar noch akzeptiert, hat aber keine Wirkung mehr.
-- `utils/cache.py` ist ein interaktives Werkzeug mit Nebenwirkungen beim Import (gibt Cache-Statistiken aus, listet Nominatim-Einträge). Die manuellen Löschfunktionen bleiben verfügbar.
+- `utils/cache.py` wurde entfernt. Die verbleibenden Hilfsskripte sind `utils/clear_nominatim_cache.py` und `utils/delete_user_cash_entry.py`.
 - `utils/delete_user_cash_entry.py` löscht `('user_details', uid)` relativ zum Skriptpfad.
 
 ### 5.6 Frontend `karte.html`
@@ -416,7 +422,7 @@ Die Karte verwendet nicht die Wohnadresse, sondern die freiwillige Ortsangabe au
 - Der Marker liegt auf dem gefundenen Nominatim-Punkt, häufig auf einem Stadt- oder PLZ-Zentrum. Das ist nicht zwingend die tatsächliche Wohnadresse.
 - Der Radius ist die halbe Diagonale der Bounding Box und keine echte Fehlertoleranz.
 - Der Ort wird zusammen mit den Profildaten über `user_details` gecacht (Default 7–14 Tage). Ändert ein Mitglied seinen Ort, kann die Karte daher bis zu 14 Tage lang den alten Ort anzeigen. Der angezeigte `profile_updated_at`-Stand gilt für dieses komplette gecachte Mitgliedsobjekt einschließlich Ortsangabe.
-- Nominatim-Ergebnisse werden standardmäßig 180–365 Tage gecacht. Die TTLs sind über `cache_config.json` konfigurierbar.
+- Positive Nominatim-Ergebnisse werden standardmäßig 180–365 Tage gecacht. Erfolgreiche Abfragen ohne Treffer werden 30 Tage negativ gecacht. Beide Werte sind über `cache_config.json` konfigurierbar; Exceptions werden nicht gecacht.
 - Durch die zufällige TTL laufen nicht alle Profile am selben Tag ab; die Aktualisierungen verteilen sich über den konfigurierten Zeitraum.
 - Eine explizite `"location": null`-Angabe würde derzeit einen Fehler auslösen, weil der Code `.lower()` direkt aufruft. Aktuell enthält `members.json` keine solchen Werte.
 
@@ -455,7 +461,8 @@ Die TTL-Bereiche für `user_details` und `nominatim` stehen in `cache_config.jso
   },
   "nominatim": {
     "ttl_days_min": 180,
-    "ttl_days_max": 365
+    "ttl_days_max": 365,
+    "negative_ttl_days": 30
   }
 }
 ```
@@ -463,8 +470,9 @@ Die TTL-Bereiche für `user_details` und `nominatim` stehen in `cache_config.jso
 - Die Datei wird relativ zum `data_grabber`-Verzeichnis gesucht, nicht relativ zum Arbeitsverzeichnis.
 - Fehlt die Datei oder ein Wert, gelten die oben genannten Defaults.
 - `ttl_days_min == ttl_days_max` ergibt eine feste TTL.
-- Werte müssen Zahlen größer 0 sein; `ttl_days_max` darf nicht kleiner als `ttl_days_min` sein. Ungültige Werte brechen den Lauf mit einer klaren Fehlermeldung ab.
-- Die TTL wird bei jedem neuen Cacheeintrag zufällig im Bereich gezogen. Änderungen greifen beim nächsten Prozessstart, also beim nächsten Cron-Lauf.
+- Werte müssen Zahlen größer 0 sein; `ttl_days_max` darf nicht kleiner als `ttl_days_min` sein. `negative_ttl_days` darf 0 sein (deaktiviert den Negativ-Cache). Ungültige Werte brechen den Lauf mit einer klaren Fehlermeldung ab.
+- Die positive TTL wird bei jedem neuen Cacheeintrag zufällig im Bereich gezogen. Änderungen greifen beim nächsten Prozessstart, also beim nächsten Cron-Lauf.
+- `negative_ttl_days` gilt für erfolgreiche Abfragen ohne Treffer. Exceptions werden nicht gecacht.
 - Die Datei enthält keine Zugangsdaten und ist deshalb eingecheckt.
 
 Vorlagen:
@@ -637,14 +645,14 @@ Cache-Key vorhanden: ('t', 'a', None)
 
 - `@cache.memoize` wurde durch manuelles Caching ersetzt.
 - Cache-Schlüssel: `('nominatim', searchstring, country_code)`.
-- `cache.set()` wird nur aufgerufen, wenn ein Treffer gefunden wurde. `None` und Request-Fehler werden nicht gecacht.
+- `cache.set()` wird bei einem Treffer aufgerufen. Seit 23.10.2026 wird „kein Treffer“ zusätzlich mit einer kurzen Negativ-TTL gecacht; Request-Fehler und Exceptions werden nicht gecacht.
 - Neues Hilfsskript `src/data_grabber/utils/clear_nominatim_cache.py` löscht alle `nominatim`-Einträge und entfernt zusätzlich abgelaufene Cache-Einträge.
 
 **Verifikation:**
 
 - Erfolgreicher Treffer wird gecacht und beim zweiten Aufruf ohne Netzwerkzugriff zurückgegeben.
-- Negativer Treffer wird nicht gecacht.
-- Simulierter Timeout wird nicht gecacht.
+- Negativer Treffer (erfolgreiche Abfrage ohne Ergebnis) wird mit kurzer TTL gecacht.
+- Simulierter Timeout oder HTTP-Fehler wird nicht gecacht.
 
 **Cache-Bereinigung:**
 
@@ -721,7 +729,6 @@ Die Seite ist deutschsprachig; die Meldung lautet „Anmelden“. Die Prüfung s
 - `examine_locations()` würde bei einem expliziten `"location": null` mit `AttributeError` abbrechen, da `.lower()` auf `None` aufgerufen wird. Aktuell enthält `members.json` keine expliziten `null`-Werte, aber das Format ist nicht abgesichert.
 - `radius` kann `'N/A'` sein; Leaflet erwartet für `setRadius()` eine Zahl. Das kann beim Hover zu einem JavaScript-Fehler führen.
 - Der User-Agent im Scraper ist veraltet (`Chrome/91`).
-- `utils/cache.py` führt beim Import Aktionen aus und ist kein reines Bibliotheksmodul.
 - `delete_user_cash_entry.py` enthält einen Tippfehler im Dateinamen („cash“ statt „cache“), funktional aber korrekt.
 - Fehler werden nur auf stdout ausgegeben; der Cronjob mailt nicht (`MAILTO=""`), sodass Fehler leicht unbemerkt bleiben.
 
@@ -777,13 +784,13 @@ cd src/data_grabber
 python -c "import diskcache as dc; c=dc.Cache('cache'); print([k for k in c.iterkeys() if isinstance(k, tuple) and k and k[0]=='nominatim'])"
 ```
 
-Nach einem erfolgreichen Lookup erscheint ein Schlüssel der Form `('nominatim', 'Qeqertarsuaq', 'gl')`. Nach einem negativen Lookup oder einem Fehler darf kein neuer Schlüssel entstehen.
+Nach einem erfolgreichen Lookup erscheint ein Schlüssel der Form `('nominatim', 'Qeqertarsuaq', 'gl')`. Nach einem erfolgreichen Lookup ohne Treffer erscheint derselbe Schlüssel mit dem Sentinel-Wert `__nominatim_negative__` (30 Tage TTL). Nach einer Exception darf kein neuer Schlüssel entstehen.
 
 ### Cache-Konfiguration prüfen
 
 ```powershell
 cd src/data_grabber
-python -c "from libs.cache_config_lib import CACHE_CONFIG, get_ttl_seconds; print(CACHE_CONFIG); print(get_ttl_seconds('user_details'), get_ttl_seconds('nominatim'))"
+python -c "from libs.cache_config_lib import CACHE_CONFIG, get_negative_ttl_seconds, get_ttl_seconds; print(CACHE_CONFIG); print(get_ttl_seconds('user_details'), get_ttl_seconds('nominatim'), get_negative_ttl_seconds('nominatim'))"
 ```
 
 Die ausgegebenen TTLs müssen in Sekunden innerhalb der konfigurierten Tagesbereiche liegen. Mit einer temporären Datei lassen sich auch fehlende Werte (Defaults) und ungültige Werte testen:
@@ -836,10 +843,15 @@ print(len(soup.select("div.contentRow-lesser")))
 
 ```powershell
 cd src/data_grabber
-python utils/cache.py
+python -c "import diskcache as dc; from collections import Counter; c=dc.Cache('cache'); keys=list(c.iterkeys()); print(len(keys), Counter(k[0] for k in keys if isinstance(k, tuple) and k))"
 ```
 
-Achtung: Das Skript gibt viele Einträge aus und ist nur ein Diagnosewerkzeug.
+Anzahl der negativen Nominatim-Einträge:
+
+```powershell
+cd src/data_grabber
+python -c "import diskcache as dc; c=dc.Cache('cache'); print(sum(1 for k in c.iterkeys() if isinstance(k, tuple) and k and k[0]=='nominatim' and c.get(k)=='__nominatim_negative__'))"
+```
 
 ---
 
@@ -876,9 +888,9 @@ docker compose exec cron python /app/utils/clear_nominatim_cache.py --cache /app
 
 Das Skript löscht alle Einträge mit dem Präfix `nominatim` und entfernt zusätzlich abgelaufene Cache-Einträge. Es wurde auf die vorhandenen lokalen Caches angewendet. Auf beiden Servern muss es nach dem Deployment einmal ausgeführt werden.
 
-### 12.3 Fehlschläge nicht als `None` cachen (umgesetzt)
+### 12.3 Fehlschläge nicht dauerhaft als `None` cachen (umgesetzt)
 
-`@cache.memoize` wurde entfernt. `query_nominatim()` speichert nur noch erfolgreiche Treffer unter `('nominatim', searchstring, country_code)`.
+`@cache.memoize` wurde entfernt. `query_nominatim()` speichert erfolgreiche Treffer unter `('nominatim', searchstring, country_code)`. Seit dem 23.10.2026 wird zusätzlich „erfolgreich abgefragt, aber kein Treffer“ mit einer kurzen Negativ-TTL (Default 30 Tage) gespeichert. Exceptions (HTTP-Fehler, Timeouts, JSON-Fehler) werden weiterhin nicht gecacht.
 
 Da sich der Cache-Schlüssel geändert hat und die alten Einträge ohnehin bereinigt werden, fragt der erste Lauf nach dem Deployment alle Orte erneut ab. Bei ca. 2.500 bis 3.200 Orten und maximal einem Request pro Sekunde dauert das pro Server etwa 45 bis 90 Minuten. Danach greift der Cache wieder.
 
@@ -889,7 +901,7 @@ Der Arbeitsstand wurde am 22.10.2026 auf den Masterstand `3c9e3fc` zurückgesetz
 - `get_member_data()` ist aktiv.
 - Es wird keine vorhandene `members.json` gelesen.
 - Die Kartenausgabe erfolgt nach `docker/webserver/www_data/shared/vmforum_members.json` (Docker: `/app/shared/vmforum_members.json`).
-- `members.json` bleibt ein Laufzeitartefakt und gehört nicht ins Docker-Image. Es liegt unter `src/data_grabber/members.json` bzw. `/app/members.json` außerhalb des Web-Roots.
+- `members.json` wird nur mit `--debug` erzeugt, gehört nicht ins Docker-Image und liegt unter `src/data_grabber/members.json` bzw. `/app/members.json` außerhalb des Web-Roots.
 
 Der Ausgabepfad ist inzwischen über `VMKARTE_SHARED_DIR` konfigurierbar; siehe Abschnitt 12.10.
 
@@ -924,8 +936,8 @@ Da das Forum HTML liefert und keine API verfügbar ist, sollten repräsentative 
 
 ### 12.9 Konfigurierbare Cache-TTLs und Profil-Datenstand (umgesetzt am 23.10.2026)
 
-- `cache_config.json` konfiguriert die TTL-Bereiche für `user_details` und `nominatim`.
-- Fehlende Datei oder fehlende Werte fallen auf Defaults zurück: `user_details` 7–14 Tage, `nominatim` 180–365 Tage.
+- `cache_config.json` konfiguriert die TTL-Bereiche für `user_details` und `nominatim` sowie die Negativ-TTL für Nominatim.
+- Fehlende Datei oder fehlende Werte fallen auf Defaults zurück: `user_details` 7–14 Tage, `nominatim` 180–365 Tage, negative Nominatim-Treffer 30 Tage.
 - Die TTL wird pro Cacheeintrag zufällig gezogen. Dadurch entfallen das frühere 1-%-Thinning und der 14-Tage-Burst.
 - `fetch_user_details()` speichert `profile_updated_at` im Mitgliedsobjekt. Bei alten Cacheeinträgen wird der Zeitpunkt aus dem Ablaufzeitpunkt und der bisherigen 14-Tage-TTL rekonstruiert.
 - Die Karte zeigt den Stand im Popup als Datum; der exakte Zeitstempel steht im Tooltip.
@@ -940,6 +952,15 @@ Da das Forum HTML liefert und keine API verfügbar ist, sollten repräsentative 
 - Ohne `--debug` wird eine vorhandene `members.json` am aktuellen Pfad sowie in den alten Shared-Verzeichnissen gelöscht.
 - nginx liefert `members.json` grundsätzlich nicht aus (`location ~ /members\.json$ { return 404; }`).
 - Mit `VMKARTE_SHARED_DIR` kann der Karten-Datenpfad für separate Web-Roots überschrieben werden.
+
+### 12.11 Negativ-Cache für Nominatim (umgesetzt am 23.10.2026)
+
+- Erfolgreiche Nominatim-Abfragen ohne Treffer werden 30 Tage lang negativ gecacht (`negative_ttl_days` in `cache_config.json`).
+- Ein Sentinel-Wert im selben Cache-Key unterscheidet „kein Treffer“ von einem fehlenden Eintrag.
+- Dadurch werden dauerhaft unauflösbare Orte nicht mehr bei jedem Lauf erneut abgefragt.
+- Exceptions (HTTP 403/429, Timeouts, JSON-Fehler) werden weiterhin nicht gecacht.
+- `0` deaktiviert den Negativ-Cache.
+- `utils/cache.py` wurde entfernt; es war nur ein interaktives Diagnosewerkzeug und enthielt auskommentierte Thinning-Aufrufe.
 
 ---
 
@@ -1007,11 +1028,12 @@ Die früheren Debug-Abweichungen (deaktivierter Scraper, falscher Ausgabepfad, f
 
 ### 23.10.2026
 
-- `src/data_grabber/libs/cache_config_lib.py`: neues Modul zum Laden, Validieren und Ziehen der Cache-TTLs.
+- `src/data_grabber/libs/cache_config_lib.py`: Laden/Validieren der Cache-TTLs inklusive `negative_ttl_days` und `get_negative_ttl_seconds()`.
 - `src/data_grabber/libs/paths_lib.py`: einheitliche, script-relative Pfade für Konfiguration, Cache, Debug-Daten und Karten-JSON.
-- `src/data_grabber/cache_config.json`: eingecheckte Default-Konfiguration für `user_details` und `nominatim`.
+- `src/data_grabber/cache_config.json` und `config/cache_config.json.sample`: Default-Konfiguration inklusive `negative_ttl_days: 30`.
 - `src/data_grabber/libs/data_scraper_lib.py`: `profile_updated_at`, Rekonstruktion für alte Cacheeinträge, konfigurierbare `user_details`-TTL und script-relative Pfade.
-- `src/data_grabber/libs/location_nominatim_lib.py`: konfigurierbare `nominatim`-TTL und script-relative Pfade.
+- `src/data_grabber/libs/location_nominatim_lib.py`: konfigurierbare `nominatim`-TTL, Negativ-Cache für erfolgreiche Abfragen ohne Treffer, keine Negativ-Caches für Exceptions, script-relative Pfade.
+- `src/data_grabber/utils/cache.py`: entfernt (nur noch manuelles Diagnosewerkzeug, nicht mehr im Projekt).
 - `src/data_grabber/libs/location_mapping_rules_lib.py`: Mapping-Dateien werden script-relativ geladen.
 - `src/data_grabber/data_grabber.py`: Thinning entfernt, `--fast` als No-op, `--debug` für die Rohdatenausgabe, Löschen veralteter `members.json` und einheitliche Ausgabepfade.
 - `src/data_grabber/libs/cache_thinning_lib.py`: entfernt.

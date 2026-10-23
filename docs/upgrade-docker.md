@@ -13,7 +13,9 @@ Diese Anleitung beschreibt das Upgrade einer bestehenden Docker-Installation. Di
 - Jedes Mitglied erhält `profile_updated_at`. Die Karte zeigt im Popup `Stand: TT.MM.JJJJ`; der exakte Zeitstempel steht im Tooltip.
 - Alte Cacheeinträge bleiben gültig. Bei `user_details`-Einträgen ohne Zeitstempel wird der Abrufzeitpunkt aus dem bisherigen Ablaufdatum rekonstruiert.
 - Die neuen TTLs gelten nur für neu geschriebene Cacheeinträge. Der erste Lauf nach dem Upgrade erzwingt keine vollständige Aktualisierung.
+- Erfolgreiche Nominatim-Abfragen ohne Treffer werden 30 Tage negativ gecacht (`negative_ttl_days` in `cache_config.json`). Exceptions werden weiterhin nicht gecacht.
 - `utils/clear_nominatim_cache.py` muss für dieses Upgrade **nicht** erneut ausgeführt werden.
+- `utils/cache.py` wurde entfernt.
 - Cron und Web verwenden jetzt denselben Host-Pfad `docker/webserver/www_data/shared`. IDE und native Installation schreiben ebenfalls dorthin; das manuelle Kopieren der Kartendaten entfällt.
 - Das Debug-`members.json` wird nur mit `--debug` nach `/app/members.json` geschrieben. Ohne `--debug` wird die Datei nicht erzeugt; vorhandene Kopien am aktuellen Pfad sowie im Shared-/Web-Verzeichnis werden beim nächsten Lauf gelöscht.
 - nginx liefert `members.json` zusätzlich grundsätzlich nicht aus (`return 404`).
@@ -99,7 +101,8 @@ Die Datei kann anschließend angepasst werden:
   },
   "nominatim": {
     "ttl_days_min": 180,
-    "ttl_days_max": 365
+    "ttl_days_max": 365,
+    "negative_ttl_days": 30
   }
 }
 ```

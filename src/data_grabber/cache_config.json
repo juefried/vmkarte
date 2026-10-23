@@ -5,6 +5,7 @@
   },
   "nominatim": {
     "ttl_days_min": 180,
-    "ttl_days_max": 365
+    "ttl_days_max": 365,
+    "negative_ttl_days": 30
   }
 }
