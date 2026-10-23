@@ -1,0 +1,177 @@
+# Upgrade der nativen Server-Installation
+
+- **Ausgangsversion:** Tag `20261022`
+- **Zielversion:** Branch `feature/profile-update-date` (nach dem Merge: aktueller Master)
+
+Diese Anleitung beschreibt das Upgrade einer Installation, bei der der Datengrabber direkt auf dem Server läuft (Cron oder systemd) und der Webserver die Karte als statische Dateien ausliefert.
+
+## Was sich ändert
+
+- Die TTL-Bereiche für `user_details` und `nominatim` stehen jetzt in `cache_config.json`.
+- Die TTL wird pro Cacheeintrag zufällig gezogen. Das frühere 1-%-Thinning entfällt.
+- `--fast` wird weiterhin akzeptiert, hat aber keine Wirkung mehr. Die bestehende Cron- oder systemd-Konfiguration muss nicht geändert werden.
+- Jedes Mitglied erhält `profile_updated_at`. Die Karte zeigt im Popup `Stand: TT.MM.JJJJ`; der exakte Zeitstempel steht im Tooltip.
+- Alte Cacheeinträge bleiben gültig. Bei `user_details`-Einträgen ohne Zeitstempel wird der Abrufzeitpunkt aus dem bisherigen Ablaufdatum rekonstruiert.
+- Die neuen TTLs gelten nur für neu geschriebene Cacheeinträge. Der erste Lauf nach dem Upgrade erzwingt keine vollständige Aktualisierung.
+- `utils/clear_nominatim_cache.py` muss für dieses Upgrade **nicht** erneut ausgeführt werden.
+- Es werden keine neuen Python-Pakete benötigt; `requirements.txt` bleibt unverändert.
+
+## Vorbereitung
+
+Im Projektverzeichnis auf dem Server:
+
+```bash
+cd /pfad/zu/vmkarte
+
+cp -a src/data_grabber/config.json src/data_grabber/config.json.bak
+cp -a src/data_grabber/cache src/data_grabber/cache.bak
+[ -d src/data_grabber/shared ] && cp -a src/data_grabber/shared src/data_grabber/shared.bak
+```
+
+Die Sicherung von `cache/` und `shared/` ist optional, aber empfohlen. `config.json` enthält die Zugangsdaten und sollte in jedem Fall gesichert werden.
+
+Falls die eingecheckte `src/data_grabber/cache_config.json` lokal angepasst wurde, diese Änderung vor dem Branchwechsel sichern:
+
+```bash
+cp src/data_grabber/cache_config.json /tmp/cache_config.json.local
+```
+
+## Code aktualisieren
+
+```bash
+git fetch --all --tags
+git checkout feature/profile-update-date
+```
+
+Falls der Branch noch nicht lokal vorhanden ist:
+
+```bash
+git fetch origin feature/profile-update-date
+git checkout feature/profile-update-date
+```
+
+Bei einer Installation ohne Git-Checkout müssen mindestens folgende Dateien übernommen werden:
+
+- `src/data_grabber/data_grabber.py`
+- `src/data_grabber/cache_config.json`
+- `src/data_grabber/libs/` (insbesondere `cache_config_lib.py`, `data_scraper_lib.py`, `location_nominatim_lib.py`)
+- `docker/webserver/www_data/karte.html`
+
+`src/data_grabber/libs/cache_thinning_lib.py` wird nicht mehr verwendet und kann entfernt werden. Das Weglassen ist unschädlich.
+
+## cache_config.json prüfen
+
+Die Datei ist im Repository enthalten und muss im selben Verzeichnis wie `data_grabber.py` liegen:
+
+```text
+src/data_grabber/cache_config.json
+```
+
+Falls du die Datei vor dem Branchwechsel gesichert hast, die lokale Anpassung jetzt wiederherstellen:
+
+```bash
+cp /tmp/cache_config.json.local src/data_grabber/cache_config.json
+```
+
+Falls die Datei in einer nicht versionierten Installation fehlt, aus dem neuen Stand übernehmen:
+
+```bash
+cp /pfad/zum/neuen/stand/src/data_grabber/cache_config.json src/data_grabber/cache_config.json
+```
+
+Alternativ kann sie mit den Default-Werten neu angelegt werden. Die Default-Werte sind:
+
+```json
+{
+  "user_details": {
+    "ttl_days_min": 7,
+    "ttl_days_max": 14
+  },
+  "nominatim": {
+    "ttl_days_min": 180,
+    "ttl_days_max": 365
+  }
+}
+```
+
+Fehlt die Datei oder ein Wert, greifen diese Defaults. Ungültige Werte brechen den Lauf mit einer klaren Fehlermeldung ab. Änderungen an den TTLs greifen beim nächsten Prozessstart, also beim nächsten Cron-/systemd-Lauf oder beim manuellen Lauf.
+
+## Datengrabber starten
+
+Die bestehende Cron- oder systemd-Konfiguration bleibt unverändert. Für einen manuellen Testlauf:
+
+```bash
+cd /pfad/zu/vmkarte/src/data_grabber
+/pfad/zu/venv/bin/python data_grabber.py
+```
+
+Das Arbeitsverzeichnis muss `src/data_grabber` sein, weil `config.json` weiterhin relativ zum Arbeitsverzeichnis gelesen wird. `cache_config.json` wird dagegen script-relativ gefunden.
+
+Der Aufruf mit `--fast` ist weiterhin möglich, hat aber keine Wirkung mehr:
+
+```bash
+/pfad/zu/venv/bin/python data_grabber.py --fast
+```
+
+Der Lauf kann bei leerem Cache mehrere Stunden dauern. Mit dem vorhandenen Cache geht er schneller. Die Ausgabe erfolgt wie bisher nach `shared/members.json` und `shared/vmforum_members.json`.
+
+## Frontend aktualisieren
+
+Die Karte benötigt die neue `karte.html`. Wenn der Webserver direkt `docker/webserver/www_data/` ausliefert, ist mit dem Code-Update nichts weiter zu tun. Wenn der Webserver ein separates Web-Root verwendet, die Datei dorthin kopieren:
+
+```bash
+cp docker/webserver/www_data/karte.html /var/www/vmforum-karte/karte.html
+```
+
+Weitere statische Dateien (Leaflet, MarkerCluster) haben sich nicht geändert. Die Karte lädt `shared/vmforum_members.json` relativ zu `karte.html`; dieses Verzeichnis muss im Web-Root weiterhin vorhanden und lesbar sein.
+
+## Verifikation
+
+Effektive Cache-Konfiguration prüfen:
+
+```bash
+cd /pfad/zu/vmkarte/src/data_grabber
+/pfad/zu/venv/bin/python -c "from libs.cache_config_lib import CACHE_CONFIG, get_ttl_seconds; print(CACHE_CONFIG); print(get_ttl_seconds('user_details'), get_ttl_seconds('nominatim'))"
+```
+
+Datenstand in der erzeugten JSON-Datei prüfen:
+
+```bash
+cd /pfad/zu/vmkarte/src/data_grabber
+grep -m1 profile_updated_at shared/vmforum_members.json
+```
+
+Anzahl der Einträge mit Zeitstempel:
+
+```bash
+cd /pfad/zu/vmkarte/src/data_grabber
+/pfad/zu/venv/bin/python -c "import json; data=json.load(open('shared/vmforum_members.json', encoding='utf-8')); print(sum(1 for m in data if m.get('profile_updated_at')), '/', len(data))"
+```
+
+Karte im Browser mit `Strg+F5` bzw. `Cmd+Shift+R` neu laden. In den Popups muss `Stand: TT.MM.JJJJ` erscheinen. Bei Einträgen ohne Profilabruf steht `Stand: unbekannt`.
+
+## Rollback
+
+```bash
+cd /pfad/zu/vmkarte
+```
+
+Falls `cache_config.json` lokal angepasst wurde, die Änderung vorher sichern und die Arbeitskopie zurücksetzen:
+
+```bash
+cp src/data_grabber/cache_config.json /tmp/cache_config.json.local
+git checkout -- src/data_grabber/cache_config.json
+git checkout 20261022
+```
+
+Danach den Cronjob bzw. den systemd-Timer wie gewohnt weiterlaufen lassen. Der Cache bleibt kompatibel und muss nicht gelöscht werden. Die alte Version benötigt `cache_config.json` nicht; beim Checkout wird die versionierte Datei aus dem Arbeitsverzeichnis entfernt. `profile_updated_at` wird von der alten Ausgabe ignoriert.
+
+Falls das Frontend bereits aktualisiert wurde, auch die alte `karte.html` wieder ausrollen. Andernfalls zeigt die neue Karte mit den alten Daten überall `Stand: unbekannt`.
+
+## Hinweise
+
+- Der erste Lauf aktualisiert nicht automatisch alle Profile. Bestehende Cacheeinträge behalten ihr bisheriges Ablaufdatum. Die Anzeige zeigt zunächst die rekonstruierten alten Abrufdaten; neue Einträge erhalten die zufällige TTL.
+- Für einen Test kann die TTL vorübergehend verkürzt werden, z. B. `user_details` 1–2 Tage und `nominatim` 30–60 Tage. Das erhöht die Zahl der Forum- und Nominatim-Abfragen deutlich und ist nicht für den Produktivbetrieb gedacht.
+- Ein vollständiges Leeren des Caches (`src/data_grabber/cache/`) erzwingt einen kompletten Neuaufbau mit ca. 6.900 Profilabrufen und bis zu ca. 3.000 Nominatim-Abfragen. Nur bei Bedarf und möglichst nicht während der Hauptnutzungszeit durchführen.
+- Nach einem Code-Update die Dateirechte prüfen: Der Cron-/systemd-Benutzer muss `cache/` und `shared/` beschreiben können; der Webserver muss `shared/vmforum_members.json` lesen können.
+- `src/data_grabber/config.json` mit den Zugangsdaten bleibt unverändert.

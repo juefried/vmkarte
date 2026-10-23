@@ -74,6 +74,9 @@ vmkarte/
 │   ├── geo-handler.php                 # geo:-Weiterleitung zu BRouter
 │   ├── leaflet/                        # Leaflet-Bibliothek
 │   └── markercluster/                  # Marker-Cluster-Plugin
+├── docs/
+│   ├── upgrade-docker.md               # Upgrade-Anleitung Docker
+│   └── upgrade-native.md               # Upgrade-Anleitung native Installation
 ├── config/                             # Laufzeitkonfiguration (ignoriert)
 ├── volumes/                            # Laufzeitdaten (ignoriert)
 ├── members.json                        # Zwischenstand mit Ortsangaben
@@ -472,6 +475,8 @@ Der Pfad von `config.json` ist relativ zum aktuellen Arbeitsverzeichnis. Das ist
 ---
 
 ## 8. Betrieb
+
+Upgrade-Anleitungen: [Docker](docs/upgrade-docker.md) · [native Installation](docs/upgrade-native.md)
 
 ### Lokal
 
@@ -949,6 +954,7 @@ Die früheren Debug-Abweichungen (deaktivierter Scraper, falscher Ausgabepfad, f
 - `docker/webserver/www_data/karte.html`: Datenstand im Popup.
 - `docker/cron/Dockerfile` und `docker-compose.yml.sample`: Default-`cache_config.json` und Mount.
 - `config/cache_config.json.sample`: Docker-Vorlage.
+- `docs/upgrade-docker.md`, `docs/upgrade-native.md`: Upgrade-Anleitungen für Docker und native Server.
 - `.gitignore`: `/config/*` mit Ausnahmen für die Beispieldateien.
 - `DOKUMENTATION.md`, `README.md`: Konfiguration, Datenstand und Betrieb.
 

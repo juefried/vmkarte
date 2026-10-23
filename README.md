@@ -31,3 +31,8 @@ Die TTL-Bereiche der Caches stehen in `cache_config.json`:
 ```
 
 Fehlende Datei oder fehlende Werte verwenden diese Defaults. Die TTL wird pro Cacheeintrag zufällig gezogen, damit sich die Aktualisierungen über die Zeit verteilen.
+
+## Upgrade von der Version 20261022
+
+- [Docker-Installation](docs/upgrade-docker.md)
+- [Native Server-Installation](docs/upgrade-native.md)
