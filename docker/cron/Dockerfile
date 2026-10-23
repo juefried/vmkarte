@@ -15,6 +15,7 @@ COPY requirements.txt /app/requirements.txt
 COPY src/data_grabber/data_grabber.py /app/data_grabber.py
 COPY src/data_grabber/libs/* /app/libs/
 COPY src/data_grabber/utils/* /app/utils/
+COPY src/data_grabber/cache_config.json /app/cache_config.json
 
 COPY docker/cron/crontab /etc/cron.d/my-cron
 RUN chmod 0600 /etc/cron.d/my-cron

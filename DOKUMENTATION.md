@@ -1,6 +1,6 @@
 # vmkarte – Codeanalyse und Dokumentation
 
-**Stand:** 22.10.2026
+**Stand:** 23.10.2026
 **Gegenstand:** Analyse des bestehenden Codes, Dokumentation der Architektur und Eingrenzung der aktuellen Fehlerursachen.
 
 ---
@@ -24,13 +24,19 @@ Live-Prüfung am 22.10.2026:
 
 Am 22.10.2026 wurde der Arbeitsstand auf den Masterstand (`3c9e3fc`) zurückgesetzt. Die zuvor vorhandenen Debug-Änderungen (Scraper auskommentiert, abweichende Ausgabepfade) sind damit **nicht mehr aktiv**. Sie sind in Befund C und D nur noch als historische Notiz dokumentiert.
 
-Zusätzlich wurden fehlgeschlagene Nominatim-Abfragen als `None` mit einer TTL von 365 Tagen gecacht. Durch das tägliche 1-%-Thinning war die effektive Lebensdauer kürzer, lag aber weiterhin bei Wochen bis Monaten.
+Zusätzlich wurden fehlgeschlagene Nominatim-Abfragen als `None` mit einer TTL von 365 Tagen gecacht. Durch das damalige tägliche 1-%-Thinning war die effektive Lebensdauer kürzer, lag aber weiterhin bei Wochen bis Monaten.
 
 **Umgesetzt am 22.10.2026:**
 
 - Nominatim-Requests senden jetzt einen konfigurierbaren, identifizierenden User-Agent und verwenden einen Timeout.
 - Nur erfolgreiche Nominatim-Ergebnisse werden gecacht; Fehler und negative Treffer nicht mehr.
 - Ein Hilfsskript zum Leeren des `nominatim`-Caches wurde ergänzt und auf die vorhandenen lokalen Caches angewendet.
+
+**Umgesetzt am 23.10.2026:**
+
+- Die TTL-Bereiche für `user_details` und `nominatim` stehen in der eingecheckten `cache_config.json` und werden pro Eintrag zufällig gezogen.
+- Das 1-%-Thinning entfällt; `--fast` wird nur noch aus Kompatibilitätsgründen akzeptiert.
+- Jedes Mitglied erhält `profile_updated_at`; die Karte zeigt den Stand im Popup als Datum.
 
 ---
 
@@ -49,11 +55,12 @@ vmkarte/
 ├── src/data_grabber/
 │   ├── data_grabber.py                 # Einstiegspunkt / Orchestrierung
 │   ├── config.example.json             # Vorlage für lokale Zugangsdaten
+│   ├── cache_config.json               # Konfiguration der Cache-TTLs
 │   ├── libs/
 │   │   ├── data_scraper_lib.py         # Forum-Login und HTML-Parsing
 │   │   ├── location_nominatim_lib.py   # Nominatim-Abfragen und Radius
 │   │   ├── location_mapping_rules_lib.py # Orts-/Länder-/PLZ-Normalisierung
-│   │   ├── cache_thinning_lib.py       # Zufälliges Leeren von Cache-Anteilen
+│   │   ├── cache_config_lib.py         # Laden/Validieren der Cache-TTLs
 │   │   ├── country_mapping.json        # Ländernamen/-kürzel → Ländercode
 │   │   └── kuerzel_mapping.json        # Deutsche Kfz-/Ortskürzel → Ortsname
 │   └── utils/
@@ -93,8 +100,8 @@ flowchart LR
 
 ### Ablauf eines vollständigen Laufs
 
-1. `data_grabber.py` parst `--fast`.
-2. Ohne `--fast` werden 1 % der Cacheeinträge aus `user_details` und `nominatim` gelöscht.
+1. `data_grabber.py` parst die CLI-Parameter; `--fast` wird aus Kompatibilitätsgründen noch akzeptiert, hat aber keine Wirkung mehr.
+2. `cache_config_lib.py` lädt die TTL-Bereiche für `user_details` und `nominatim` aus `cache_config.json`.
 3. `get_member_data()` loggt sich ins Forum ein, lädt alle Mitgliederseiten und ruft für jedes Mitglied die „Über“-Seite auf.
 4. Die Mitgliederdaten werden als `members.json` zwischengespeichert.
 5. `examine_locations()` normalisiert die Ortsangabe, ermittelt Land und PLZ, fragt Nominatim ab und berechnet einen Radius aus der Bounding Box.
@@ -110,12 +117,12 @@ flowchart LR
 
 Einstiegspunkt und Orchestrierung.
 
-- CLI-Parameter `--fast`: überspringt das zufällige Cache-Leeren.
-- Aktueller Stand (Master `3c9e3fc`):
-  - `get_member_data()` ist aktiv (`data_grabber.py:43`).
-  - Die Mitgliederdaten werden zur Laufzeit nach `shared/members.json` geschrieben (`data_grabber.py:47`).
-  - Die Ausgabe erfolgt nach `shared/vmforum_members.json` (`data_grabber.py:72`).
-- Baut aus jedem Mitglied ein reduziertes Objekt mit `id`, `name`, `lat`, `lon`, `radius` und optional `vm`, `lr`, `tr`, `other`.
+- CLI-Parameter `--fast`: wird aus Kompatibilitätsgründen noch akzeptiert, hat aber keine Wirkung mehr.
+- `get_member_data()` ist aktiv.
+- Die Mitgliederdaten werden zur Laufzeit nach `shared/members.json` geschrieben.
+- Die Ausgabe erfolgt nach `shared/vmforum_members.json`.
+- Baut aus jedem Mitglied ein reduziertes Objekt mit `id`, `name`, `lat`, `lon`, `radius` und optional `profile_updated_at`, `vm`, `lr`, `tr`, `other`.
+- Das frühere Cache-Thinning entfällt; die Verteilung übernimmt die zufällige TTL aus `cache_config.json`.
 
 ### 5.2 `src/data_grabber/libs/data_scraper_lib.py`
 
@@ -153,12 +160,14 @@ Verantwortlich für Login und HTML-Parsing.
 | Cache-Name | Schlüssel | Laufzeit | Inhalt |
 |---|---|---|---|
 | `members_dict` | `('members_dict',)` | 23 h | komplettes Mitglieder-Dictionary |
-| `user_details` | `('user_details', uid)` | 14 Tage | angereichertes Mitgliedsobjekt |
-| `nominatim` | `('nominatim', searchstring, country_code)` | 365 Tage | nur erfolgreiche Nominatim-Antworten |
+| `user_details` | `('user_details', uid)` | 7–14 Tage (konfigurierbar) | angereichertes Mitgliedsobjekt inkl. `profile_updated_at` |
+| `nominatim` | `('nominatim', searchstring, country_code)` | 180–365 Tage (konfigurierbar) | nur erfolgreiche Nominatim-Antworten |
+
+Die TTL wird für jeden neuen Cacheeintrag zufällig aus dem in `cache_config.json` konfigurierten Bereich gezogen. Dadurch verteilen sich die Profil- und Geocoding-Aktualisierungen über die Zeit. Sind `ttl_days_min` und `ttl_days_max` gleich, ist die TTL fest.
 
 **Wichtig zur Wirkung:** Der `members_dict`-Cache ist als **Entwicklungshilfe** gedacht. Bei mehreren Läufen innerhalb von 23 Stunden spart er die 345 Mitgliederseiten. Im täglichen Produktivbetrieb (Cron alle 24 h) ist die TTL dagegen vor jedem Lauf abgelaufen, sodass die Mitgliederliste ohnehin neu geladen wird. Das ist kein Fehler, sondern der bewusste Kompromiss zugunsten täglicher Aktualität.
 
-Nur `user_details` (14 Tage) und `nominatim` (365 Tage) entlasten im Produktivbetrieb spürbar Forum und Nominatim.
+`user_details` und `nominatim` entlasten im Produktivbetrieb spürbar Forum und Nominatim. Das frühere 1-%-Thinning ist entfallen, weil die zufällige TTL die Verteilung zuverlässiger übernimmt und keinen 14-Tage-Burst erzeugt.
 
 ### 5.3 `src/data_grabber/libs/location_nominatim_lib.py`
 
@@ -172,7 +181,8 @@ Nur `user_details` (14 Tage) und `nominatim` (365 Tage) entlasten im Produktivbe
 - Bei genau einem Treffer wird ein zweiter Request mit `exclude_place_ids` ausgeführt (`location_nominatim_lib.py:105`), ebenfalls mit Header und Timeout.
 - Bevorzugt bestimmte OSM-Typen (PLZ, administrative Grenzen, Stadt, Dorf usw.).
 - Gibt `None` zurück, wenn kein Treffer oder ein Request-Fehler auftritt.
-- Cacht **nur erfolgreiche Treffer** (`location_nominatim_lib.py:138`); `None` und Fehler werden nicht gespeichert.
+- Cacht **nur erfolgreiche Treffer**; `None` und Fehler werden nicht gespeichert.
+- Die TTL für neue Treffer stammt aus `cache_config.json` (Default 180–365 Tage, zufällig pro Eintrag).
 
 **`calculate_radius(boundingbox)`**
 
@@ -198,11 +208,14 @@ Nur `user_details` (14 Tage) und `nominatim` (365 Tage) entlasten im Produktivbe
 - `analyze_location_for_country()` erkennt Ländernamen und Kürzel.
 - `analyze_location_for_postal_code()` sucht 4- bis 5-stellige Zahlen.
 
-### 5.5 Cache-Verwaltung
+### 5.5 Cache-Verwaltung und Cache-Konfiguration
 
-- `cache_thinning_lib.delete_random_cache_data(name, percentage)` löscht zufällig einen prozentualen Anteil eines benannten Caches.
-- Wird bei jedem Lauf ohne `--fast` mit 1 % für `user_details` und `nominatim` aufgerufen.
-- `utils/cache.py` ist ein interaktives Werkzeug mit Nebenwirkungen beim Import (gibt Cache-Statistiken aus, listet Nominatim-Einträge).
+- `cache_config_lib.load_cache_config()` liest `cache_config.json` relativ zum `data_grabber`-Verzeichnis.
+- Fehlende Datei oder fehlende Werte führen zu den Defaults; ungültige Werte lösen eine klare `ValueError`-Meldung aus.
+- `get_ttl_seconds(cache_name)` zieht bei jedem Cache-Schreibvorgang eine zufällige TTL aus dem konfigurierten Bereich.
+- Das frühere `cache_thinning_lib.delete_random_cache_data()` und der 1-%-Thinning-Aufruf sind entfallen. Die Verteilung erfolgt über die zufällige TTL.
+- `--fast` wird zwar noch akzeptiert, hat aber keine Wirkung mehr.
+- `utils/cache.py` ist ein interaktives Werkzeug mit Nebenwirkungen beim Import (gibt Cache-Statistiken aus, listet Nominatim-Einträge). Die manuellen Löschfunktionen bleiben verfügbar.
 - `utils/delete_user_cash_entry.py` löscht `('user_details', uid)` relativ zum Skriptpfad.
 
 ### 5.6 Frontend `karte.html`
@@ -211,7 +224,8 @@ Nur `user_details` (14 Tage) und `nominatim` (365 Tage) entlasten im Produktivbe
 - Erstellt eine Leaflet-Karte mit MarkerCluster.
 - Zeigt die vorgeschriebene Attribution im Leaflet-Attribution-Control unten rechts: „© OpenStreetMap-Mitwirkende, ODbL“ sowie „Geocoding: Nominatim“.
 - Filtert nach URL-Parametern und Formularfeldern.
-- Zeigt Name, Velomobil, Liegerad, Trike und Freitext/Hashtags im Popup.
+- Zeigt Name, Velomobil, Liegerad, Trike, Freitext/Hashtags und den Stand der Profildaten im Popup.
+- Der Stand wird als Datum (`TT.MM.JJJJ`) aus `profile_updated_at` angezeigt; der exakte Zeitstempel steht im Tooltip. Fehlt der Wert, erscheint `Stand: unbekannt`.
 - Nutzt `radius` beim Hover, um die Unsicherheit der Ortsauflösung als Kreis darzustellen.
 - Registriert einen `geo:`-Protokollhandler, der auf `christoph-moder.de/vmforum-karte/geo-handler.php` verweist.
 - Es gibt keine Fehlerbehandlung, falls `fetch()` fehlschlägt; die Karte initialisiert dann nicht.
@@ -225,9 +239,10 @@ Nur `user_details` (14 Tage) und `nominatim` (365 Tage) entlasten im Produktivbe
   - `src/data_grabber/data_grabber.py` → `/app/data_grabber.py`
   - `src/data_grabber/libs/*` → `/app/libs/`
   - `src/data_grabber/utils/*` → `/app/utils/`
+  - `src/data_grabber/cache_config.json` → `/app/cache_config.json` (Default, wird durch den Compose-Mount überschrieben)
 - **Kopiert bewusst nicht** `members.json` oder `vmforum_members.json`. Beide Dateien sind Laufzeitartefakte: `members.json` entsteht durch `get_member_data()`, `vmforum_members.json` durch `examine_locations()`.
 - Voraussetzung dafür ist, dass der Scraper aktiv ist. Das ist seit der Rückkehr zum Masterstand wieder der Fall; siehe Befund C.
-- Cronjob: täglich 03:33 Uhr, `cd /app && python3 /app/data_grabber.py` (`docker/cron/crontab:5`).
+- Cronjob: täglich 03:33 Uhr, `cd /app && python3 /app/data_grabber.py --fast` (`docker/cron/crontab:5`). `--fast` hat inzwischen keine Wirkung mehr.
 
 **Web-Container** (`docker/webserver`)
 
@@ -239,6 +254,7 @@ Nur `user_details` (14 Tage) und `nominatim` (365 Tage) entlasten im Produktivbe
 
 - Cron mountet:
   - `./config/config.json` → `/app/config.json`
+  - `./config/cache_config.json` → `/app/cache_config.json` (read-only)
   - `./volumes/cron/cache` → `/app/cache`
   - `./volumes/shared` → `/app/shared`
 - Web mountet:
@@ -266,7 +282,7 @@ Objekt, keyed nach `uid`:
 }
 ```
 
-Optionale Felder: `location`, `vm`, `lr`, `tr`, `other`.
+Optionale Felder: `location`, `profile_updated_at`, `vm`, `lr`, `tr`, `other`.
 
 ### 6.2 Ausgabe `vmforum_members.json`
 
@@ -280,6 +296,7 @@ Array:
     "lat": "49.453872",
     "lon": "11.077298",
     "radius": 15774,
+    "profile_updated_at": "2026-10-23T03:35:12+02:00",
     "lr": "Flux V-220"
   }
 ]
@@ -289,6 +306,7 @@ Hinweise:
 
 - `lat`/`lon` sind Strings, wie sie Nominatim liefert.
 - `radius` ist eine Ganzzahl in Metern oder `'N/A'`.
+- `profile_updated_at` ist der Zeitpunkt des letzten erfolgreichen Profilabrufs als ISO-8601-String mit lokaler Zeitzone. Das Feld fehlt, wenn das Profil noch nie erfolgreich geladen wurde; die Karte zeigt dann `Stand: unbekannt`.
 - Nur Mitglieder mit nicht-leerer Ortsangabe und erfolgreichem Nominatim-Treffer werden aufgenommen.
 - Bei ca. 6.948 Mitgliedern enthielten die vorhandenen Ausgabedateien ca. 3.167 Einträge mit Koordinaten.
 
@@ -390,7 +408,9 @@ Die Karte verwendet nicht die Wohnadresse, sondern die freiwillige Ortsangabe au
 - Die Typ-Priorisierung bevorzugt größere Einheiten wie Postleitzahlen, Verwaltungsgebiete und Städte. Exakte Hausadressen sind dadurch unwahrscheinlicher, aber nicht ausgeschlossen.
 - Der Marker liegt auf dem gefundenen Nominatim-Punkt, häufig auf einem Stadt- oder PLZ-Zentrum. Das ist nicht zwingend die tatsächliche Wohnadresse.
 - Der Radius ist die halbe Diagonale der Bounding Box und keine echte Fehlertoleranz.
-- Der Ort wird über `user_details` 14 Tage gecacht. Ändert ein Mitglied seinen Ort, kann die Karte daher bis zu 14 Tage lang den alten Ort anzeigen. Nominatim-Ergebnisse werden bis zu 365 Tage gecacht.
+- Der Ort wird zusammen mit den Profildaten über `user_details` gecacht (Default 7–14 Tage). Ändert ein Mitglied seinen Ort, kann die Karte daher bis zu 14 Tage lang den alten Ort anzeigen. Der angezeigte `profile_updated_at`-Stand gilt für dieses komplette gecachte Mitgliedsobjekt einschließlich Ortsangabe.
+- Nominatim-Ergebnisse werden standardmäßig 180–365 Tage gecacht. Die TTLs sind über `cache_config.json` konfigurierbar.
+- Durch die zufällige TTL laufen nicht alle Profile am selben Tag ab; die Aktualisierungen verteilen sich über den konfigurierten Zeitraum.
 - Eine explizite `"location": null`-Angabe würde derzeit einen Fehler auslösen, weil der Code `.lower()` direkt aufruft. Aktuell enthält `members.json` keine solchen Werte.
 
 ---
@@ -416,12 +436,38 @@ Die Karte verwendet nicht die Wohnadresse, sondern die freiwillige Ortsangabe au
 
 Für einen öffentlichen Betrieb oder einen Fork sollte jede Instanz einen eigenen User-Agent mit Kontaktangabe setzen, z. B. `meine-vmkarte/1.0 (+https://example.org; admin@example.org)`. Der Wert wird beim Import gelesen; Änderungen benötigen einen Neustart.
 
+### Cache-TTLs in `cache_config.json`
+
+Die TTL-Bereiche für `user_details` und `nominatim` stehen in `cache_config.json`:
+
+```json
+{
+  "user_details": {
+    "ttl_days_min": 7,
+    "ttl_days_max": 14
+  },
+  "nominatim": {
+    "ttl_days_min": 180,
+    "ttl_days_max": 365
+  }
+}
+```
+
+- Die Datei wird relativ zum `data_grabber`-Verzeichnis gesucht, nicht relativ zum Arbeitsverzeichnis.
+- Fehlt die Datei oder ein Wert, gelten die oben genannten Defaults.
+- `ttl_days_min == ttl_days_max` ergibt eine feste TTL.
+- Werte müssen Zahlen größer 0 sein; `ttl_days_max` darf nicht kleiner als `ttl_days_min` sein. Ungültige Werte brechen den Lauf mit einer klaren Fehlermeldung ab.
+- Die TTL wird bei jedem neuen Cacheeintrag zufällig im Bereich gezogen. Änderungen greifen beim nächsten Prozessstart, also beim nächsten Cron-Lauf.
+- Die Datei enthält keine Zugangsdaten und ist deshalb eingecheckt.
+
 Vorlagen:
 
-- `src/data_grabber/config.example.json` für lokale Läufe
-- `config/config.json.sample` für Docker
+- `src/data_grabber/config.example.json` für lokale Zugangsdaten
+- `src/data_grabber/cache_config.json` für lokale Cache-TTLs (eingecheckt)
+- `config/config.json.sample` für Docker-Zugangsdaten
+- `config/cache_config.json.sample` für Docker-Cache-TTLs
 
-Der Pfad ist relativ zum aktuellen Arbeitsverzeichnis. Das ist fehleranfällig, weil das Skript je nach Aufrufstelle unterschiedliche `config.json`-Dateien findet.
+Der Pfad von `config.json` ist relativ zum aktuellen Arbeitsverzeichnis. Das ist fehleranfällig, weil das Skript je nach Aufrufstelle unterschiedliche `config.json`-Dateien findet. `cache_config.json` verwendet dagegen einen script-relativen Pfad.
 
 ---
 
@@ -437,6 +483,8 @@ pip install -r ..\..\requirements.txt
 copy config.example.json config.json
 python data_grabber.py
 ```
+
+`cache_config.json` ist bereits eingecheckt und wird script-relativ gefunden. Fehlt sie, gelten die Defaults.
 
 Die Ausgabe erfolgt relativ zum Arbeitsverzeichnis nach `shared/members.json` und `shared/vmforum_members.json`. Das Verzeichnis `shared/` muss vorhanden und beschreibbar sein; im Repository ist es nicht enthalten.
 
@@ -466,10 +514,13 @@ Danach `docker/webserver/www_data/karte.html` über den IDE-Server öffnen und m
 ```bash
 copy docker-compose.yml.sample docker-compose.yml
 copy config\config.json.sample config\config.json
+copy config\cache_config.json.sample config\cache_config.json
 copy config\.htpasswd.sample config\.htpasswd
 docker compose build
 docker compose up -d
 ```
+
+Die Datei `config/cache_config.json` wird read-only nach `/app/cache_config.json` gemountet. Fehlt sie oder ist der Mount-Pfad keine reguläre Datei, greifen die Default-Werte aus `cache_config_lib.py`.
 
 ### 8.3 Zwei-Server-Betrieb (Docker und Systeminstallation)
 
@@ -480,7 +531,8 @@ Geplanter Betrieb: ein Server im Docker-Container, ein zweiter Server direkt auf
 - Jede Instanz benötigt eine eigene `config.json`, ein eigenes `cache/`-Verzeichnis und ein beschreibbares Ausgabeverzeichnis. Die Caches werden **nicht** zwischen den Servern geteilt.
 - Der jeweils erste Lauf ist teuer: ca. 345 Mitgliederseiten plus bis zu ca. 6.900 Profilabrufe. Die Laufzeiten sollten versetzt starten (z. B. 03:33 und 04:33), damit Forum und Nominatim nicht gleichzeitig belastet werden.
 - Beide Instanzen loggen sich mit demselben Forenkonto ein. Tägliche Logins von zwei IP-Adressen können Sicherheitshinweise oder Sitzungsprüfungen auslösen. Falls möglich, ein separates Konto verwenden oder die Läufe zeitlich versetzen.
-- Damit der Cache die Laufzeit tatsächlich reduziert, müssen die TTLs größer als das jeweilige Cron-Intervall sein. `user_details` (14 Tage) und `nominatim` (365 Tage) tun das. `members_dict` (23 h) ist bewusst eine Entwicklungshilfe und im täglichen Cron-Betrieb wirkungslos.
+- Damit der Cache die Laufzeit tatsächlich reduziert, müssen die TTLs größer als das jeweilige Cron-Intervall sein. `user_details` (Default 7–14 Tage) und `nominatim` (Default 180–365 Tage) tun das. `members_dict` (23 h) ist bewusst eine Entwicklungshilfe und im täglichen Cron-Betrieb wirkungslos.
+- Beide Server sollten dieselbe `cache_config.json` verwenden, damit die Lastverteilung vergleichbar ist. Die zufällige TTL glättet die Profilabrufe über die Zeit, statt sie in einem 14-Tage-Burst zu bündeln.
 - Jede Instanz fragt Nominatim selbst ab. Der Rate-Limit von 1 Request/Sekunde gilt pro Instanz und sollte eingehalten werden. Beide Instanzen brauchen einen identifizierbaren User-Agent mit Kontaktangabe; dieser kann pro Server über `config.json` oder `NOMINATIM_USER_AGENT` gesetzt werden.
 - Auf dem zweiten Server muss die Ausgabe in ein vom Webserver lesbares Verzeichnis geschrieben werden. Der Pfad sollte konfigurierbar sein, damit Docker-Volume und Systempfad ohne Codeänderung funktionieren.
 - Logging unterscheidet sich: Docker über `docker logs`, Systeminstallation über Cron-Mail, systemd-Journal oder eine Logdatei. Ohne Benachrichtigung bleiben Fehler leicht unbemerkt.
@@ -625,7 +677,7 @@ Die Seite ist deutschsprachig; die Meldung lautet „Anmelden“. Die Prüfung s
 ### Befund G – Weitere Cache-Poisoning-Fälle (mittel)
 
 - `get_members_dictionary()` fängt Fehler pro Seite ab und gibt ggf. ein leeres oder unvollständiges Dictionary zurück. Das Ergebnis wird 23 Stunden gecacht.
-- `fetch_user_details()` prüft nicht, ob die geladene Seite tatsächlich eine Profilseite ist. Wird bei abgelaufener Session eine Login-Seite mit HTTP 200 geliefert, findet die Funktion keine `dl.pairs--columns` und cacht das Mitglied **ohne** Fahrzeugdaten für 14 Tage.
+- `fetch_user_details()` prüft nicht, ob die geladene Seite tatsächlich eine Profilseite ist. Wird bei abgelaufener Session eine Login-Seite mit HTTP 200 geliefert, findet die Funktion keine `dl.pairs--columns` und cacht das Mitglied **ohne** Fahrzeugdaten für die konfigurierte `user_details`-TTL (Default 7–14 Tage).
 - Die Cache-Schlüssel enthalten keine Version. Änderungen am Parsing oder an den Feldnamen bleiben daher ggf. bis zum Ablauf unentdeckt.
 
 ### Befund H – Robustheit und Nebenprobleme (niedrig bis mittel)
@@ -693,6 +745,28 @@ python -c "import diskcache as dc; c=dc.Cache('cache'); print([k for k in c.iter
 ```
 
 Nach einem erfolgreichen Lookup erscheint ein Schlüssel der Form `('nominatim', 'Qeqertarsuaq', 'gl')`. Nach einem negativen Lookup oder einem Fehler darf kein neuer Schlüssel entstehen.
+
+### Cache-Konfiguration prüfen
+
+```powershell
+cd src/data_grabber
+python -c "from libs.cache_config_lib import CACHE_CONFIG, get_ttl_seconds; print(CACHE_CONFIG); print(get_ttl_seconds('user_details'), get_ttl_seconds('nominatim'))"
+```
+
+Die ausgegebenen TTLs müssen in Sekunden innerhalb der konfigurierten Tagesbereiche liegen. Mit einer temporären Datei lassen sich auch fehlende Werte (Defaults) und ungültige Werte testen:
+
+```powershell
+python -c "from libs.cache_config_lib import load_cache_config; print(load_cache_config('nicht_vorhanden.json'))"
+```
+
+### Datenstand prüfen
+
+```powershell
+cd src/data_grabber
+python -c "import json; data=json.load(open('shared/vmforum_members.json', encoding='utf-8')); print(sum(1 for m in data if m.get('profile_updated_at')), '/', len(data))"
+```
+
+Nach einem Lauf sollten die meisten Einträge ein `profile_updated_at` besitzen. Bei bestehenden Cacheeinträgen wird der Wert aus dem Ablaufzeitpunkt rekonstruiert.
 
 ### Forum-Selektoren prüfen
 
@@ -795,11 +869,21 @@ Zusätzlich nach dem Login die Mitgliederliste abrufen und deren Status prüfen.
 
 Da das Forum HTML liefert und keine API verfügbar ist, sollten repräsentative Seiten (Mitgliederliste, Profilseite) als Fixtures gespeichert und das Parsing damit getestet werden. So fällt eine erneute XenForo-Änderung sofort auf, ohne Live-Zugriffe.
 
+### 12.9 Konfigurierbare Cache-TTLs und Profil-Datenstand (umgesetzt am 23.10.2026)
+
+- `cache_config.json` konfiguriert die TTL-Bereiche für `user_details` und `nominatim`.
+- Fehlende Datei oder fehlende Werte fallen auf Defaults zurück: `user_details` 7–14 Tage, `nominatim` 180–365 Tage.
+- Die TTL wird pro Cacheeintrag zufällig gezogen. Dadurch entfallen das frühere 1-%-Thinning und der 14-Tage-Burst.
+- `fetch_user_details()` speichert `profile_updated_at` im Mitgliedsobjekt. Bei alten Cacheeinträgen wird der Zeitpunkt aus dem Ablaufzeitpunkt und der bisherigen 14-Tage-TTL rekonstruiert.
+- Die Karte zeigt den Stand im Popup als Datum; der exakte Zeitstempel steht im Tooltip.
+- `--fast` wird aus Kompatibilitätsgründen noch akzeptiert, hat aber keine Wirkung mehr.
+
 ---
 
 ## 13. Sicherheit und Datenschutz
 
 - `src/data_grabber/config.json` enthält Zugangsdaten im Klartext. Sie ist jetzt in `.gitignore` eingetragen und darf nicht committet werden.
+- `cache_config.json` enthält keine Zugangsdaten und ist deshalb eingecheckt.
 - `members.json` und `vmforum_members.json` enthalten personenbezogene Daten (Namen, Ortsangaben, Fahrzeuge). Sie sind ebenfalls ignoriert.
 - Das Root-Verzeichnis `cache/`, `src/data_grabber/cache/` und `src/data_grabber/shared/` sind ignoriert; dort liegen Laufzeitdaten.
 - Fehlermeldungen können die konfigurierte E-Mail-Adresse im Nominatim-URL enthalten und landen im Log.
@@ -818,6 +902,10 @@ Die aktuellen `.gitignore`-Einträge:
 /cache/
 /members.json
 /vmforum_members.json
+/config/*
+!/config/.htpasswd.sample
+!/config/config.json.sample
+!/config/cache_config.json.sample
 ```
 
 ---
@@ -841,11 +929,30 @@ Die beiden aktiven Bruchstellen wurden am 22.10.2026 behoben:
 
 Zusätzlich wurde der vorhandene `nominatim`-Cache mit `utils/clear_nominatim_cache.py` bereinigt. Auf beiden Servern muss dieses Skript nach dem Deployment einmal ausgeführt werden.
 
+Am 23.10.2026 wurden die Cache-TTLs für `user_details` und `nominatim` extern konfigurierbar gemacht und zufällig gestreut. Dadurch verteilen sich die Aktualisierungen über die Zeit, statt in einem 14-Tage-Burst zu laufen. Die Karte zeigt pro Profil den Stand der zuletzt gecachten Profildaten.
+
 Die früheren Debug-Abweichungen (deaktivierter Scraper, falscher Ausgabepfad, fehlende `members.json` im Container) sind mit dem Masterstand entfallen.
 
 ---
 
-## 16. Geänderte Dateien (22.10.2026)
+## 16. Geänderte Dateien
+
+### 23.10.2026
+
+- `src/data_grabber/libs/cache_config_lib.py`: neues Modul zum Laden, Validieren und Ziehen der Cache-TTLs.
+- `src/data_grabber/cache_config.json`: eingecheckte Default-Konfiguration für `user_details` und `nominatim`.
+- `src/data_grabber/libs/data_scraper_lib.py`: `profile_updated_at`, Rekonstruktion für alte Cacheeinträge und konfigurierbare `user_details`-TTL.
+- `src/data_grabber/libs/location_nominatim_lib.py`: konfigurierbare `nominatim`-TTL.
+- `src/data_grabber/data_grabber.py`: Thinning entfernt, `--fast` als No-op, `profile_updated_at` in der Ausgabe.
+- `src/data_grabber/libs/cache_thinning_lib.py`: entfernt.
+- `src/data_grabber/smoke_test.py`: gibt `profile_updated_at` mit aus.
+- `docker/webserver/www_data/karte.html`: Datenstand im Popup.
+- `docker/cron/Dockerfile` und `docker-compose.yml.sample`: Default-`cache_config.json` und Mount.
+- `config/cache_config.json.sample`: Docker-Vorlage.
+- `.gitignore`: `/config/*` mit Ausnahmen für die Beispieldateien.
+- `DOKUMENTATION.md`, `README.md`: Konfiguration, Datenstand und Betrieb.
+
+### 22.10.2026
 
 - `src/data_grabber/libs/location_nominatim_lib.py`: konfigurierbarer User-Agent, Timeout, 1-Request/Sekunde-Helper und Caching nur erfolgreicher Treffer.
 - `src/data_grabber/utils/clear_nominatim_cache.py`: neues Hilfsskript zum Bereinigen des `nominatim`-Caches.

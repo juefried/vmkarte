@@ -1,10 +1,24 @@
 import json
+from datetime import datetime
+from typing import List, Dict
+
 import requests
 from bs4 import BeautifulSoup
 import diskcache as dc
-from typing import List, Dict
+
+from libs.cache_config_lib import get_ttl_seconds
 
 cache = dc.Cache('cache')
+
+LEGACY_USER_DETAILS_TTL = 60 * 60 * 24 * 14 - 60 * 60
+
+
+def _format_timestamp(timestamp):
+    """
+    Formats a POSIX timestamp as an ISO 8601 string in the local timezone.
+    """
+    return datetime.fromtimestamp(timestamp).astimezone().isoformat(timespec='seconds')
+
 
 # Read configuration file
 with open('config.json', 'r', encoding='utf-8') as f:
@@ -208,8 +222,14 @@ def fetch_user_details(member):
 
     # Check if the entry exists in the cache
     cache_key = ('user_details', member['uid'])
-    if cache_key in cache:
-        return cache[cache_key]
+    cached_member, expire_time = cache.get(cache_key, expire_time=True)
+
+    if cached_member is not None:
+        if not cached_member.get('profile_updated_at') and expire_time is not None:
+            cached_member['profile_updated_at'] = _format_timestamp(
+                expire_time - LEGACY_USER_DETAILS_TTL
+            )
+        return cached_member
 
     try:
         # Fetch the profile page
@@ -236,7 +256,8 @@ def fetch_user_details(member):
                 member['other'] = dd
 
         # Save the result in the cache
-        cache.set(cache_key, member, expire=60*60*24*14-60*60)
+        member['profile_updated_at'] = datetime.now().astimezone().isoformat(timespec='seconds')
+        cache.set(cache_key, member, expire=get_ttl_seconds('user_details'))
 
     except Exception as e:
         print(f"An error occurred while fetching user details from {profile_url}: {e}")

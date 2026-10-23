@@ -21,6 +21,7 @@ services:
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
       - ./config/config.json:/app/config.json
+      - ./config/cache_config.json:/app/cache_config.json:ro
       - ./volumes/cron/cache:/app/cache
       - ./volumes/shared:/app/shared
     restart: unless-stopped

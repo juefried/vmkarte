@@ -4,7 +4,32 @@ import json
 import argparse
 from libs.data_scraper_lib import get_member_data
 from libs.location_nominatim_lib import examine_locations
-from libs.cache_thinning_lib import delete_random_cache_data
+
+
+def prepare_vmforum_members(members):
+    """
+    Reduces member dictionaries to the fields used by the map.
+    """
+    vmforum_members = []
+    for member in members:
+        data = {
+            'id': member['uid'],
+            'name': member['name'],
+            'lat': member['lat'],
+            'lon': member['lon'],
+            'radius': member['radius']
+        }
+        if member.get('profile_updated_at'):
+            data['profile_updated_at'] = member['profile_updated_at']
+
+        for key in ['vm', 'tr', 'lr', 'other']:
+            if member.get(key):
+                data[key] = member[key]
+
+        vmforum_members.append(data)
+
+    return vmforum_members
+
 
 def main():
     """
@@ -23,21 +48,15 @@ def main():
     # Create an argument parser
     parser = argparse.ArgumentParser()
 
-    # Add an optional argument for using the cache
+    # Deprecated: accepted for compatibility with existing cron and IDE configurations
     parser.add_argument(
         '--fast',
         action='store_true',
-        help='Use the cache maximally'
+        help='Deprecated, has no effect'
     )
 
     # Parse the command line arguments
-    args = parser.parse_args()
-
-    # Shuffle the cache to achieve a better distribution of access times
-    # This can be removed after a few months
-    if not args.fast:
-        delete_random_cache_data("user_details", 1)
-        delete_random_cache_data("nominatim", 1)
+    parser.parse_args()
 
     # Retrieve member data
     members = get_member_data()
@@ -52,21 +71,7 @@ def main():
     members = examine_locations(members)
 
     # Prepare data for the JSON file
-    vmforum_members = []
-    for member in members:
-
-        data = {
-            'id': member['uid'],
-            'name': member['name'],
-            'lat': member['lat'],
-            'lon': member['lon'],
-            'radius': member['radius']
-        }
-        for key in ['vm', 'tr', 'lr', 'other']:
-            if member.get(key):
-                data[key] = member[key]
-
-        vmforum_members.append(data)
+    vmforum_members = prepare_vmforum_members(members)
 
     # Write the data to a JSON file
     with open('shared/vmforum_members.json', 'w', encoding='utf-8') as vmforumfile:

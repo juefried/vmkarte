@@ -1,0 +1,10 @@
+{
+  "user_details": {
+    "ttl_days_min": 7,
+    "ttl_days_max": 14
+  },
+  "nominatim": {
+    "ttl_days_min": 180,
+    "ttl_days_max": 365
+  }
+}

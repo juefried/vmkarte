@@ -11,3 +11,23 @@ cd generate_data
 pip install -r requirements.txt
 ```
 
+## Konfiguration
+
+Zugangsdaten und Nominatim-Kontakt stehen in `config.json` (Vorlage: `config.example.json`).
+
+Die TTL-Bereiche der Caches stehen in `cache_config.json`:
+
+```json
+{
+  "user_details": {
+    "ttl_days_min": 7,
+    "ttl_days_max": 14
+  },
+  "nominatim": {
+    "ttl_days_min": 180,
+    "ttl_days_max": 365
+  }
+}
+```
+
+Fehlende Datei oder fehlende Werte verwenden diese Defaults. Die TTL wird pro Cacheeintrag zufällig gezogen, damit sich die Aktualisierungen über die Zeit verteilen.

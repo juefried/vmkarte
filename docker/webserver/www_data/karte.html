@@ -25,6 +25,9 @@
 		
 		/* red circles for hashtags */
 		.tag_circle	{ stroke: red; fill: red; }
+
+		/* profile data timestamp in popups */
+		.stand		{ color: #666; font-size: 0.9em; }
 	/*]]>*/
 	</style>
 
@@ -60,6 +63,12 @@
 		var tempDiv = document.createElement('div');
 		tempDiv.textContent = str;
 		return tempDiv.innerHTML;
+	}
+
+	function format_profile_date(value) {
+		if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}/.test(value))
+			return 'unbekannt';
+		return value.slice(0, 10).split('-').reverse().join('.');
 	}
 
 	// Search for all tags in the "other" field of member pages, sort them by occurrence, and add them to autocompletion.
@@ -204,7 +213,10 @@
 						+ (v.tr ? '<br /><b>Trike:</b> ' + html_escape(v.tr) : '')
 						+ (v.other
 							? '<br />' + html_escape(v.other).replace(hashtag_regex, match => '<a href="karte.html?other=' + encodeURIComponent(match) + '" title="alle mit diesem Hashtag anzeigen">' + match + '</a>')
-							: ''),
+							: '')
+						+ '<br /><span class="stand" title="Letzter Profilabruf: '
+						+ html_escape(v.profile_updated_at || 'unbekannt')
+						+ '">Stand: ' + format_profile_date(v.profile_updated_at) + '</span>',
 						{ 'closeOnEscapeKey': true }	// Seems to be broken.
 						)
 					// Close popup when Escape key is pressed.

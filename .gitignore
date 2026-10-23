@@ -171,4 +171,7 @@ cython_debug/
 /members.json
 /vmforum_members.json
 /volumes/
-/config/
+/config/*
+!/config/.htpasswd.sample
+!/config/config.json.sample
+!/config/cache_config.json.sample

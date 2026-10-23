@@ -8,6 +8,7 @@ import time
 import requests
 from urllib.parse import quote
 from geopy.distance import geodesic
+from libs.cache_config_lib import get_ttl_seconds
 from libs.location_mapping_rules_lib import analyze_location_for_country, analyze_location_for_postal_code, prepare_location
 import diskcache as dc
 import re
@@ -54,9 +55,6 @@ NOMINATIM_HEADERS = {
 
 # Timeout for Nominatim requests in seconds
 NOMINATIM_TIMEOUT = 30
-
-# Cache successful results, but never cache failed lookups
-NOMINATIM_CACHE_TTL = 60*60*24*365-60*60
 
 
 def _get_nominatim(url):
@@ -162,7 +160,7 @@ def query_nominatim(searchstring, country_code):
 
         if result is not None:
             # Only cache successful lookups
-            cache.set(cache_key, result, expire=NOMINATIM_CACHE_TTL)
+            cache.set(cache_key, result, expire=get_ttl_seconds('nominatim'))
 
         return result
 

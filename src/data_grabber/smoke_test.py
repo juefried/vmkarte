@@ -54,7 +54,8 @@ def main():
     for entry in result:
         print(
             f"   {entry['name']}: lat={entry.get('lat')}, "
-            f"lon={entry.get('lon')}, radius={entry.get('radius')}"
+            f"lon={entry.get('lon')}, radius={entry.get('radius')}, "
+            f"profile_updated_at={entry.get('profile_updated_at')}"
         )
 
     if not result:
