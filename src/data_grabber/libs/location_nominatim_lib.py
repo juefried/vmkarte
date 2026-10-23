@@ -10,14 +10,15 @@ from urllib.parse import quote
 from geopy.distance import geodesic
 from libs.cache_config_lib import get_ttl_seconds
 from libs.location_mapping_rules_lib import analyze_location_for_country, analyze_location_for_postal_code, prepare_location
+from libs.paths_lib import CACHE_DIR, CONFIG_PATH
 import diskcache as dc
 import re
 
 # Diskcache for persistent LRU-Cache
-cache = dc.Cache('cache')
+cache = dc.Cache(str(CACHE_DIR))
 
 # Read configuration file
-with open('config.json', 'r', encoding='utf-8') as f:
+with CONFIG_PATH.open('r', encoding='utf-8') as f:
     config = json.load(f)
 EMAIL = config['email']
 

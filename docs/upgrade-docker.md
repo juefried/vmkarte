@@ -14,6 +14,8 @@ Diese Anleitung beschreibt das Upgrade einer bestehenden Docker-Installation. Di
 - Alte Cacheeinträge bleiben gültig. Bei `user_details`-Einträgen ohne Zeitstempel wird der Abrufzeitpunkt aus dem bisherigen Ablaufdatum rekonstruiert.
 - Die neuen TTLs gelten nur für neu geschriebene Cacheeinträge. Der erste Lauf nach dem Upgrade erzwingt keine vollständige Aktualisierung.
 - `utils/clear_nominatim_cache.py` muss für dieses Upgrade **nicht** erneut ausgeführt werden.
+- Cron und Web verwenden jetzt denselben Host-Pfad `docker/webserver/www_data/shared`. IDE und native Installation schreiben ebenfalls dorthin; das manuelle Kopieren der Kartendaten entfällt.
+- Das Debug-`members.json` wird nach `/app/members.json` geschrieben und nicht mehr über den Web-Root ausgeliefert.
 
 ## Vorbereitung
 
@@ -25,9 +27,10 @@ cd /pfad/zu/vmkarte
 cp docker-compose.yml docker-compose.yml.bak
 cp -a config config.bak
 cp -a volumes volumes.bak
+[ -d docker/webserver/www_data/shared ] && cp -a docker/webserver/www_data/shared docker/webserver/www_data/shared.bak
 ```
 
-Die Sicherung von `volumes/` ist optional, aber empfohlen. Sie enthält den Cache und die erzeugten Kartendaten.
+Die Sicherung von `volumes/` und des bisherigen Shared-Verzeichnisses ist optional, aber empfohlen. Sie enthalten den Cache und die erzeugten Kartendaten.
 
 Neuen Stand auschecken:
 
@@ -56,10 +59,27 @@ Die neue Version benötigt einen zusätzlichen Mount für den Cron-Container:
       - ./config/config.json:/app/config.json
       - ./config/cache_config.json:/app/cache_config.json:ro
       - ./volumes/cron/cache:/app/cache
-      - ./volumes/shared:/app/shared
+      - ./docker/webserver/www_data/shared:/app/shared
 ```
 
-Die Zeile `./config/cache_config.json:/app/cache_config.json:ro` ist neu. Wenn `docker-compose.yml` aus `docker-compose.yml.sample` erzeugt wurde, kann sie alternativ durch einen erneuten Vergleich mit der Vorlage übernommen werden.
+Neu sind `cache_config.json` und der gemeinsame Shared-Pfad. Der Web-Service verwendet denselben Host-Pfad:
+
+```yaml
+  web:
+    # ...
+    volumes:
+      - ./config/.htpasswd:/etc/nginx/.htpasswd
+      - ./docker/webserver/www_data/shared:/www_data/shared:ro
+```
+
+Bestehende Kartendaten aus `volumes/shared` einmalig übernehmen. Nur `vmforum_members.json` kopieren, nicht das alte Debug-`members.json`:
+
+```bash
+mkdir -p docker/webserver/www_data/shared
+cp -a volumes/shared/vmforum_members.json docker/webserver/www_data/shared/
+```
+
+Danach kann `./volumes/shared` aus der Compose-Datei entfernt werden. Der Cache bleibt unter `./volumes/cron/cache` erhalten.
 
 ## cache_config.json anlegen
 
@@ -123,7 +143,7 @@ docker compose exec cron python3 -c "from libs.cache_config_lib import CACHE_CON
 Datenstand in der erzeugten JSON-Datei prüfen:
 
 ```bash
-grep -m1 profile_updated_at volumes/shared/vmforum_members.json
+grep -m1 profile_updated_at docker/webserver/www_data/shared/vmforum_members.json
 ```
 
 Anzahl der Einträge mit Zeitstempel:
@@ -144,7 +164,8 @@ Wenn in der JSON-Datei Zeitstempel stehen, die Karte aber überall `Stand: unbek
    docker compose exec cron ls -l /app/shared/vmforum_members.json
    docker compose exec web ls -l /www_data/shared/vmforum_members.json
    ```
-   Beide Pfade müssen auf dasselbe Volume zeigen. Wurde der Scraper außerhalb des Containers ausgeführt, schreibt er nach `src/data_grabber/shared/vmforum_members.json` und nicht in das Docker-Volume `volumes/shared`. In diesem Fall den Lauf im Cron-Container ausführen:
+   Beide Pfade müssen auf dasselbe Host-Verzeichnis `docker/webserver/www_data/shared` zeigen. Wurde der Scraper außerhalb des Containers mit dem neuen Stand ausgeführt, schreibt er standardmäßig ebenfalls dorthin. Prüfen, ob `VMKARTE_SHARED_DIR` auf ein anderes Verzeichnis zeigt. Andernfalls den Lauf im Cron-Container ausführen:
+
    ```bash
    docker compose exec cron python3 /app/data_grabber.py
    ```
@@ -159,7 +180,9 @@ docker compose build
 docker compose up -d
 ```
 
-Der zusätzliche Mount für `cache_config.json` kann bestehen bleiben; die alte Version ignoriert die Datei. Der Cache bleibt kompatibel und muss nicht gelöscht werden. Die alte Version ignoriert auch `profile_updated_at` in der JSON-Ausgabe.
+Die zusätzlichen Mounts für `cache_config.json` und `docker/webserver/www_data/shared` können bestehen bleiben; die alte Version ignoriert `cache_config.json` und schreibt weiterhin nach `/app/shared`, also in dasselbe Host-Verzeichnis. Der Cache bleibt kompatibel und muss nicht gelöscht werden. Die alte Version ignoriert auch `profile_updated_at` in der JSON-Ausgabe.
+
+Hinweis: Die alte Version schreibt `members.json` wieder in das Shared-Verzeichnis, also in den Web-Root. Nach dem Rollback sollte diese Datei dort nicht öffentlich erreichbar bleiben.
 
 Falls beim Rollback auch die alte Karte verwendet werden soll, den Web-Container ebenfalls neu bauen (siehe oben).
 

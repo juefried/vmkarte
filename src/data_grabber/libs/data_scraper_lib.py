@@ -7,8 +7,9 @@ from bs4 import BeautifulSoup
 import diskcache as dc
 
 from libs.cache_config_lib import get_ttl_seconds
+from libs.paths_lib import CACHE_DIR, CONFIG_PATH
 
-cache = dc.Cache('cache')
+cache = dc.Cache(str(CACHE_DIR))
 
 LEGACY_USER_DETAILS_TTL = 60 * 60 * 24 * 14 - 60 * 60
 
@@ -21,7 +22,7 @@ def _format_timestamp(timestamp):
 
 
 # Read configuration file
-with open('config.json', 'r', encoding='utf-8') as f:
+with CONFIG_PATH.open('r', encoding='utf-8') as f:
     config = json.load(f)
 
 # Login data to velomobilforum.de

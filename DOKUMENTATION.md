@@ -61,6 +61,7 @@ vmkarte/
 │   │   ├── location_nominatim_lib.py   # Nominatim-Abfragen und Radius
 │   │   ├── location_mapping_rules_lib.py # Orts-/Länder-/PLZ-Normalisierung
 │   │   ├── cache_config_lib.py         # Laden/Validieren der Cache-TTLs
+│   │   ├── paths_lib.py                # Einheitliche Laufzeitpfade
 │   │   ├── country_mapping.json        # Ländernamen/-kürzel → Ländercode
 │   │   └── kuerzel_mapping.json        # Deutsche Kfz-/Ortskürzel → Ortsname
 │   └── utils/
@@ -73,14 +74,13 @@ vmkarte/
 │   ├── karte.html                      # Leaflet-Frontend
 │   ├── geo-handler.php                 # geo:-Weiterleitung zu BRouter
 │   ├── leaflet/                        # Leaflet-Bibliothek
-│   └── markercluster/                  # Marker-Cluster-Plugin
+│   ├── markercluster/                  # Marker-Cluster-Plugin
+│   └── shared/                         # Kartendaten (Laufzeit, ignoriert)
 ├── docs/
 │   ├── upgrade-docker.md               # Upgrade-Anleitung Docker
 │   └── upgrade-native.md               # Upgrade-Anleitung native Installation
 ├── config/                             # Laufzeitkonfiguration (ignoriert)
-├── volumes/                            # Laufzeitdaten (ignoriert)
-├── members.json                        # Zwischenstand mit Ortsangaben
-├── vmforum_members.json                # Aufbereitete Daten für die Karte
+├── volumes/                            # Docker-Cache (ignoriert)
 ├── requirements.txt
 ├── setup.py
 └── docker-compose.yml.sample
@@ -95,9 +95,9 @@ flowchart LR
     A[Velomobil-Forum<br/>XenForo 2.3] -->|Login + HTML| B[data_scraper_lib]
     B -->|members.json<br/>uid → Mitglied| C[location_nominatim_lib]
     D[Nominatim API] -->|Koordinaten + Bounding Box| C
-    C -->|vmforum_members.json| E[shared-Volume]
+    C -->|vmforum_members.json| E[docker/webserver/www_data/shared]
     E --> F[karte.html<br/>Leaflet + MarkerCluster]
-    G[diskcache<br/>cache/] --- B
+    G[diskcache<br/>data_grabber/cache] --- B
     G --- C
 ```
 
@@ -122,8 +122,8 @@ Einstiegspunkt und Orchestrierung.
 
 - CLI-Parameter `--fast`: wird aus Kompatibilitätsgründen noch akzeptiert, hat aber keine Wirkung mehr.
 - `get_member_data()` ist aktiv.
-- Die Mitgliederdaten werden zur Laufzeit nach `shared/members.json` geschrieben.
-- Die Ausgabe erfolgt nach `shared/vmforum_members.json`.
+- Die Mitgliederdaten werden zur Laufzeit nach `src/data_grabber/members.json` geschrieben (Docker: `/app/members.json`). Diese Datei liegt außerhalb des Web-Roots.
+- Die Kartenausgabe erfolgt nach `docker/webserver/www_data/shared/vmforum_members.json` (Docker: `/app/shared/vmforum_members.json`).
 - Baut aus jedem Mitglied ein reduziertes Objekt mit `id`, `name`, `lat`, `lon`, `radius` und optional `profile_updated_at`, `vm`, `lr`, `tr`, `other`.
 - Das frühere Cache-Thinning entfällt; die Verteilung übernimmt die zufällige TTL aus `cache_config.json`.
 
@@ -251,7 +251,7 @@ Die TTL wird für jeden neuen Cacheeintrag zufällig aus dem in `cache_config.js
 
 - nginx mit Basic Auth.
 - Dokumentwurzel `/www_data`, Startseite `karte.html`.
-- `./volumes/shared` wird read-only nach `/www_data/shared` gemountet.
+- `./docker/webserver/www_data/shared` wird read-only nach `/www_data/shared` gemountet.
 
 **Compose** (`docker-compose.yml.sample`)
 
@@ -259,11 +259,11 @@ Die TTL wird für jeden neuen Cacheeintrag zufällig aus dem in `cache_config.js
   - `./config/config.json` → `/app/config.json`
   - `./config/cache_config.json` → `/app/cache_config.json` (read-only)
   - `./volumes/cron/cache` → `/app/cache`
-  - `./volumes/shared` → `/app/shared`
+  - `./docker/webserver/www_data/shared` → `/app/shared`
 - Web mountet:
-  - `./volumes/shared` → `/www_data/shared`
+  - `./docker/webserver/www_data/shared` → `/www_data/shared`
 
-Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/shared/vmforum_members.json` schreiben.
+Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/shared/vmforum_members.json` schreiben. Derselbe Host-Pfad wird auch vom Web-Container gelesen. IDE und native Installation schreiben standardmäßig direkt nach `<repo>/docker/webserver/www_data/shared`.
 
 ---
 
@@ -275,17 +275,17 @@ Objekt, keyed nach `uid`:
 
 ```json
 {
-  "1742": {
-    "uid": "1742",
-    "name": "(F)liegevogel",
-    "href": "/forum/index.php?members/f-liegevogel.1742/",
-    "location": "90469 Nürnberg",
-    "lr": "Flux V-220"
+  "999999": {
+    "uid": "999999",
+    "name": "pr0meteus",
+    "href": "/forum/index.php?members/pr0meteus.999999/",
+    "location": "12345 Musterstadt",
+    "lr": "Beispielliegerad"
   }
 }
 ```
 
-Optionale Felder: `location`, `profile_updated_at`, `vm`, `lr`, `tr`, `other`.
+Die UID, der Ortsname und das Fahrzeug sind fiktive Beispieldaten. Optionale Felder: `location`, `profile_updated_at`, `vm`, `lr`, `tr`, `other`.
 
 ### 6.2 Ausgabe `vmforum_members.json`
 
@@ -294,13 +294,13 @@ Array:
 ```json
 [
   {
-    "id": "1742",
-    "name": "(F)liegevogel",
-    "lat": "49.453872",
-    "lon": "11.077298",
-    "radius": 15774,
+    "id": "999999",
+    "name": "pr0meteus",
+    "lat": "50.000000",
+    "lon": "10.000000",
+    "radius": 2500,
     "profile_updated_at": "2026-10-23T03:35:12+02:00",
-    "lr": "Flux V-220"
+    "lr": "Beispielliegerad"
   }
 ]
 ```
@@ -420,7 +420,7 @@ Die Karte verwendet nicht die Wohnadresse, sondern die freiwillige Ortsangabe au
 
 ## 7. Konfiguration
 
-`config.json` im Arbeitsverzeichnis des Grabbers:
+`config.json` im `data_grabber`-Verzeichnis (script-relativ):
 
 ```json
 {
@@ -470,7 +470,27 @@ Vorlagen:
 - `config/config.json.sample` für Docker-Zugangsdaten
 - `config/cache_config.json.sample` für Docker-Cache-TTLs
 
-Der Pfad von `config.json` ist relativ zum aktuellen Arbeitsverzeichnis. Das ist fehleranfällig, weil das Skript je nach Aufrufstelle unterschiedliche `config.json`-Dateien findet. `cache_config.json` verwendet dagegen einen script-relativen Pfad.
+### Pfade
+
+`libs/paths_lib.py` löst alle Laufzeitpfade script-relativ auf:
+
+| Zweck | Lokal / IDE / native Installation | Docker |
+|---|---|---|
+| `config.json` | `src/data_grabber/config.json` | `/app/config.json` |
+| `cache_config.json` | `src/data_grabber/cache_config.json` | `/app/cache_config.json` |
+| Cache | `src/data_grabber/cache/` | `/app/cache/` |
+| Debug-`members.json` | `src/data_grabber/members.json` | `/app/members.json` |
+| Karten-JSON | `<repo>/docker/webserver/www_data/shared/vmforum_members.json` | `/app/shared/vmforum_members.json` |
+
+Damit sucht die IDE dieselben Dateien wie die native Installation, und der Web-Root `docker/webserver/www_data` enthält die Kartendaten direkt. In Docker werden die Container-Pfade über Compose auf denselben Host-Pfad `docker/webserver/www_data/shared` gemountet.
+
+Der Karten-Datenpfad kann mit der Umgebungsvariable `VMKARTE_SHARED_DIR` überschrieben werden. Das ist für native Installationen mit einem separaten Web-Root nützlich:
+
+```bash
+export VMKARTE_SHARED_DIR=/var/www/vmforum-karte/shared
+```
+
+Ohne Override gilt: Wenn `<repo>/docker/webserver/www_data` existiert, wird `<repo>/docker/webserver/www_data/shared` verwendet; andernfalls `<data_grabber>/shared` (Fallback für das Docker-Image).
 
 ---
 
@@ -491,7 +511,7 @@ python data_grabber.py
 
 `cache_config.json` ist bereits eingecheckt und wird script-relativ gefunden. Fehlt sie, gelten die Defaults.
 
-Die Ausgabe erfolgt relativ zum Arbeitsverzeichnis nach `shared/members.json` und `shared/vmforum_members.json`. Das Verzeichnis `shared/` muss vorhanden und beschreibbar sein; im Repository ist es nicht enthalten.
+Die Ausgabe erfolgt script-relativ nach `src/data_grabber/members.json` (Debug) und `docker/webserver/www_data/shared/vmforum_members.json` (Karte). Das Verzeichnis `docker/webserver/www_data/shared/` wird bei Bedarf angelegt und ist im Repository ignoriert.
 
 ### Schneller Test in der IDE
 
@@ -502,17 +522,13 @@ cd src/data_grabber
 python smoke_test.py
 ```
 
-Das Arbeitsverzeichnis muss `src/data_grabber` sein, damit `config.json` und `libs/` gefunden werden. Der Test dauert wenige Sekunden.
+Die Pfade werden script-relativ aufgelöst; der Test kann aus `src/data_grabber` oder über den vollständigen Pfad gestartet werden. Der Test dauert wenige Sekunden.
 
 ### Karte in der IDE anzeigen
 
-Die Karte lädt `shared/vmforum_members.json` relativ zu `karte.html`. Für einen Test über den IDE-Webserver muss die Datei daher unter `docker/webserver/www_data/shared/vmforum_members.json` liegen:
+Der Scraper schreibt die Kartendaten direkt nach `docker/webserver/www_data/shared/vmforum_members.json`. Damit entfällt das bisherige Kopieren nach jedem Lauf. `docker/webserver/www_data/karte.html` über den IDE-Webserver öffnen und mit `Strg+F5` neu laden.
 
-```powershell
-copy src\data_grabber\shared\vmforum_members.json docker\webserver\www_data\shared\vmforum_members.json
-```
-
-Danach `docker/webserver/www_data/karte.html` über den IDE-Server öffnen und mit `Strg+F5` neu laden. Der Kopiervorgang muss nach jedem Scraper-Lauf wiederholt werden; sonst zeigt die Karte alte Daten und gegebenenfalls überall `Stand: unbekannt`. Fehlt die Datei, bricht `create_map()` beim `await members` ab und es bleibt eine leere Seite. Der Ordner ist in `.gitignore` eingetragen und über `docker/webserver/.dockerignore` vom Web-Image ausgeschlossen.
+Fehlt die Datei, bricht `create_map()` beim `await members` ab und es bleibt eine leere Seite. Der Ordner ist in `.gitignore` eingetragen und über `docker/webserver/.dockerignore` vom Web-Image ausgeschlossen.
 
 ### Docker
 
@@ -527,6 +543,8 @@ docker compose up -d
 
 Die Datei `config/cache_config.json` wird read-only nach `/app/cache_config.json` gemountet. Fehlt sie oder ist der Mount-Pfad keine reguläre Datei, greifen die Default-Werte aus `cache_config_lib.py`.
 
+Cron und Web mounten beide `./docker/webserver/www_data/shared` (nach `/app/shared` bzw. `/www_data/shared`). Dadurch schreibt der Scraper direkt in das Verzeichnis, aus dem die Karte liest.
+
 ### 8.3 Zwei-Server-Betrieb (Docker und Systeminstallation)
 
 Geplanter Betrieb: ein Server im Docker-Container, ein zweiter Server direkt auf dem System. Beide scrapen unabhängig.
@@ -539,7 +557,7 @@ Geplanter Betrieb: ein Server im Docker-Container, ein zweiter Server direkt auf
 - Damit der Cache die Laufzeit tatsächlich reduziert, müssen die TTLs größer als das jeweilige Cron-Intervall sein. `user_details` (Default 7–14 Tage) und `nominatim` (Default 180–365 Tage) tun das. `members_dict` (23 h) ist bewusst eine Entwicklungshilfe und im täglichen Cron-Betrieb wirkungslos.
 - Beide Server sollten dieselbe `cache_config.json` verwenden, damit die Lastverteilung vergleichbar ist. Die zufällige TTL glättet die Profilabrufe über die Zeit, statt sie in einem 14-Tage-Burst zu bündeln.
 - Jede Instanz fragt Nominatim selbst ab. Der Rate-Limit von 1 Request/Sekunde gilt pro Instanz und sollte eingehalten werden. Beide Instanzen brauchen einen identifizierbaren User-Agent mit Kontaktangabe; dieser kann pro Server über `config.json` oder `NOMINATIM_USER_AGENT` gesetzt werden.
-- Auf dem zweiten Server muss die Ausgabe in ein vom Webserver lesbares Verzeichnis geschrieben werden. Der Pfad sollte konfigurierbar sein, damit Docker-Volume und Systempfad ohne Codeänderung funktionieren.
+- Auf dem zweiten Server schreibt der Scraper standardmäßig nach `<repo>/docker/webserver/www_data/shared`. Für einen separaten Web-Root kann `VMKARTE_SHARED_DIR` auf das Verzeichnis gesetzt werden, das der Webserver als `shared` ausliefert.
 - Logging unterscheidet sich: Docker über `docker logs`, Systeminstallation über Cron-Mail, systemd-Journal oder eine Logdatei. Ohne Benachrichtigung bleiben Fehler leicht unbemerkt.
 - Das Docker-Image basiert auf Python 3.14 und entspricht damit der lokal getesteten Version. Python 3.9 ist seit Oktober 2025 End-of-Life und sollte nicht mehr verwendet werden. Die Systeminstallation sollte eine gemeinsam getestete, aktuelle Python-Version verwenden.
 
@@ -711,7 +729,7 @@ Die Seite ist deutschsprachig; die Meldung lautet „Anmelden“. Die Prüfung s
 | `volumes/shared/vmforum_members.json` | 547.242 B | 03.08.2024 |
 | `volumes/cron/cache/cache.db` | 5.111.808 B | 03.08.2024 |
 
-Die vom Webserver tatsächlich gelesene Datei `volumes/shared/vmforum_members.json` stammt aus August 2024. Die zuletzt erzeugte Ausgabe vom 22.02.2025 liegt nur unter `src/data_grabber/` und wird von der Karte nicht verwendet.
+Die Tabelle dokumentiert historische Artefakte. Der aktuelle, vom Webserver gelesene Pfad ist `docker/webserver/www_data/shared/vmforum_members.json` (Docker-Container: `/app/shared/vmforum_members.json` bzw. `/www_data/shared/vmforum_members.json`). Der Debug-Stand `members.json` liegt jetzt unter `src/data_grabber/members.json` und nicht mehr im Web-Root.
 
 ---
 
@@ -764,11 +782,20 @@ Die ausgegebenen TTLs müssen in Sekunden innerhalb der konfigurierten Tagesbere
 python -c "from libs.cache_config_lib import load_cache_config; print(load_cache_config('nicht_vorhanden.json'))"
 ```
 
+### Pfade prüfen
+
+```powershell
+cd src/data_grabber
+python -c "from libs.paths_lib import CONFIG_PATH, CACHE_DIR, SHARED_DIR, MEMBERS_JSON_PATH; print(CONFIG_PATH); print(CACHE_DIR); print(SHARED_DIR); print(MEMBERS_JSON_PATH)"
+```
+
+Erwartet: `cache_config.json` und `config.json` im `data_grabber`-Verzeichnis, `SHARED_DIR` unter `docker/webserver/www_data/shared` (lokal) bzw. `/app/shared` (Docker).
+
 ### Datenstand prüfen
 
 ```powershell
 cd src/data_grabber
-python -c "import json; data=json.load(open('shared/vmforum_members.json', encoding='utf-8')); print(sum(1 for m in data if m.get('profile_updated_at')), '/', len(data))"
+python -c "import json; from libs.paths_lib import VMFORUM_MEMBERS_JSON_PATH as p; data=json.load(open(p, encoding='utf-8')); print(sum(1 for m in data if m.get('profile_updated_at')), '/', len(data))"
 ```
 
 Nach einem Lauf sollten die meisten Einträge ein `profile_updated_at` besitzen. Bei bestehenden Cacheeinträgen wird der Wert aus dem Ablaufzeitpunkt rekonstruiert.
@@ -840,10 +867,10 @@ Der Arbeitsstand wurde am 22.10.2026 auf den Masterstand `3c9e3fc` zurückgesetz
 
 - `get_member_data()` ist aktiv.
 - Es wird keine vorhandene `members.json` gelesen.
-- Die Ausgabe erfolgt nach `shared/vmforum_members.json`.
-- `members.json` bleibt ein Laufzeitartefakt und gehört nicht ins Docker-Image.
+- Die Kartenausgabe erfolgt nach `docker/webserver/www_data/shared/vmforum_members.json` (Docker: `/app/shared/vmforum_members.json`).
+- `members.json` bleibt ein Laufzeitartefakt und gehört nicht ins Docker-Image. Es liegt unter `src/data_grabber/members.json` bzw. `/app/members.json` außerhalb des Web-Roots.
 
-Optional offen: Der Ausgabepfad könnte zusätzlich über CLI/Umgebungsvariable konfigurierbar gemacht werden.
+Der Ausgabepfad ist inzwischen über `VMKARTE_SHARED_DIR` konfigurierbar; siehe Abschnitt 12.10.
 
 ### 12.5 Login- und Sessionprüfung korrigieren
 
@@ -883,6 +910,14 @@ Da das Forum HTML liefert und keine API verfügbar ist, sollten repräsentative 
 - Die Karte zeigt den Stand im Popup als Datum; der exakte Zeitstempel steht im Tooltip.
 - `--fast` wird aus Kompatibilitätsgründen noch akzeptiert, hat aber keine Wirkung mehr.
 
+### 12.10 Einheitliche Laufzeitpfade (umgesetzt am 23.10.2026)
+
+- `libs/paths_lib.py` löst `config.json`, `cache_config.json`, Cache, Debug-`members.json` und Karten-JSON script-relativ auf.
+- Die Kartenausgabe geht standardmäßig nach `docker/webserver/www_data/shared/vmforum_members.json`. IDE und native Installation schreiben damit direkt in den Web-Root; das manuelle Kopieren entfällt.
+- Docker mountet denselben Host-Pfad nach `/app/shared` (Cron) und `/www_data/shared` (Web).
+- `members.json` wird nach `src/data_grabber/members.json` bzw. `/app/members.json` geschrieben und liegt damit außerhalb des öffentlich ausgelieferten Verzeichnisses.
+- Mit `VMKARTE_SHARED_DIR` kann der Karten-Datenpfad für separate Web-Roots überschrieben werden.
+
 ---
 
 ## 13. Sicherheit und Datenschutz
@@ -890,7 +925,8 @@ Da das Forum HTML liefert und keine API verfügbar ist, sollten repräsentative 
 - `src/data_grabber/config.json` enthält Zugangsdaten im Klartext. Sie ist jetzt in `.gitignore` eingetragen und darf nicht committet werden.
 - `cache_config.json` enthält keine Zugangsdaten und ist deshalb eingecheckt.
 - `members.json` und `vmforum_members.json` enthalten personenbezogene Daten (Namen, Ortsangaben, Fahrzeuge). Sie sind ebenfalls ignoriert.
-- Das Root-Verzeichnis `cache/`, `src/data_grabber/cache/` und `src/data_grabber/shared/` sind ignoriert; dort liegen Laufzeitdaten.
+- `members.json` liegt jetzt unter `src/data_grabber/members.json` bzw. `/app/members.json` und wird nicht mehr über den Web-Root ausgeliefert. `vmforum_members.json` ist bewusst öffentlich (durch Basic Auth geschützt) und enthält nur die für die Karte nötigen Felder.
+- Das Root-Verzeichnis `cache/`, `src/data_grabber/cache/`, `docker/webserver/www_data/shared/` und `volumes/` sind ignoriert; dort liegen Laufzeitdaten.
 - Fehlermeldungen können die konfigurierte E-Mail-Adresse im Nominatim-URL enthalten und landen im Log.
 - Der Standard-User-Agent enthält die öffentliche Projekt-URL. Für den produktiven Betrieb sollte jede Instanz einen eigenen User-Agent mit Kontaktangabe konfigurieren.
 - Die OSM-Attribution (ODbL) und der Nominatim-Hinweis sind im Leaflet-Attribution-Control der Karte sichtbar. Diese Attribution darf nicht per CSS entfernt oder verdeckt werden.
@@ -904,6 +940,8 @@ Die aktuellen `.gitignore`-Einträge:
 /src/data_grabber/config.json
 /src/data_grabber/members.json
 /src/data_grabber/vmforum_members.json
+/docker/webserver/www_data/shared/
+/volumes/
 /cache/
 /members.json
 /vmforum_members.json
@@ -911,6 +949,7 @@ Die aktuellen `.gitignore`-Einträge:
 !/config/.htpasswd.sample
 !/config/config.json.sample
 !/config/cache_config.json.sample
+/session-*.md
 ```
 
 ---
@@ -945,19 +984,22 @@ Die früheren Debug-Abweichungen (deaktivierter Scraper, falscher Ausgabepfad, f
 ### 23.10.2026
 
 - `src/data_grabber/libs/cache_config_lib.py`: neues Modul zum Laden, Validieren und Ziehen der Cache-TTLs.
+- `src/data_grabber/libs/paths_lib.py`: einheitliche, script-relative Pfade für Konfiguration, Cache, Debug-Daten und Karten-JSON.
 - `src/data_grabber/cache_config.json`: eingecheckte Default-Konfiguration für `user_details` und `nominatim`.
-- `src/data_grabber/libs/data_scraper_lib.py`: `profile_updated_at`, Rekonstruktion für alte Cacheeinträge und konfigurierbare `user_details`-TTL.
-- `src/data_grabber/libs/location_nominatim_lib.py`: konfigurierbare `nominatim`-TTL.
-- `src/data_grabber/data_grabber.py`: Thinning entfernt, `--fast` als No-op, `profile_updated_at` in der Ausgabe.
+- `src/data_grabber/libs/data_scraper_lib.py`: `profile_updated_at`, Rekonstruktion für alte Cacheeinträge, konfigurierbare `user_details`-TTL und script-relative Pfade.
+- `src/data_grabber/libs/location_nominatim_lib.py`: konfigurierbare `nominatim`-TTL und script-relative Pfade.
+- `src/data_grabber/libs/location_mapping_rules_lib.py`: Mapping-Dateien werden script-relativ geladen.
+- `src/data_grabber/data_grabber.py`: Thinning entfernt, `--fast` als No-op, `profile_updated_at` in der Ausgabe und einheitliche Ausgabepfade.
 - `src/data_grabber/libs/cache_thinning_lib.py`: entfernt.
 - `src/data_grabber/smoke_test.py`: gibt `profile_updated_at` mit aus.
 - `docker/webserver/www_data/karte.html`: Datenstand im Popup, JSON-Abruf ohne Browser-Cache und Konsolen-Diagnose für fehlende Zeitstempel.
 - `docs/upgrade-docker.md`, `docs/upgrade-native.md`: Troubleshooting für `Stand: unbekannt`.
-- `docker/cron/Dockerfile` und `docker-compose.yml.sample`: Default-`cache_config.json` und Mount.
+- `docker/cron/Dockerfile` und `docker-compose.yml.sample`: Default-`cache_config.json` und gemeinsamer Mount `./docker/webserver/www_data/shared`.
 - `config/cache_config.json.sample`: Docker-Vorlage.
 - `docs/upgrade-docker.md`, `docs/upgrade-native.md`: Upgrade-Anleitungen für Docker und native Server.
-- `.gitignore`: `/config/*` mit Ausnahmen für die Beispieldateien.
-- `DOKUMENTATION.md`, `README.md`: Konfiguration, Datenstand und Betrieb.
+- `.gitignore`: `/config/*` mit Ausnahmen für die Beispieldateien, `session-*.md` für lokale Sitzungsprotokolle.
+- `DOKUMENTATION.md`: Beispieldaten auf `pr0meteus` und fiktive Orts-/Fahrzeugdaten umgestellt; keine realen Mitgliedsdaten mehr in den Beispielen.
+- `DOKUMENTATION.md`, `README.md`: Konfiguration, Datenstand, Pfade und Betrieb.
 
 ### 22.10.2026
 

@@ -2,8 +2,7 @@ import json
 import random
 from pathlib import Path
 
-CACHE_CONFIG_FILENAME = 'cache_config.json'
-CACHE_CONFIG_PATH = Path(__file__).resolve().parent.parent / CACHE_CONFIG_FILENAME
+from libs.paths_lib import CACHE_CONFIG_PATH
 
 DEFAULT_CACHE_CONFIG = {
     'user_details': {

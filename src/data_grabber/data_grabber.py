@@ -4,6 +4,7 @@ import json
 import argparse
 from libs.data_scraper_lib import get_member_data
 from libs.location_nominatim_lib import examine_locations
+from libs.paths_lib import MEMBERS_JSON_PATH, SHARED_DIR, VMFORUM_MEMBERS_JSON_PATH
 
 
 def prepare_vmforum_members(members):
@@ -63,9 +64,8 @@ def main():
     print(f"Total members parsed: {len(members)}")  # Print the total number of members parsed
 
     # Write the data to a JSON file / just for debug purposes
-    with open('shared/members.json', 'w', encoding='utf-8') as file:
+    with MEMBERS_JSON_PATH.open('w', encoding='utf-8') as file:
         json.dump(members, file, ensure_ascii=False, indent=4)
-    file.close()
 
     # Examine locations
     members = examine_locations(members)
@@ -73,10 +73,11 @@ def main():
     # Prepare data for the JSON file
     vmforum_members = prepare_vmforum_members(members)
 
-    # Write the data to a JSON file
-    with open('shared/vmforum_members.json', 'w', encoding='utf-8') as vmforumfile:
+    # Write the data to the JSON file served by the map
+    SHARED_DIR.mkdir(parents=True, exist_ok=True)
+    print(f"Writing map data to {VMFORUM_MEMBERS_JSON_PATH}")
+    with VMFORUM_MEMBERS_JSON_PATH.open('w', encoding='utf-8') as vmforumfile:
         json.dump(vmforum_members, vmforumfile, ensure_ascii=False, indent=2)
-    vmforumfile.close()
 
 if __name__ == "__main__":
     main()

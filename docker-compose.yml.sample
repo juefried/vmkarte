@@ -10,7 +10,7 @@ services:
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
       - ./config/.htpasswd:/etc/nginx/.htpasswd
-      - ./volumes/shared:/www_data/shared:ro
+      - ./docker/webserver/www_data/shared:/www_data/shared:ro
     restart: unless-stopped
 
   cron:
@@ -23,5 +23,5 @@ services:
       - ./config/config.json:/app/config.json
       - ./config/cache_config.json:/app/cache_config.json:ro
       - ./volumes/cron/cache:/app/cache
-      - ./volumes/shared:/app/shared
+      - ./docker/webserver/www_data/shared:/app/shared
     restart: unless-stopped

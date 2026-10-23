@@ -1,11 +1,13 @@
 import json
 import re
+from pathlib import Path
 
-with open('libs/country_mapping.json', 'r', encoding='utf-8') as f:
+LIBS_DIR = Path(__file__).resolve().parent
+
+with (LIBS_DIR / 'country_mapping.json').open('r', encoding='utf-8') as f:
     country_mapping = json.load(f)
     # Lowercase the country codes and their location names
     country_mapping = {k.lower(): [loc.lower() for loc in v] for k, v in country_mapping.items()}
-    f.close()
 
 # Create a new structure with reversed key-value pairs
 country_mapping_reverse = {}
@@ -24,10 +26,10 @@ country_mapping_reverse = dict(
     sorted(country_mapping_reverse.items(), key=lambda item: len(item[0]), reverse=True)
 )
 
-with open('libs/kuerzel_mapping.json', 'r', encoding='utf-8') as f:
+with (LIBS_DIR / 'kuerzel_mapping.json').open('r', encoding='utf-8') as f:
     kuerzel_mapping = json.load(f)
     kuerzel_mapping = {k.lower(): v.lower() for k, v in kuerzel_mapping.items()}
-    f.close()
+
 
 
 def get_country_code(country_name: str, country_mapping: dict) -> str:
