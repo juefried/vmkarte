@@ -1,10 +1,34 @@
 #!/usr/bin/python3
 
-import json
 import argparse
+import json
+
 from libs.data_scraper_lib import get_member_data
 from libs.location_nominatim_lib import examine_locations
-from libs.paths_lib import MEMBERS_JSON_PATH, SHARED_DIR, VMFORUM_MEMBERS_JSON_PATH
+from libs.paths_lib import APP_DIR, MEMBERS_JSON_PATH, REPO_ROOT, SHARED_DIR, VMFORUM_MEMBERS_JSON_PATH
+
+
+def remove_stale_members_json(include_current=True):
+    """
+    Removes raw member data that must never be served by the web server.
+
+    The current debug file is only removed when include_current is true. Legacy
+    copies in the shared/web directory, in the old local shared directory and in
+    the repository root are always removed.
+    """
+    paths = [
+        SHARED_DIR / 'members.json',
+        APP_DIR / 'shared' / 'members.json',
+        REPO_ROOT / 'members.json',
+    ]
+    if include_current:
+        paths.append(MEMBERS_JSON_PATH)
+
+    for path in paths:
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as error:
+            print(f"Could not remove {path}: {error}")
 
 
 def prepare_vmforum_members(members):
@@ -55,17 +79,27 @@ def main():
         action='store_true',
         help='Deprecated, has no effect'
     )
+    parser.add_argument(
+        '--debug',
+        action='store_true',
+        help='Write raw member data to members.json (private, not web-served)'
+    )
 
     # Parse the command line arguments
-    parser.parse_args()
+    args = parser.parse_args()
+
+    # Raw member data must never be exposed through the web server. Remove
+    # stale copies before the long scrape starts.
+    remove_stale_members_json(include_current=not args.debug)
 
     # Retrieve member data
     members = get_member_data()
     print(f"Total members parsed: {len(members)}")  # Print the total number of members parsed
 
-    # Write the data to a JSON file / just for debug purposes
-    with MEMBERS_JSON_PATH.open('w', encoding='utf-8') as file:
-        json.dump(members, file, ensure_ascii=False, indent=4)
+    if args.debug:
+        with MEMBERS_JSON_PATH.open('w', encoding='utf-8') as file:
+            json.dump(members, file, ensure_ascii=False, indent=4)
+        print(f"Debug member data written to {MEMBERS_JSON_PATH}")
 
     # Examine locations
     members = examine_locations(members)
@@ -78,6 +112,7 @@ def main():
     print(f"Writing map data to {VMFORUM_MEMBERS_JSON_PATH}")
     with VMFORUM_MEMBERS_JSON_PATH.open('w', encoding='utf-8') as vmforumfile:
         json.dump(vmforum_members, vmforumfile, ensure_ascii=False, indent=2)
+
 
 if __name__ == "__main__":
     main()

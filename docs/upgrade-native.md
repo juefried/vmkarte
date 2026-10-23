@@ -16,7 +16,7 @@ Diese Anleitung beschreibt das Upgrade einer Installation, bei der der Datengrab
 - `utils/clear_nominatim_cache.py` muss für dieses Upgrade **nicht** erneut ausgeführt werden.
 - Es werden keine neuen Python-Pakete benötigt; `requirements.txt` bleibt unverändert.
 - Alle Laufzeitpfade werden script-relativ aufgelöst. Die Kartendaten gehen standardmäßig nach `<repo>/docker/webserver/www_data/shared`; für einen separaten Web-Root kann `VMKARTE_SHARED_DIR` gesetzt werden.
-- Das Debug-`members.json` liegt jetzt unter `src/data_grabber/members.json` und nicht mehr im Web-Root.
+- Das Debug-`members.json` wird nur mit `--debug` nach `src/data_grabber/members.json` geschrieben. Ohne `--debug` wird die Datei nicht erzeugt; vorhandene Kopien am aktuellen Pfad sowie in alten Shared-Verzeichnissen werden beim nächsten Lauf gelöscht.
 
 ## Vorbereitung
 
@@ -116,6 +116,12 @@ Der Aufruf mit `--fast` ist weiterhin möglich, hat aber keine Wirkung mehr:
 /pfad/zu/venv/bin/python data_grabber.py --fast
 ```
 
+Für Debugging kann `--debug` ergänzt werden. Die Rohdaten landen dann unter `src/data_grabber/members.json`, nicht im Web-Root:
+
+```bash
+/pfad/zu/venv/bin/python data_grabber.py --debug
+```
+
 Der Lauf kann bei leerem Cache mehrere Stunden dauern. Mit dem vorhandenen Cache geht er schneller. Die Ausgabe erfolgt nach `src/data_grabber/members.json` (Debug) und `docker/webserver/www_data/shared/vmforum_members.json` (Karte). Mit gesetztem `VMKARTE_SHARED_DIR` geht die Kartenausgabe in das dort angegebene Verzeichnis.
 
 ## Frontend aktualisieren
@@ -209,6 +215,7 @@ Falls das Frontend bereits aktualisiert wurde, auch die alte `karte.html` wieder
 ## Hinweise
 
 - Das alte `src/data_grabber/shared/` und die alte `src/data_grabber/vmforum_members.json` werden nicht mehr beschrieben und können nach der Umstellung entfernt werden.
+- Alte Debug-Dateien im Web-Root entfernen: `rm -f src/data_grabber/shared/members.json /var/www/vmforum-karte/shared/members.json`. Der nächste Lauf ohne `--debug` entfernt die bekannten Pfade ebenfalls automatisch.
 - Der erste Lauf aktualisiert nicht automatisch alle Profile. Bestehende Cacheeinträge behalten ihr bisheriges Ablaufdatum. Die Anzeige zeigt zunächst die rekonstruierten alten Abrufdaten; neue Einträge erhalten die zufällige TTL.
 - Für einen Test kann die TTL vorübergehend verkürzt werden, z. B. `user_details` 1–2 Tage und `nominatim` 30–60 Tage. Das erhöht die Zahl der Forum- und Nominatim-Abfragen deutlich und ist nicht für den Produktivbetrieb gedacht.
 - Ein vollständiges Leeren des Caches (`src/data_grabber/cache/`) erzwingt einen kompletten Neuaufbau mit ca. 6.900 Profilabrufen und bis zu ca. 3.000 Nominatim-Abfragen. Nur bei Bedarf und möglichst nicht während der Hauptnutzungszeit durchführen.

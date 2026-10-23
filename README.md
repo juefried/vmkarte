@@ -38,7 +38,7 @@ Der Scraper schreibt die Kartendaten standardmäßig nach `docker/webserver/www_
 
 Im Docker-Betrieb mounten Cron und Web denselben Host-Pfad nach `/app/shared` bzw. `/www_data/shared`. Für einen separaten Web-Root kann der Pfad mit `VMKARTE_SHARED_DIR` überschrieben werden.
 
-Das Debug-`members.json` liegt unter `src/data_grabber/members.json` (Docker: `/app/members.json`) und wird nicht über den Web-Root ausgeliefert.
+Das Debug-`members.json` wird nur mit `--debug` geschrieben und liegt unter `src/data_grabber/members.json` (Docker: `/app/members.json`); es wird nicht über den Web-Root ausgeliefert. Ohne `--debug` wird eine vorhandene Datei gelöscht.
 
 ## Upgrade von der Version 20261022
 

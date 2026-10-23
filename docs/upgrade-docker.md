@@ -15,7 +15,8 @@ Diese Anleitung beschreibt das Upgrade einer bestehenden Docker-Installation. Di
 - Die neuen TTLs gelten nur für neu geschriebene Cacheeinträge. Der erste Lauf nach dem Upgrade erzwingt keine vollständige Aktualisierung.
 - `utils/clear_nominatim_cache.py` muss für dieses Upgrade **nicht** erneut ausgeführt werden.
 - Cron und Web verwenden jetzt denselben Host-Pfad `docker/webserver/www_data/shared`. IDE und native Installation schreiben ebenfalls dorthin; das manuelle Kopieren der Kartendaten entfällt.
-- Das Debug-`members.json` wird nach `/app/members.json` geschrieben und nicht mehr über den Web-Root ausgeliefert.
+- Das Debug-`members.json` wird nur mit `--debug` nach `/app/members.json` geschrieben. Ohne `--debug` wird die Datei nicht erzeugt; vorhandene Kopien am aktuellen Pfad sowie im Shared-/Web-Verzeichnis werden beim nächsten Lauf gelöscht.
+- nginx liefert `members.json` zusätzlich grundsätzlich nicht aus (`return 404`).
 
 ## Vorbereitung
 
@@ -77,6 +78,7 @@ Bestehende Kartendaten aus `volumes/shared` einmalig übernehmen. Nur `vmforum_m
 ```bash
 mkdir -p docker/webserver/www_data/shared
 cp -a volumes/shared/vmforum_members.json docker/webserver/www_data/shared/
+rm -f docker/webserver/www_data/shared/members.json volumes/shared/members.json
 ```
 
 Danach kann `./volumes/shared` aus der Compose-Datei entfernt werden. Der Cache bleibt unter `./volumes/cron/cache` erhalten.
@@ -131,6 +133,12 @@ docker compose exec cron python3 /app/data_grabber.py
 ```
 
 `--fast` kann weiterhin angegeben werden, ist aber wirkungslos. Der Lauf kann bei leerem Cache mehrere Stunden dauern; mit dem vorhandenen Cache geht er schneller.
+
+Für Debugging kann `--debug` ergänzt werden. Die Rohdaten landen dann unter `/app/members.json`, nicht im Web-Root:
+
+```bash
+docker compose exec cron python3 /app/data_grabber.py --debug
+```
 
 ## Verifikation
 

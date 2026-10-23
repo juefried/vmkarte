@@ -121,8 +121,9 @@ flowchart LR
 Einstiegspunkt und Orchestrierung.
 
 - CLI-Parameter `--fast`: wird aus Kompatibilitätsgründen noch akzeptiert, hat aber keine Wirkung mehr.
+- CLI-Parameter `--debug`: schreibt die Rohdaten nach `src/data_grabber/members.json` (Docker: `/app/members.json`). Ohne `--debug` wird diese Datei nicht erzeugt.
+- Ohne `--debug` werden vorhandene `members.json`-Kopien am aktuellen Pfad sowie im Shared-/Web-Verzeichnis, im alten lokalen `shared/`-Verzeichnis und im Repository-Root gelöscht. Die Datei liegt außerhalb des Web-Roots.
 - `get_member_data()` ist aktiv.
-- Die Mitgliederdaten werden zur Laufzeit nach `src/data_grabber/members.json` geschrieben (Docker: `/app/members.json`). Diese Datei liegt außerhalb des Web-Roots.
 - Die Kartenausgabe erfolgt nach `docker/webserver/www_data/shared/vmforum_members.json` (Docker: `/app/shared/vmforum_members.json`).
 - Baut aus jedem Mitglied ein reduziertes Objekt mit `id`, `name`, `lat`, `lon`, `radius` und optional `profile_updated_at`, `vm`, `lr`, `tr`, `other`.
 - Das frühere Cache-Thinning entfällt; die Verteilung übernimmt die zufällige TTL aus `cache_config.json`.
@@ -252,6 +253,7 @@ Die TTL wird für jeden neuen Cacheeintrag zufällig aus dem in `cache_config.js
 - nginx mit Basic Auth.
 - Dokumentwurzel `/www_data`, Startseite `karte.html`.
 - `./docker/webserver/www_data/shared` wird read-only nach `/www_data/shared` gemountet.
+- `members.json` wird per `location ~ /members\.json$ { return 404; }` grundsätzlich nicht ausgeliefert.
 
 **Compose** (`docker-compose.yml.sample`)
 
@@ -270,6 +272,8 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 ## 6. Datenformate
 
 ### 6.1 Eingabe / Zwischenstand `members.json`
+
+Wird nur mit `--debug` geschrieben und enthält personenbezogene Rohdaten. Ohne `--debug` wird die Datei nicht erzeugt; vorhandene Kopien im Web-/Shared-Verzeichnis werden entfernt.
 
 Objekt, keyed nach `uid`:
 
@@ -511,7 +515,13 @@ python data_grabber.py
 
 `cache_config.json` ist bereits eingecheckt und wird script-relativ gefunden. Fehlt sie, gelten die Defaults.
 
-Die Ausgabe erfolgt script-relativ nach `src/data_grabber/members.json` (Debug) und `docker/webserver/www_data/shared/vmforum_members.json` (Karte). Das Verzeichnis `docker/webserver/www_data/shared/` wird bei Bedarf angelegt und ist im Repository ignoriert.
+Die Kartenausgabe erfolgt script-relativ nach `docker/webserver/www_data/shared/vmforum_members.json`. Das Verzeichnis wird bei Bedarf angelegt und ist im Repository ignoriert. Die Rohdaten in `members.json` werden nur mit `--debug` geschrieben:
+
+```bash
+python data_grabber.py --debug
+```
+
+Ohne `--debug` wird eine vorhandene `members.json` gelöscht.
 
 ### Schneller Test in der IDE
 
@@ -791,6 +801,17 @@ python -c "from libs.paths_lib import CONFIG_PATH, CACHE_DIR, SHARED_DIR, MEMBER
 
 Erwartet: `cache_config.json` und `config.json` im `data_grabber`-Verzeichnis, `SHARED_DIR` unter `docker/webserver/www_data/shared` (lokal) bzw. `/app/shared` (Docker).
 
+### Debug-Datei prüfen
+
+Nach einem Lauf **ohne** `--debug` darf `src/data_grabber/members.json` nicht existieren:
+
+```powershell
+cd src/data_grabber
+Test-Path members.json
+```
+
+Erwartet: `False`. Mit `--debug` wird die Datei geschrieben und liegt außerhalb des Web-Roots.
+
 ### Datenstand prüfen
 
 ```powershell
@@ -915,7 +936,9 @@ Da das Forum HTML liefert und keine API verfügbar ist, sollten repräsentative 
 - `libs/paths_lib.py` löst `config.json`, `cache_config.json`, Cache, Debug-`members.json` und Karten-JSON script-relativ auf.
 - Die Kartenausgabe geht standardmäßig nach `docker/webserver/www_data/shared/vmforum_members.json`. IDE und native Installation schreiben damit direkt in den Web-Root; das manuelle Kopieren entfällt.
 - Docker mountet denselben Host-Pfad nach `/app/shared` (Cron) und `/www_data/shared` (Web).
-- `members.json` wird nach `src/data_grabber/members.json` bzw. `/app/members.json` geschrieben und liegt damit außerhalb des öffentlich ausgelieferten Verzeichnisses.
+- `members.json` wird nur mit `--debug` nach `src/data_grabber/members.json` bzw. `/app/members.json` geschrieben und liegt damit außerhalb des öffentlich ausgelieferten Verzeichnisses.
+- Ohne `--debug` wird eine vorhandene `members.json` am aktuellen Pfad sowie in den alten Shared-Verzeichnissen gelöscht.
+- nginx liefert `members.json` grundsätzlich nicht aus (`location ~ /members\.json$ { return 404; }`).
 - Mit `VMKARTE_SHARED_DIR` kann der Karten-Datenpfad für separate Web-Roots überschrieben werden.
 
 ---
@@ -925,7 +948,8 @@ Da das Forum HTML liefert und keine API verfügbar ist, sollten repräsentative 
 - `src/data_grabber/config.json` enthält Zugangsdaten im Klartext. Sie ist jetzt in `.gitignore` eingetragen und darf nicht committet werden.
 - `cache_config.json` enthält keine Zugangsdaten und ist deshalb eingecheckt.
 - `members.json` und `vmforum_members.json` enthalten personenbezogene Daten (Namen, Ortsangaben, Fahrzeuge). Sie sind ebenfalls ignoriert.
-- `members.json` liegt jetzt unter `src/data_grabber/members.json` bzw. `/app/members.json` und wird nicht mehr über den Web-Root ausgeliefert. `vmforum_members.json` ist bewusst öffentlich (durch Basic Auth geschützt) und enthält nur die für die Karte nötigen Felder.
+- `members.json` wird nur mit `--debug` erzeugt, liegt unter `src/data_grabber/members.json` bzw. `/app/members.json` und wird nicht über den Web-Root ausgeliefert. Ohne `--debug` werden vorhandene Kopien entfernt. nginx blockiert `members.json` zusätzlich per `return 404`.
+- `vmforum_members.json` ist bewusst öffentlich (durch Basic Auth geschützt) und enthält nur die für die Karte nötigen Felder. Die Koordinaten sind die eigentlichen Kartendaten; bei Bedarf muss der Zugriff auf die Karte insgesamt stärker abgesichert werden.
 - Das Root-Verzeichnis `cache/`, `src/data_grabber/cache/`, `docker/webserver/www_data/shared/` und `volumes/` sind ignoriert; dort liegen Laufzeitdaten.
 - Fehlermeldungen können die konfigurierte E-Mail-Adresse im Nominatim-URL enthalten und landen im Log.
 - Der Standard-User-Agent enthält die öffentliche Projekt-URL. Für den produktiven Betrieb sollte jede Instanz einen eigenen User-Agent mit Kontaktangabe konfigurieren.
@@ -989,8 +1013,9 @@ Die früheren Debug-Abweichungen (deaktivierter Scraper, falscher Ausgabepfad, f
 - `src/data_grabber/libs/data_scraper_lib.py`: `profile_updated_at`, Rekonstruktion für alte Cacheeinträge, konfigurierbare `user_details`-TTL und script-relative Pfade.
 - `src/data_grabber/libs/location_nominatim_lib.py`: konfigurierbare `nominatim`-TTL und script-relative Pfade.
 - `src/data_grabber/libs/location_mapping_rules_lib.py`: Mapping-Dateien werden script-relativ geladen.
-- `src/data_grabber/data_grabber.py`: Thinning entfernt, `--fast` als No-op, `profile_updated_at` in der Ausgabe und einheitliche Ausgabepfade.
+- `src/data_grabber/data_grabber.py`: Thinning entfernt, `--fast` als No-op, `--debug` für die Rohdatenausgabe, Löschen veralteter `members.json` und einheitliche Ausgabepfade.
 - `src/data_grabber/libs/cache_thinning_lib.py`: entfernt.
+- `docker/webserver/default.conf` und `docker/webserver/.dockerignore`: `members.json` wird nicht ausgeliefert bzw. nicht ins Image aufgenommen.
 - `src/data_grabber/smoke_test.py`: gibt `profile_updated_at` mit aus.
 - `docker/webserver/www_data/karte.html`: Datenstand im Popup, JSON-Abruf ohne Browser-Cache und Konsolen-Diagnose für fehlende Zeitstempel.
 - `docs/upgrade-docker.md`, `docs/upgrade-native.md`: Troubleshooting für `Stand: unbekannt`.
