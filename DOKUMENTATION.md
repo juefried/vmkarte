@@ -123,6 +123,9 @@ Einstiegspunkt und Orchestrierung.
 
 - CLI-Parameter `--fast`: wird aus Kompatibilitätsgründen noch akzeptiert, hat aber keine Wirkung mehr.
 - CLI-Parameter `--debug`: schreibt die Rohdaten nach `src/data_grabber/members.json` (Docker: `/app/members.json`). Ohne `--debug` wird diese Datei nicht erzeugt.
+- CLI-Parameter `--refresh-members`: ignoriert den 23-Stunden-Cache `members_dict`, lädt alle Mitgliederseiten neu und ersetzt den Cache. Damit werden auch neu registrierte Benutzer innerhalb des 24-Stunden-Fensters gefunden.
+- CLI-Parameter `--refresh-user UID|NAME`: erzwingt einen frischen Profilabruf für einen Benutzer (Bypass von `user_details`). Mehrfach und kommagetrennt möglich. Akzeptiert numerische UIDs oder exakte Forennamen; mehrdeutige Namen führen zu einem Fehler mit den passenden UIDs. Ist das Ziel nicht im aktuellen Mitglieder-Cache, wird die Mitgliederliste automatisch einmal neu geladen. Für dieses Profil wird zusätzlich der Nominatim-Cache nicht gelesen; das frische Ergebnis wird mit neuer TTL gespeichert.
+- `--refresh-members` und `--refresh-user` lassen sich kombinieren. Dann stammen auch die Ortsangaben des Zielprofils garantiert aus der frisch geladenen Mitgliederliste.
 - Ohne `--debug` werden vorhandene `members.json`-Kopien am aktuellen Pfad sowie im Shared-/Web-Verzeichnis, im alten lokalen `shared/`-Verzeichnis und im Repository-Root gelöscht. Die Datei liegt außerhalb des Web-Roots.
 - `get_member_data()` ist aktiv.
 - Die Kartenausgabe erfolgt nach `docker/webserver/www_data/shared/vmforum_members.json` (Docker: `/app/shared/vmforum_members.json`).
@@ -171,6 +174,13 @@ Verantwortlich für Login und HTML-Parsing.
 
 Die TTL wird für jeden neuen positiven Cacheeintrag zufällig aus dem in `cache_config.json` konfigurierten Bereich gezogen. Dadurch verteilen sich die Profil- und Geocoding-Aktualisierungen über die Zeit. Sind `ttl_days_min` und `ttl_days_max` gleich, ist die TTL fest.
 
+`--refresh-members` umgeht den `members_dict`-Cache und ersetzt ihn nach erfolgreichem Scrape. Ein leeres Ergebnis wird nicht gecacht, damit ein fehlgeschlagener Login den bestehenden Mitglieder-Cache nicht überschreibt.
+
+`--refresh-user` umgeht die Caches gezielt für die angegebenen UIDs:
+
+- `user_details`: kein Cache-Lesen; nach erfolgreichem Profilabruf wird der Eintrag mit neuer TTL gespeichert.
+- `nominatim`: kein Cache-Lesen für alle Länder-Versuche dieses Profils; ein frisches positives oder negatives Ergebnis wird gespeichert. Da der Nominatim-Schlüssel ortsbasiert ist, kann damit auch ein von anderen Mitgliedern genutzter Ortseintrag aktualisiert werden.
+
 Negativ-Treffer werden mit `negative_ttl_days` (Default 30 Tage) gecacht. Damit werden dauerhaft unauflösbare Orte nicht bei jedem Lauf erneut an Nominatim geschickt. **Exceptions** wie HTTP 403/429, Timeouts oder JSON-Fehler werden weiterhin **nicht** gecacht.
 
 **Wichtig zur Wirkung:** Der `members_dict`-Cache ist als **Entwicklungshilfe** gedacht. Bei mehreren Läufen innerhalb von 23 Stunden spart er die 345 Mitgliederseiten. Im täglichen Produktivbetrieb (Cron alle 24 h) ist die TTL dagegen vor jedem Lauf abgelaufen, sodass die Mitgliederliste ohnehin neu geladen wird. Das ist kein Fehler, sondern der bewusste Kompromiss zugunsten täglicher Aktualität.
@@ -179,10 +189,11 @@ Negativ-Treffer werden mit `negative_ttl_days` (Default 30 Tage) gecacht. Damit 
 
 ### 5.3 `src/data_grabber/libs/location_nominatim_lib.py`
 
-**`query_nominatim(searchstring, country_code)`**
+**`query_nominatim(searchstring, country_code, use_cache=True)`**
 
 - Entfernt führende/abschließende Kommas und Leerzeichen.
 - Entfernt bei vorhandenem Ländercode ein Präfix wie `d-90469`.
+- Prüft bei `use_cache=True` den lokalen Cache. Mit `use_cache=False` wird der Cache nicht gelesen; das frische Ergebnis wird trotzdem gespeichert.
 - Baut die URL:
   `https://nominatim.openstreetmap.org/search?q=...&format=json&addressdetails=1&email=...&countrycodes=...`
 - Sendet den Request mit `NOMINATIM_HEADERS` (konfigurierbarer User-Agent) und `NOMINATIM_TIMEOUT` (`location_nominatim_lib.py:46`).
@@ -198,11 +209,12 @@ Negativ-Treffer werden mit `negative_ttl_days` (Default 30 Tage) gecacht. Damit 
 - Berechnet die geodätische Distanz von der Bounding-Box-Mitte zur Nordwest-Ecke.
 - Gibt einen gerundeten Radius in Metern oder `'N/A'` zurück.
 
-**`examine_locations(members)`**
+**`examine_locations(members, refresh_uids=())`**
 
 - Iteriert über das Dictionary `uid → Mitglied`.
 - Normalisiert den Ort, ermittelt Land/PLZ.
 - Probiert bei unbekanntem Land verschiedene Ländercode-Kombinationen.
+- Für UIDs in `refresh_uids` werden alle Nominatim-Abfragen mit `use_cache=False` ausgeführt. Alle anderen Mitglieder nutzen den Cache unverändert.
 - Übernimmt `lat`, `lon`, `radius` nur bei erfolgreicher Nominatim-Antwort.
 - Mitglieder ohne Ortsangabe oder ohne Nominatim-Treffer werden nicht in die Ausgabe übernommen.
 
@@ -225,6 +237,7 @@ Negativ-Treffer werden mit `negative_ttl_days` (Default 30 Tage) gecacht. Damit 
 - `get_negative_ttl_seconds(cache_name)` liefert die TTL für negative Nominatim-Treffer (Default 30 Tage; `0` deaktiviert den Negativ-Cache).
 - Das frühere `cache_thinning_lib.delete_random_cache_data()` und der 1-%-Thinning-Aufruf sind entfallen. Die Verteilung erfolgt über die zufällige TTL.
 - `--fast` wird zwar noch akzeptiert, hat aber keine Wirkung mehr.
+- `--refresh-members` und `--refresh-user` ergänzen die Cache-Verwaltung um einen gezielten Bypass, ohne die Cache-Schlüssel oder TTL-Bereiche zu verändern. `--refresh-user` benötigt kein separates Nominatim-Flag: Der Orts-Cache wird für die Ziel-UID automatisch nicht gelesen.
 - `utils/cache.py` wurde entfernt. Die verbleibenden Hilfsskripte sind `utils/clear_nominatim_cache.py` und `utils/delete_user_cash_entry.py`.
 - `utils/delete_user_cash_entry.py` löscht `('user_details', uid)` relativ zum Skriptpfad.
 
@@ -421,7 +434,7 @@ Die Karte verwendet nicht die Wohnadresse, sondern die freiwillige Ortsangabe au
 - Die Typ-Priorisierung bevorzugt größere Einheiten wie Postleitzahlen, Verwaltungsgebiete und Städte. Exakte Hausadressen sind dadurch unwahrscheinlicher, aber nicht ausgeschlossen.
 - Der Marker liegt auf dem gefundenen Nominatim-Punkt, häufig auf einem Stadt- oder PLZ-Zentrum. Das ist nicht zwingend die tatsächliche Wohnadresse.
 - Der Radius ist die halbe Diagonale der Bounding Box und keine echte Fehlertoleranz.
-- Der Ort wird zusammen mit den Profildaten über `user_details` gecacht (Default 7–14 Tage). Ändert ein Mitglied seinen Ort, kann die Karte daher bis zu 14 Tage lang den alten Ort anzeigen. Der angezeigte `profile_updated_at`-Stand gilt für dieses komplette gecachte Mitgliedsobjekt einschließlich Ortsangabe.
+- Der Ort wird zusammen mit den Profildaten über `user_details` gecacht (Default 7–14 Tage). Ändert ein Mitglied seinen Ort, kann die Karte daher bis zu 14 Tage lang den alten Ort anzeigen. Der angezeigte `profile_updated_at`-Stand gilt für dieses komplette gecachte Mitgliedsobjekt einschließlich Ortsangabe. Mit `--refresh-user UID|NAME` lässt sich dieses Mitgliedsobjekt gezielt und sofort erneuern; für die frische Ortsangabe zusätzlich `--refresh-members` verwenden.
 - Positive Nominatim-Ergebnisse werden standardmäßig 180–365 Tage gecacht. Erfolgreiche Abfragen ohne Treffer werden 30 Tage negativ gecacht. Beide Werte sind über `cache_config.json` konfigurierbar; Exceptions werden nicht gecacht.
 - Durch die zufällige TTL laufen nicht alle Profile am selben Tag ab; die Aktualisierungen verteilen sich über den konfigurierten Zeitraum.
 - Eine explizite `"location": null`-Angabe würde derzeit einen Fehler auslösen, weil der Code `.lower()` direkt aufruft. Aktuell enthält `members.json` keine solchen Werte.
@@ -530,6 +543,25 @@ python data_grabber.py --debug
 ```
 
 Ohne `--debug` wird eine vorhandene `members.json` gelöscht.
+
+### Gezielte Aktualisierung
+
+```bash
+# Mitgliederliste neu laden (neue Benutzer sofort finden)
+python data_grabber.py --refresh-members
+
+# Profil und Ort eines Benutzers sofort aktualisieren
+python data_grabber.py --refresh-user 12345
+
+# Mehrere Benutzer, per UID oder exaktem Forennamen
+python data_grabber.py --refresh-user 12345,67890
+python data_grabber.py --refresh-user "Max Mustermann"
+
+# Zusätzlich frische Ortsangabe aus der Mitgliederliste
+python data_grabber.py --refresh-members --refresh-user 12345
+```
+
+Ein gezielter Lauf schreibt weiterhin die vollständige `vmforum_members.json`. Alle nicht betroffenen Mitglieder werden aus den bestehenden Caches bedient. Kann ein Ziel nicht aufgelöst werden, wird die Mitgliederliste einmalig neu geladen; bleibt es unauffindbar oder mehrdeutig, bricht der Lauf mit einer Meldung ab. Wird der Profilabruf oder die Nominatim-Abfrage für das Ziel nicht erfolgreich abgeschlossen, gelten die bisherigen Regeln: Es werden keine neuen Fahrzeugdaten gesetzt bzw. das Mitglied wird ohne aufgelösten Ort nicht in die Kartenausgabe übernommen.
 
 ### Schneller Test in der IDE
 

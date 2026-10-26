@@ -77,7 +77,7 @@ def _get_nominatim(url):
         time.sleep(1)
 
 
-def query_nominatim(searchstring, country_code):
+def query_nominatim(searchstring, country_code, use_cache=True):
     """
     Queries the Nominatim API for location details based on the search string and country code.
 
@@ -89,6 +89,8 @@ def query_nominatim(searchstring, country_code):
     Args:
         searchstring (str): The location to search for.
         country_code (str): The country code to narrow down the search, can be None.
+        use_cache (bool): Read an existing Nominatim cache entry. Fresh results are
+            still written to the cache.
 
     Returns:
         dict or None: The location details if found, otherwise None.
@@ -108,13 +110,14 @@ def query_nominatim(searchstring, country_code):
             # Extract the matched group from searchstring
             searchstring = match.group(1)
 
-    # Reuse a previously successful or negative lookup
+    # Reuse a previously successful or negative lookup unless bypassed
     cache_key = ('nominatim', searchstring, country_code)
-    cached_result = cache.get(cache_key)
-    if cached_result is not None:
-        if cached_result == NOMINATIM_NEGATIVE:
-            return None
-        return cached_result
+    if use_cache:
+        cached_result = cache.get(cache_key)
+        if cached_result is not None:
+            if cached_result == NOMINATIM_NEGATIVE:
+                return None
+            return cached_result
 
     try:
         # Construct the URL for the Nominatim API request
@@ -202,27 +205,38 @@ def calculate_radius(boundingbox):
         return round(radius)
     return 'N/A'
 
-def examine_locations(members):
+def examine_locations(members, refresh_uids=()):
     """
     Examines the locations of the members and updates their information.
 
     Args:
         members (dict): A dictionary containing the members' information.
+        refresh_uids (iterable): UIDs whose Nominatim lookups must bypass the cache.
+            Fresh results are still written to the cache.
 
     Returns:
         list: A list of updated members' information.
     """
     updated_members = []  # Initialize an empty list to store updated members' information
     total_members = len(members)  # Get the total number of members
+    if isinstance(refresh_uids, str):
+        refresh_uids = [refresh_uids]
+    refresh_uids = {str(uid) for uid in (refresh_uids or ())}
 
     for index, uid in enumerate(members, start=1):
         member = members[uid]  # Get the member's information
         location = member.get('location', "").lower().strip()  # Get the member's location
+        use_nominatim_cache = str(uid) not in refresh_uids
 
         postal_code = None  # Initialize variable to store postal code
         country_code = None  # Initialize variable to store country code
 
         if location:
+            if not use_nominatim_cache:
+                print(
+                    f"Nominatim cache bypassed for {member.get('name', uid)} ({uid})"
+                )
+
             country_code = analyze_location_for_country(location)  # Analyze location for country code
             postal_code = analyze_location_for_postal_code(location)  # Analyze location for postal code
             new_location = prepare_location(location)  # Prepare location for query
@@ -233,7 +247,7 @@ def examine_locations(members):
             nominatim_data = None  # Initialize variable to store Nominatim data
 
             if country_code is not None:
-                nominatim_data = query_nominatim(location, country_code)  # Query Nominatim with country code
+                nominatim_data = query_nominatim(location, country_code, use_cache=use_nominatim_cache)  # Query Nominatim with country code
             else:
                 cc_try_list = None  # Initialize variable to store country code try list
                 if postal_code is not None:
@@ -245,7 +259,7 @@ def examine_locations(members):
                     cc_try_list = ['de,at,ch', None]  # Set country code try list for no postal code
 
                 for cc_try in cc_try_list:
-                    nominatim_data = query_nominatim(location, cc_try)  # Query Nominatim with country code try
+                    nominatim_data = query_nominatim(location, cc_try, use_cache=use_nominatim_cache)  # Query Nominatim with country code try
                     if nominatim_data:
                         break  # Break loop if Nominatim data is found
 

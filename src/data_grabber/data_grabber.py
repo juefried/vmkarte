@@ -56,6 +56,25 @@ def prepare_vmforum_members(members):
     return vmforum_members
 
 
+def parse_refresh_user_tokens(values):
+    """
+    Flattens repeated and comma-separated --refresh-user values.
+
+    Args:
+        values (list): Raw argparse values.
+
+    Returns:
+        list: Unique, trimmed UID or name tokens in input order.
+    """
+    tokens = []
+    for value in values or []:
+        for token in value.split(','):
+            token = token.strip()
+            if token:
+                tokens.append(token)
+    return list(dict.fromkeys(tokens))
+
+
 def main():
     """
     Main function to run the data grabber.
@@ -84,16 +103,33 @@ def main():
         action='store_true',
         help='Write raw member data to members.json (private, not web-served)'
     )
+    parser.add_argument(
+        '--refresh-members',
+        action='store_true',
+        help='Ignore the 23h members list cache and reload all member pages'
+    )
+    parser.add_argument(
+        '--refresh-user',
+        action='append',
+        default=[],
+        metavar='UID|NAME',
+        help='Refresh profile and Nominatim data for a UID or exact forum name; '
+             'repeatable or comma-separated'
+    )
 
     # Parse the command line arguments
     args = parser.parse_args()
+    refresh_user_tokens = parse_refresh_user_tokens(args.refresh_user)
 
     # Raw member data must never be exposed through the web server. Remove
     # stale copies before the long scrape starts.
     remove_stale_members_json(include_current=not args.debug)
 
     # Retrieve member data
-    members = get_member_data()
+    members, refresh_uids = get_member_data(
+        refresh_members=args.refresh_members,
+        refresh_user_tokens=refresh_user_tokens,
+    )
     print(f"Total members parsed: {len(members)}")  # Print the total number of members parsed
 
     if args.debug:
@@ -102,7 +138,7 @@ def main():
         print(f"Debug member data written to {MEMBERS_JSON_PATH}")
 
     # Examine locations
-    members = examine_locations(members)
+    members = examine_locations(members, refresh_uids=refresh_uids)
 
     # Prepare data for the JSON file
     vmforum_members = prepare_vmforum_members(members)

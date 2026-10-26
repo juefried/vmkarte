@@ -41,6 +41,28 @@ Im Docker-Betrieb mounten Cron und Web denselben Host-Pfad nach `/app/shared` bz
 
 Das Debug-`members.json` wird nur mit `--debug` geschrieben und liegt unter `src/data_grabber/members.json` (Docker: `/app/members.json`); es wird nicht über den Web-Root ausgeliefert. Ohne `--debug` wird eine vorhandene Datei gelöscht.
 
+## Gezielte Aktualisierung
+
+```bash
+# Mitgliederliste neu laden, damit neue Benutzer sofort gefunden werden
+python data_grabber.py --refresh-members
+
+# Profil und Ort eines Benutzers sofort aktualisieren
+python data_grabber.py --refresh-user 12345
+
+# Mehrere Benutzer per UID oder exaktem Forennamen
+python data_grabber.py --refresh-user 12345,67890
+python data_grabber.py --refresh-user "Max Mustermann"
+```
+
+`--refresh-user` umgeht den `user_details`-Cache und fragt Nominatim für dieses Profil ohne Cache-Lesen ab. Das frische Ergebnis wird mit neuer TTL gespeichert. Ist der Benutzer noch nicht im 23-Stunden-Cache der Mitgliederliste, wird diese automatisch einmal neu geladen.
+
+Die Ortsangabe stammt aus der Mitgliederliste. Ohne `--refresh-members` kann sie aus dem 23-Stunden-Cache kommen. Für garantiert frische Ortsdaten beide Optionen kombinieren:
+
+```bash
+python data_grabber.py --refresh-members --refresh-user 12345
+```
+
 ## Upgrade von der Version 20261022
 
 - [Docker-Installation](docs/upgrade-docker.md)
