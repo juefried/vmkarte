@@ -2,5 +2,5 @@
   "username": "username",
   "password": "password",
   "email": "email",
-  "nominatim_user_agent": "vmkarte/1.0 (+https://github.com/juefried/vmkarte)"
+  "nominatim_user_agent": "vmkarte/1.0 (+irgendwas, was dich identifiziert)"
 }
