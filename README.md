@@ -89,6 +89,46 @@ python utils/vehicle_label_map_report.py
 
 Mit `--strict` endet der Report mit Status 1, wenn unbekannte Werte gefunden werden.
 
+### Mappingtabelle aktualisieren
+
+1. Report ausführen:
+
+   ```bash
+   cd src/data_grabber
+   python utils/vehicle_label_map_report.py
+   ```
+
+2. Fehlenden Wert in `libs/vehicle_label_map.json` unter `vm`, `lr` oder `tr` ergänzen. Der Schlüssel ist der API-Rohwert, der Wert der Anzeigename:
+
+   ```json
+   {
+     "lr": {
+       "neues_modell": "Neues Modell"
+     }
+   }
+   ```
+
+3. JSON prüfen und Report streng testen:
+
+   ```bash
+   python -c "import json; json.load(open('libs/vehicle_label_map.json', encoding='utf-8'))"
+   python utils/vehicle_label_map_report.py --strict
+   ```
+
+4. Optional die Tests ausführen:
+
+   ```bash
+   python -m unittest discover -s tests -p "test_*.py"
+   ```
+
+5. Map-Datei committen. Ein Cache-Löschen ist nicht nötig.
+
+Im Docker-Betrieb ist die Map Teil des Images. Nach einer Änderung daher `docker compose build` und `docker compose up -d` ausführen. Der Report im Container läuft mit:
+
+```bash
+docker compose exec cron python3 /app/utils/vehicle_label_map_report.py
+```
+
 ## Gezielte Aktualisierung
 
 ```bash

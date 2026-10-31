@@ -169,6 +169,27 @@ Verantwortlich für Authentifizierung, Paginierung, Feld-Mapping und Caching der
 - Beim Lesen aus `members_dict` und `user_details` werden vorhandene Rohwerte ebenfalls über den Resolver normalisiert.
 - `utils/vehicle_label_map_report.py` zeigt fehlende Rohwerte, Trefferzahl, Best Guess, Confidence und Quelle. Mit `--strict` endet das Skript mit Status 1, wenn unbekannte Werte gefunden werden.
 
+**Humanisierung und Token-Schreibweise**
+
+`libs/vehicle_label_lib.py` normalisiert Rohwerte vor dem Vergleich: Umlaute werden ersetzt (`ä` → `ae`, `ö` → `oe`, `ü` → `ue`, `ß` → `ss`), `&` wird zu `amp`, Satzzeichen entfallen, `_`, `-` und Leerzeichen gelten als Trennzeichen.
+
+Die Humanisierung greift erst, wenn exakter, normalisierter, tokenbasierter und erweiterter Treffer fehlschlagen:
+
+- Rohwert an `_`, `-` und Leerzeichen trennen.
+- Bekannte Schreibweisen aus vorhandenen Labels übernehmen, z. B. `df` → `DF`, `m5` → `M5`, `waw` → `WAW`, `zox` → `ZOX`.
+- `amp` als `&` ausgeben.
+- Unbekannte Wörter großschreiben.
+
+| Rohwert | Ergebnis | Methode |
+|---|---|---|
+| `df_xl` | `DF XL` | exakt |
+| `df__xl` | `DF XL` | normalisiert |
+| `m5_carbon_high_racer_2024` | `M5 Carbon High Racer 2024` | Erweiterung |
+| `z_amp_z_swing_2` | `Z&Z Swing 2` | Erweiterung |
+| `neues_modell` | `Neues Modell` | Humanisierung |
+
+Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellnamen werden nicht automatisch zusammengeführt. Das vermeidet falsche Treffer wie `Flux S-800` → `Flux S-900`. Unbekannte Rohwerte bleiben im Unknown-Log; humanisierte Werte werden zusätzlich gewarnt.
+
 **Caching**
 
 | Cache-Name | Schlüssel | Laufzeit | Inhalt |
@@ -599,6 +620,56 @@ python utils/vehicle_label_map_report.py
 ```
 
 Der Report liest den Mitglieder-Cache und die Liste unbekannter Werte. Er verändert keine Dateien. `--json` liefert maschinenlesbare Ausgabe, `--strict` beendet mit Status 1, sobald unbekannte Werte vorhanden sind.
+
+### Mappingtabelle aktualisieren
+
+1. Report im Verzeichnis `src/data_grabber` ausführen:
+
+   ```powershell
+   python utils/vehicle_label_map_report.py
+   ```
+
+2. Für jeden offenen Wert das Feld (`vm`, `lr`, `tr`) und den Rohwert notieren.
+
+3. In `libs/vehicle_label_map.json` unter dem passenden Feld ergänzen. Ausschnitt:
+
+   ```json
+   {
+     "lr": {
+       "neues_modell": "Neues Modell"
+     }
+   }
+   ```
+
+   Der Schlüssel ist der API-Rohwert, der Wert der Anzeigename.
+
+4. JSON validieren:
+
+   ```powershell
+   python -c "import json; json.load(open('libs/vehicle_label_map.json', encoding='utf-8'))"
+   ```
+
+5. Report streng prüfen:
+
+   ```powershell
+   python utils/vehicle_label_map_report.py --strict
+   ```
+
+   Erwartet: `Unknown values: 0` für die ergänzten Werte.
+
+6. Tests ausführen:
+
+   ```powershell
+   python -m unittest discover -s tests -p "test_*.py"
+   ```
+
+7. Die Map-Datei committen. Ein Cache-Löschen ist nicht nötig: Der Resolver normalisiert vorhandene Rohwerte beim Lesen; der nächste Prozess lädt die Map neu. Alte Unknown-Log-Einträge bleiben, der Report filtert bereits bekannte Werte.
+
+Im Docker-Betrieb liegt die Map im Image unter `/app/libs/vehicle_label_map.json`. Änderungen daher im Repository vornehmen und `docker compose build` sowie `docker compose up -d` ausführen. Der Report läuft im Container mit:
+
+```powershell
+docker compose exec cron python3 /app/utils/vehicle_label_map_report.py
+```
 
 ### Karte in der IDE anzeigen
 
