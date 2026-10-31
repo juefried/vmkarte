@@ -3,7 +3,7 @@
 import argparse
 import json
 
-from libs.data_scraper_lib import get_member_data
+from libs.forum_api_lib import get_member_data
 from libs.location_nominatim_lib import examine_locations
 from libs.paths_lib import APP_DIR, MEMBERS_JSON_PATH, REPO_ROOT, SHARED_DIR, VMFORUM_MEMBERS_JSON_PATH
 
@@ -54,6 +54,20 @@ def prepare_vmforum_members(members):
         vmforum_members.append(data)
 
     return vmforum_members
+
+
+def remove_internal_fields(members):
+    """
+    Removes internal API bookkeeping fields before writing debug data.
+    """
+    return {
+        uid: {
+            key: value
+            for key, value in member.items()
+            if not key.startswith('_')
+        }
+        for uid, member in members.items()
+    }
 
 
 def parse_refresh_user_tokens(values):
@@ -134,7 +148,7 @@ def main():
 
     if args.debug:
         with MEMBERS_JSON_PATH.open('w', encoding='utf-8') as file:
-            json.dump(members, file, ensure_ascii=False, indent=4)
+            json.dump(remove_internal_fields(members), file, ensure_ascii=False, indent=4)
         print(f"Debug member data written to {MEMBERS_JSON_PATH}")
 
     # Examine locations

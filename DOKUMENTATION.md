@@ -1,11 +1,15 @@
 # vmkarte – Codeanalyse und Dokumentation
 
-**Stand:** 23.10.2026
+**Stand:** 31.10.2026
 **Gegenstand:** Analyse des bestehenden Codes, Dokumentation der Architektur und Eingrenzung der aktuellen Fehlerursachen.
+
+> **Aktueller Stand 31.10.2026:** Der HTML-Scraper wurde durch einen XenForo-REST-API-Client (`src/data_grabber/libs/forum_api_lib.py`) ersetzt. Die Abschnitte 1 und 9–12 dokumentieren die historische HTML-Scraper-Analyse. Maßgeblich für den aktuellen Betrieb sind die Abschnitte 2–8, 13–18 sowie `README.md`.
 
 ---
 
 ## 1. Kurzfassung
+
+> **Historischer Stand 22.10.2026 – HTML-Scraper.** Die folgenden Befunde beziehen sich auf den damaligen Scraper und sind nicht mehr für den aktuellen API-Betrieb maßgeblich.
 
 Die Vermutung, dass der „Screen-Grabber“ wegen einer Änderung der Forum-Software nicht mehr funktioniert, konnte **nicht bestätigt** werden.
 
@@ -45,7 +49,7 @@ Zusätzlich wurden fehlgeschlagene Nominatim-Abfragen als `None` mit einer TTL v
 
 Das Projekt liest Mitgliederdaten aus dem Velomobil-Forum, ermittelt aus der freiwillig angegebenen Ortsangabe Koordinaten über Nominatim/OpenStreetMap und erzeugt daraus eine JSON-Datei. Diese wird von einer statischen Leaflet-Karte im Browser angezeigt.
 
-Es handelt sich nicht um einen Screenshot- oder OCR-basierten „Screen-Grabber“, sondern um einen **HTML-Scraper** mit `requests` und `BeautifulSoup`.
+Bis zum 31.10.2026 handelte es sich nicht um einen Screenshot- oder OCR-basierten „Screen-Grabber“, sondern um einen **HTML-Scraper** mit `requests` und `BeautifulSoup`. Seitdem wird die **XenForo-REST-API** verwendet.
 
 ---
 
@@ -58,16 +62,21 @@ vmkarte/
 │   ├── config.example.json             # Vorlage für lokale Zugangsdaten
 │   ├── cache_config.json               # Konfiguration der Cache-TTLs
 │   ├── libs/
-│   │   ├── data_scraper_lib.py         # Forum-Login und HTML-Parsing
+│   │   ├── forum_api_lib.py            # XenForo-REST-API-Client
+│   │   ├── vehicle_label_lib.py        # Best-Guess-Resolver für Fahrzeuglabels
+│   │   ├── vehicle_label_map.json      # API-Optionswert → Anzeigename
 │   │   ├── location_nominatim_lib.py   # Nominatim-Abfragen und Radius
 │   │   ├── location_mapping_rules_lib.py # Orts-/Länder-/PLZ-Normalisierung
 │   │   ├── cache_config_lib.py         # Laden/Validieren der Cache-TTLs
 │   │   ├── paths_lib.py                # Einheitliche Laufzeitpfade
 │   │   ├── country_mapping.json        # Ländernamen/-kürzel → Ländercode
 │   │   └── kuerzel_mapping.json        # Deutsche Kfz-/Ortskürzel → Ortsname
+│   ├── tests/
+│   │   └── test_vehicle_labels.py      # Tests für Label-Resolver
 │   └── utils/
 │       ├── clear_nominatim_cache.py    # Löscht den Nominatim-Cache
-│       └── delete_user_cash_entry.py   # Löscht einen user_details-Cacheeintrag
+│       ├── delete_user_cash_entry.py   # Löscht einen user_details-Cacheeintrag
+│       └── vehicle_label_map_report.py # Report fehlender Fahrzeuglabels
 ├── docker/
 │   ├── cron/                           # Cron-Container für den Datengrabber
 │   └── webserver/                      # nginx + statische Karte
@@ -93,7 +102,7 @@ vmkarte/
 
 ```mermaid
 flowchart LR
-    A[Velomobil-Forum<br/>XenForo 2.3] -->|Login + HTML| B[data_scraper_lib]
+    A[Velomobil-Forum<br/>XenForo 2.3 REST-API] -->|XF-Api-Key| B[forum_api_lib]
     B -->|members.json<br/>uid → Mitglied| C[location_nominatim_lib]
     D[Nominatim API] -->|Koordinaten + Bounding Box| C
     C -->|vmforum_members.json| E[docker/webserver/www_data/shared]
@@ -106,8 +115,8 @@ flowchart LR
 
 1. `data_grabber.py` parst die CLI-Parameter; `--fast` wird aus Kompatibilitätsgründen noch akzeptiert, hat aber keine Wirkung mehr.
 2. `cache_config_lib.py` lädt die TTL-Bereiche für `user_details` und `nominatim` aus `cache_config.json`.
-3. `get_member_data()` loggt sich ins Forum ein, lädt alle Mitgliederseiten und ruft für jedes Mitglied die „Über“-Seite auf.
-4. Die Mitgliederdaten werden als `members.json` zwischengespeichert.
+3. `get_member_data()` ruft die paginierte Benutzerliste über die REST-API ab und ergänzt fehlende Profildaten über `/users/{id}/`.
+4. Die Mitgliederdaten werden im `members_dict`-Cache zwischengespeichert.
 5. `examine_locations()` normalisiert die Ortsangabe, ermittelt Land und PLZ, fragt Nominatim ab und berechnet einen Radius aus der Bounding Box.
 6. Es werden nur Mitglieder mit erfolgreich aufgelöstem Ort übernommen.
 7. Die aufbereiteten Datensätze werden als `vmforum_members.json` geschrieben.
@@ -122,7 +131,7 @@ flowchart LR
 Einstiegspunkt und Orchestrierung.
 
 - CLI-Parameter `--fast`: wird aus Kompatibilitätsgründen noch akzeptiert, hat aber keine Wirkung mehr.
-- CLI-Parameter `--debug`: schreibt die Rohdaten nach `src/data_grabber/members.json` (Docker: `/app/members.json`). Ohne `--debug` wird diese Datei nicht erzeugt.
+- CLI-Parameter `--debug`: schreibt die Rohdaten nach `src/data_grabber/members.json` (Docker: `/app/members.json`). Ohne `--debug` wird diese Datei nicht erzeugt. Für den Normalbetrieb ist `--debug` nicht nötig; die Kartenausgabe ist identisch.
 - CLI-Parameter `--refresh-members`: ignoriert den 23-Stunden-Cache `members_dict`, lädt alle Mitgliederseiten neu und ersetzt den Cache. Damit werden auch neu registrierte Benutzer innerhalb des 24-Stunden-Fensters gefunden.
 - CLI-Parameter `--refresh-user UID|NAME`: erzwingt einen frischen Profilabruf für einen Benutzer (Bypass von `user_details`). Mehrfach und kommagetrennt möglich. Akzeptiert numerische UIDs oder exakte Forennamen; mehrdeutige Namen führen zu einem Fehler mit den passenden UIDs. Ist das Ziel nicht im aktuellen Mitglieder-Cache, wird die Mitgliederliste automatisch einmal neu geladen. Für dieses Profil wird zusätzlich der Nominatim-Cache nicht gelesen; das frische Ergebnis wird mit neuer TTL gespeichert.
 - `--refresh-members` und `--refresh-user` lassen sich kombinieren. Dann stammen auch die Ortsangaben des Zielprofils garantiert aus der frisch geladenen Mitgliederliste.
@@ -132,60 +141,56 @@ Einstiegspunkt und Orchestrierung.
 - Baut aus jedem Mitglied ein reduziertes Objekt mit `id`, `name`, `lat`, `lon`, `radius` und optional `profile_updated_at`, `vm`, `lr`, `tr`, `other`.
 - Das frühere Cache-Thinning entfällt; die Verteilung übernimmt die zufällige TTL aus `cache_config.json`.
 
-### 5.2 `src/data_grabber/libs/data_scraper_lib.py`
+### 5.2 `src/data_grabber/libs/forum_api_lib.py`
 
-Verantwortlich für Login und HTML-Parsing.
+Verantwortlich für Authentifizierung, Paginierung, Feld-Mapping und Caching der Forendaten über die XenForo-REST-API.
 
-**Login**
+**Authentifizierung**
 
-- Ruft `https://www.velomobilforum.de/forum/index.php?login/login` auf.
-- Liest das versteckte Feld `_xfToken`.
-- Sendet `login`, `password`, `remember`, `_xfRedirect` und `_xfToken` per POST.
-- Prüft den Erfolg über `if 'Log in' in response.text` (`data_scraper_lib.py:57`).
+- Sendet `XF-Api-Key` aus `api.api_key`.
+- `XF-Api-User` wird nur gesetzt, wenn `api.api_user_id` eine numerische Benutzer-ID ist. Für einen User-Key ist das nicht nötig; ein Super-User-Key kann damit den Kontext setzen.
+- `GET /index/` liefert Key-Typ und Scopes; der Client prüft `user:read`.
+- Bei `401`/`403` werden klare Fehler ausgegeben, insbesondere wenn die Mitgliederliste für einen Guest-Key gesperrt ist.
 
 **Mitgliederliste**
 
-- Ermittelt die Seitenzahl über `ul.pageNav-main li.pageNav-page a`.
-- Lädt jede Seite über `...?members/list/&page={i}`.
-- Parst pro Mitglied:
-  - `h3.contentRow-header a.username` → `uid`, `name`, `href`
-  - `div.contentRow-main` → Kontext
-  - `div.contentRow-lesser a` → optionale Ortsangabe
-- Ergebnis wird als Dictionary `uid → Mitglied` aufgebaut.
-
-**Profilseite**
-
-- Ruft `https://www.velomobilforum.de{member['href']}about` auf.
-- Sucht `dl.pairs--columns`.
-- Liest `dt`/`dd` und mappt:
+- `GET /users/?page=N` wird paginiert, bis `pagination.total_pages` erreicht ist.
+- Übernommen werden `user_id` → `uid`, `username` → `name`, `location` → `location` und `view_url` → `href`.
+- Enthält der jeweilige Listeneintrag `custom_fields`, werden die Fahrzeugfelder direkt daraus gemappt; andernfalls werden die Details für genau diesen Benutzer über `GET /users/{id}/` ergänzt. Die Entscheidung erfolgt pro Benutzer, nicht anhand der ersten Seite.
+- Feld-Mapping:
   - `Velomobil` → `vm`
   - `Liegerad` → `lr`
   - `Trike` → `tr`
   - `sonstige Fahrzeuge/Bemerkungen` → `other`
+- Die Feld-IDs lassen sich in `api.custom_field_map` fest vorgeben. Ohne Vorgabe werden sie anhand ihrer Namen erkannt.
+- Für Auswahlfelder liefert die API interne Optionswerte (z. B. `df_xl`). `libs/vehicle_label_map.json` übersetzt sie in Anzeigenamen (z. B. `DF XL`).
+- `libs/vehicle_label_lib.py` löst unbekannte Werte in dieser Reihenfolge: exakter Treffer, normalisierter Treffer (Groß-/Kleinschreibung, `_`/`-`, Umlaute), gleiche Token-Menge, Erweiterung eines bekannten Labels um Zusatz-Tokens, sonst Humanisierung mit gelernter Token-Schreibweise.
+- Unbekannte Rohwerte werden im Cache `('vehicle_label_unknown', 'api-v1')` für 90 Tage für den Report gespeichert; humanisierte Werte werden zusätzlich einmal pro Lauf gewarnt.
+- Beim Lesen aus `members_dict` und `user_details` werden vorhandene Rohwerte ebenfalls über den Resolver normalisiert.
+- `utils/vehicle_label_map_report.py` zeigt fehlende Rohwerte, Trefferzahl, Best Guess, Confidence und Quelle. Mit `--strict` endet das Skript mit Status 1, wenn unbekannte Werte gefunden werden.
 
 **Caching**
 
 | Cache-Name | Schlüssel | Laufzeit | Inhalt |
 |---|---|---|---|
-| `members_dict` | `('members_dict',)` | 23 h | komplettes Mitglieder-Dictionary |
-| `user_details` | `('user_details', uid)` | 7–14 Tage (konfigurierbar) | angereichertes Mitgliedsobjekt inkl. `profile_updated_at` |
+| `members_dict` | `('members_dict', 'api-v1')` | 23 h | komplettes Mitglieder-Dictionary |
+| `user_details` | `('user_details', 'api-v1', uid)` | 7–14 Tage (konfigurierbar) | angereichertes Mitgliedsobjekt inkl. `profile_updated_at` |
 | `nominatim` | `('nominatim', searchstring, country_code)` | 180–365 Tage (konfigurierbar) | erfolgreiche Nominatim-Antworten |
 | `nominatim` (negativ) | `('nominatim', searchstring, country_code)` | 30 Tage (konfigurierbar) | Sentinel für „erfolgreich abgefragt, kein Treffer“ |
 
-Die TTL wird für jeden neuen positiven Cacheeintrag zufällig aus dem in `cache_config.json` konfigurierten Bereich gezogen. Dadurch verteilen sich die Profil- und Geocoding-Aktualisierungen über die Zeit. Sind `ttl_days_min` und `ttl_days_max` gleich, ist die TTL fest.
+- Der Namespace `api-v1` trennt die API-Caches von den alten HTML-Scraper-Einträgen. Alte Einträge werden ignoriert und laufen mit ihrer bisherigen TTL aus.
+- Die TTL wird für jeden neuen Cacheeintrag zufällig aus `cache_config.json` gezogen.
+- `--refresh-members` umgeht den `members_dict`-Cache. Ein leeres oder fehlerhaftes Ergebnis wird nicht gecacht.
+- `--refresh-user` umgeht `user_details` für die Ziel-UIDs und erzwingt einen Detailabruf.
+- Fehlt `custom_fields` in einer Detailantwort, bleiben vorhandene Fahrzeugfelder erhalten und der Eintrag wird nur kurz (1 Tag) gecacht. So kann eine spätere Rechteerweiterung zeitnah greifen.
+- Ein 403 bei einem einzelnen Profil bricht den Lauf nicht ab: Der Client gibt eine Warnung aus, behält die vorhandenen Daten und cacht sie kurz. Ein 403 auf die Mitgliederliste bleibt ein harter Fehler.
+- Exceptions und API-Fehler werden nicht als erfolgreiche Cacheeinträge gespeichert.
 
-`--refresh-members` umgeht den `members_dict`-Cache und ersetzt ihn nach erfolgreichem Scrape. Ein leeres Ergebnis wird nicht gecacht, damit ein fehlgeschlagener Login den bestehenden Mitglieder-Cache nicht überschreibt.
+**Grenzen**
 
-`--refresh-user` umgeht die Caches gezielt für die angegebenen UIDs:
-
-- `user_details`: kein Cache-Lesen; nach erfolgreichem Profilabruf wird der Eintrag mit neuer TTL gespeichert.
-- `nominatim`: kein Cache-Lesen für alle Länder-Versuche dieses Profils; ein frisches positives oder negatives Ergebnis wird gespeichert. Da der Nominatim-Schlüssel ortsbasiert ist, kann damit auch ein von anderen Mitgliedern genutzter Ortseintrag aktualisiert werden.
-
-Negativ-Treffer werden mit `negative_ttl_days` (Default 30 Tage) gecacht. Damit werden dauerhaft unauflösbare Orte nicht bei jedem Lauf erneut an Nominatim geschickt. **Exceptions** wie HTTP 403/429, Timeouts oder JSON-Fehler werden weiterhin **nicht** gecacht.
-
-**Wichtig zur Wirkung:** Der `members_dict`-Cache ist als **Entwicklungshilfe** gedacht. Bei mehreren Läufen innerhalb von 23 Stunden spart er die 345 Mitgliederseiten. Im täglichen Produktivbetrieb (Cron alle 24 h) ist die TTL dagegen vor jedem Lauf abgelaufen, sodass die Mitgliederliste ohnehin neu geladen wird. Das ist kein Fehler, sondern der bewusste Kompromiss zugunsten täglicher Aktualität.
-
-`user_details` und `nominatim` entlasten im Produktivbetrieb spürbar Forum und Nominatim. Das frühere 1-%-Thinning ist entfallen, weil die zufällige TTL die Verteilung zuverlässiger übernimmt und keinen 14-Tage-Burst erzeugt.
+- Die API muss die Mitgliederliste und Profile für den Key-Kontext freigeben. Ein Guest-Key mit `user:read` reicht nicht aus, wenn Gäste die Mitgliederliste nicht sehen dürfen.
+- `custom_fields` sind nur verfügbar, wenn der Key-Kontext die Profilfelder sehen darf.
+- XenForo stellt keinen API-Endpunkt für die Definitionsdaten der Profilfelder bereit. Die sichtbaren Labels von Auswahlfeldern kommen daher aus `vehicle_label_map.json` und dem Best-Guess-Resolver, nicht direkt aus der API.
 
 ### 5.3 `src/data_grabber/libs/location_nominatim_lib.py`
 
@@ -239,7 +244,7 @@ Negativ-Treffer werden mit `negative_ttl_days` (Default 30 Tage) gecacht. Damit 
 - `--fast` wird zwar noch akzeptiert, hat aber keine Wirkung mehr.
 - `--refresh-members` und `--refresh-user` ergänzen die Cache-Verwaltung um einen gezielten Bypass, ohne die Cache-Schlüssel oder TTL-Bereiche zu verändern. `--refresh-user` benötigt kein separates Nominatim-Flag: Der Orts-Cache wird für die Ziel-UID automatisch nicht gelesen.
 - `utils/cache.py` wurde entfernt. Die verbleibenden Hilfsskripte sind `utils/clear_nominatim_cache.py` und `utils/delete_user_cash_entry.py`.
-- `utils/delete_user_cash_entry.py` löscht `('user_details', uid)` relativ zum Skriptpfad.
+- `utils/delete_user_cash_entry.py` löscht den API-Key `('user_details', 'api-v1', uid)` und den alten HTML-Key `('user_details', uid)` relativ zum Skriptpfad.
 
 ### 5.6 Frontend `karte.html`
 
@@ -346,9 +351,9 @@ Die Karte verwendet nicht die Wohnadresse, sondern die freiwillige Ortsangabe au
 
 1. **Ort aus der Mitgliederliste lesen**
 
-   Der Scraper liest auf der Mitgliederliste den Benutzernamen, die `uid`, den Profil-Link und – falls vorhanden – den Text aus `div.contentRow-lesser a`. Dieser Text ist die Ortsangabe, z. B. `90469 Nürnberg`, `Wien` oder `bei Hamburg`.
+   Der API-Client liest über `GET /users/` den Benutzernamen, die `user_id`, den Profil-Link (`view_url`) und – falls vorhanden – `location`. Die Ortsangabe ist Freitext, z. B. `90469 Nürnberg`, `Wien` oder `bei Hamburg`.
 
-   Die Fahrzeugfelder `Velomobil`, `Liegerad`, `Trike` und `sonstige Fahrzeuge/Bemerkungen` kommen von der „Über“-Seite des Profils. Sie werden nicht für das Geocoding verwendet, sondern nur in der Karte angezeigt und gefiltert.
+   Die Fahrzeugfelder `Velomobil`, `Liegerad`, `Trike` und `sonstige Fahrzeuge/Bemerkungen` kommen aus `custom_fields` des Profils. Falls die Mitgliederliste diese Felder nicht enthält, werden sie über `GET /users/{id}/` ergänzt. Sie werden nicht für das Geocoding verwendet, sondern nur in der Karte angezeigt und gefiltert.
 
 2. **Ortsangabe normalisieren**
 
@@ -437,7 +442,7 @@ Die Karte verwendet nicht die Wohnadresse, sondern die freiwillige Ortsangabe au
 - Der Ort wird zusammen mit den Profildaten über `user_details` gecacht (Default 7–14 Tage). Ändert ein Mitglied seinen Ort, kann die Karte daher bis zu 14 Tage lang den alten Ort anzeigen. Der angezeigte `profile_updated_at`-Stand gilt für dieses komplette gecachte Mitgliedsobjekt einschließlich Ortsangabe. Mit `--refresh-user UID|NAME` lässt sich dieses Mitgliedsobjekt gezielt und sofort erneuern; für die frische Ortsangabe zusätzlich `--refresh-members` verwenden.
 - Positive Nominatim-Ergebnisse werden standardmäßig 180–365 Tage gecacht. Erfolgreiche Abfragen ohne Treffer werden 30 Tage negativ gecacht. Beide Werte sind über `cache_config.json` konfigurierbar; Exceptions werden nicht gecacht.
 - Durch die zufällige TTL laufen nicht alle Profile am selben Tag ab; die Aktualisierungen verteilen sich über den konfigurierten Zeitraum.
-- Eine explizite `"location": null`-Angabe würde derzeit einen Fehler auslösen, weil der Code `.lower()` direkt aufruft. Aktuell enthält `members.json` keine solchen Werte.
+- Die API kann `location` als `null` oder als Nicht-String liefern. `_extract_location()` behandelt das als leere Ortsangabe; solche Mitglieder werden nicht geocodiert.
 
 ---
 
@@ -447,20 +452,32 @@ Die Karte verwendet nicht die Wohnadresse, sondern die freiwillige Ortsangabe au
 
 ```json
 {
-  "username": "velomobilforum-username",
-  "password": "velomobilforum-password",
   "email": "email-address-for-nominatim",
-  "nominatim_user_agent": "vmkarte/1.0 (+https://github.com/juefried/vmkarte)"
+  "nominatim_user_agent": "vmkarte/2.0 (+https://github.com/juefried/vmkarte)",
+  "api": {
+    "base_url": "https://www.velomobilforum.de/forum/index.php?api/",
+    "api_key": "your-forum-api-key",
+    "custom_field_map": {
+      "vm": "",
+      "lr": "",
+      "tr": "",
+      "other": ""
+    }
+  }
 }
 ```
+
+`api.base_url` ist die von der Forum-Administration bereitgestellte API-URL. `api.api_key` wird als `XF-Api-Key` gesendet. Der Key benötigt `user:read` und muss die Mitgliederliste sowie Profile sehen dürfen. Für einen Super-User-Key kann optional `api.api_user_id` als numerische Benutzer-ID gesetzt werden; für einen User-Key ist das nicht erforderlich.
+
+Empfohlen ist ein **dedizierter User-Key** für ein Lese-/Bot-Konto. Er ist an genau dieses Konto gebunden, benötigt keinen `XF-Api-User`-Kontext und lässt sich leichter widerrufen. Ein Super-User-Key mit `api_bypass_permissions=1` ist mächtiger als nötig und sollte nur verwendet werden, wenn der Betreiber keinen User-Key bereitstellen möchte.
 
 `nominatim_user_agent` ist optional. Die Auflösung erfolgt in dieser Reihenfolge:
 
 1. Umgebungsvariable `NOMINATIM_USER_AGENT`
 2. `nominatim_user_agent` aus `config.json`
-3. Standardwert `vmkarte/1.0 (+https://github.com/juefried/vmkarte)`
+3. Standardwert `vmkarte/2.0 (+https://github.com/juefried/vmkarte)`
 
-Für einen öffentlichen Betrieb oder einen Fork sollte jede Instanz einen eigenen User-Agent mit Kontaktangabe setzen, z. B. `meine-vmkarte/1.0 (+https://example.org; admin@example.org)`. Der Wert wird beim Import gelesen; Änderungen benötigen einen Neustart.
+Für einen öffentlichen Betrieb oder einen Fork sollte jede Instanz einen eigenen User-Agent mit Kontaktangabe setzen, z. B. `meine-vmkarte/2.0 (+https://example.org; admin@example.org)`. Der Wert wird beim Import gelesen; Änderungen benötigen einen Neustart.
 
 ### Cache-TTLs in `cache_config.json`
 
@@ -542,7 +559,7 @@ Die Kartenausgabe erfolgt script-relativ nach `docker/webserver/www_data/shared/
 python data_grabber.py --debug
 ```
 
-Ohne `--debug` wird eine vorhandene `members.json` gelöscht.
+Ohne `--debug` wird eine vorhandene `members.json` gelöscht. Der Debug-Lauf ist nur zur Kontrolle der Rohdaten nötig; die Laufzeit wird vor allem von neuen Nominatim-Abfragen bestimmt. Mit gefülltem Cache ist ein erneuter Lauf deutlich schneller.
 
 ### Gezielte Aktualisierung
 
@@ -565,7 +582,7 @@ Ein gezielter Lauf schreibt weiterhin die vollständige `vmforum_members.json`. 
 
 ### Schneller Test in der IDE
 
-`src/data_grabber/smoke_test.py` prüft Login, Mitgliederliste, zwei Profilseiten und zwei Nominatim-Abfragen, ohne die produktiven Ausgabedateien zu überschreiben:
+`src/data_grabber/smoke_test.py` prüft API-Index, ein Einzelprofil, eine Mitgliederlistenseite, zwei Profilabrufe und zwei Nominatim-Abfragen, ohne die produktiven Ausgabedateien zu überschreiben:
 
 ```powershell
 cd src/data_grabber
@@ -573,6 +590,15 @@ python smoke_test.py
 ```
 
 Die Pfade werden script-relativ aufgelöst; der Test kann aus `src/data_grabber` oder über den vollständigen Pfad gestartet werden. Der Test dauert wenige Sekunden.
+
+### Fahrzeuglabel-Report
+
+```powershell
+cd src/data_grabber
+python utils/vehicle_label_map_report.py
+```
+
+Der Report liest den Mitglieder-Cache und die Liste unbekannter Werte. Er verändert keine Dateien. `--json` liefert maschinenlesbare Ausgabe, `--strict` beendet mit Status 1, sobald unbekannte Werte vorhanden sind.
 
 ### Karte in der IDE anzeigen
 
@@ -603,7 +629,7 @@ Geplanter Betrieb: ein Server im Docker-Container, ein zweiter Server direkt auf
 
 - Jede Instanz benötigt eine eigene `config.json`, ein eigenes `cache/`-Verzeichnis und ein beschreibbares Ausgabeverzeichnis. Die Caches werden **nicht** zwischen den Servern geteilt.
 - Der jeweils erste Lauf ist teuer: ca. 345 Mitgliederseiten plus bis zu ca. 6.900 Profilabrufe. Die Laufzeiten sollten versetzt starten (z. B. 03:33 und 04:33), damit Forum und Nominatim nicht gleichzeitig belastet werden.
-- Beide Instanzen loggen sich mit demselben Forenkonto ein. Tägliche Logins von zwei IP-Adressen können Sicherheitshinweise oder Sitzungsprüfungen auslösen. Falls möglich, ein separates Konto verwenden oder die Läufe zeitlich versetzen.
+- Beide Instanzen benötigen einen API-Key mit Lesezugriff auf Mitgliederliste und Profile. Ob derselbe Key auf beiden Servern verwendet werden darf, muss mit dem Forenbetreiber geklärt werden; die Läufe sollten zeitlich versetzt starten, um die API nicht gleichzeitig zu belasten.
 - Damit der Cache die Laufzeit tatsächlich reduziert, müssen die TTLs größer als das jeweilige Cron-Intervall sein. `user_details` (Default 7–14 Tage) und `nominatim` (Default 180–365 Tage) tun das. `members_dict` (23 h) ist bewusst eine Entwicklungshilfe und im täglichen Cron-Betrieb wirkungslos.
 - Beide Server sollten dieselbe `cache_config.json` verwenden, damit die Lastverteilung vergleichbar ist. Die zufällige TTL glättet die Profilabrufe über die Zeit, statt sie in einem 14-Tage-Burst zu bündeln.
 - Jede Instanz fragt Nominatim selbst ab. Der Rate-Limit von 1 Request/Sekunde gilt pro Instanz und sollte eingehalten werden. Beide Instanzen brauchen einen identifizierbaren User-Agent mit Kontaktangabe; dieser kann pro Server über `config.json` oder `NOMINATIM_USER_AGENT` gesetzt werden.
@@ -998,7 +1024,8 @@ Da das Forum HTML liefert und keine API verfügbar ist, sollten repräsentative 
 
 ## 13. Sicherheit und Datenschutz
 
-- `src/data_grabber/config.json` enthält Zugangsdaten im Klartext. Sie ist jetzt in `.gitignore` eingetragen und darf nicht committet werden.
+- `src/data_grabber/config.json` enthält den API-Key und die Nominatim-Kontaktangabe im Klartext. Sie ist in `.gitignore` eingetragen und darf nicht committet werden.
+- Der API-Key wird nur im `XF-Api-Key`-Header gesendet und nicht geloggt. Fehlerausgaben enthalten den Key nicht.
 - `cache_config.json` enthält keine Zugangsdaten und ist deshalb eingecheckt.
 - `members.json` und `vmforum_members.json` enthalten personenbezogene Daten (Namen, Ortsangaben, Fahrzeuge). Sie sind ebenfalls ignoriert.
 - `members.json` wird nur mit `--debug` erzeugt, liegt unter `src/data_grabber/members.json` bzw. `/app/members.json` und wird nicht über den Web-Root ausgeliefert. Ohne `--debug` werden vorhandene Kopien entfernt. nginx blockiert `members.json` zusätzlich per `return 404`.
@@ -1031,32 +1058,55 @@ Die aktuellen `.gitignore`-Einträge:
 
 ---
 
-## 14. Offene Punkte
+## 14. Status und offene Punkte (Stand 31.10.2026)
 
-1. Sollen die unter Abschnitt 12.5 bis 12.8 genannten Robustheits- und Sicherheitskorrekturen ebenfalls umgesetzt werden?
-2. Soll die Ausgabe zusätzlich über eine konfigurierbare Pfadvariable gesteuert werden, damit Docker- und Systeminstallation denselben Code verwenden?
-3. Soll für die beiden Server ein separates Forenkonto verwendet werden?
+**Erledigt**
+
+- **API-Key.** Der User-Key für `vmkarte` (ID 29111) mit `user:read` liest Mitgliederliste, Profile und `custom_fields`.
+- **Struktur von `custom_fields`.** Die Felder sind flache Schlüssel-Wert-Paare; `api.custom_field_map` ist optional.
+- **Fahrzeuglabels.** `custom_fields` liefert nur Optionswerte. Die Anzeigenamen kommen aus `vehicle_label_map.json`, dem Best-Guess-Resolver und dem Report-Skript.
+
+**Offen**
+
+- **Einzelprofil-403.** Der Client warnt und behält vorhandene Daten. Zu prüfen ist, ob das für dauerhaft private Profile ausreicht oder ob eine explizite Ausnahme dokumentiert werden soll.
+- **Alte Cache-Einträge.** Der Namespace `api-v1` verhindert die Nutzung der alten HTML-Caches. Alte Einträge können bei Bedarf zusätzlich manuell gelöscht werden.
+- **Zwei-Server-Betrieb.** Ob beide Instanzen denselben Key verwenden dürfen, ist mit dem Forenbetreiber zu klären.
+- **`--refresh-members`.** Der Testlauf wurde nach 7 Minuten bei Seite 206/346 abgebrochen; `--refresh-user` ist getestet.
 
 ---
 
 ## 15. Fazit
 
-Der Forum-Scraper ist funktionsfähig. Die Forensoftware wurde auf XenForo 2.3 aktualisiert, die verwendeten HTML-Strukturen und Selektoren existieren aber weiterhin.
+Der HTML-Scraper ist vollständig durch die XenForo-REST-API ersetzt. Login, Session, `_xfToken` und HTML-Selektoren werden nicht mehr benötigt.
 
-Die beiden aktiven Bruchstellen wurden am 22.10.2026 behoben:
+Der ursprüngliche Guest-Key reichte für den vollständigen Betrieb nicht aus. Mit dem bereitgestellten User-Key (ID 29111, `user:read`) liest der Client Mitgliederliste, Profile und `custom_fields`; der vollständige Lauf ist erfolgreich.
 
-1. **Nominatim-Requests ohne User-Agent** → behoben durch `NOMINATIM_HEADERS` und Timeout.
-2. **Fehlgeschlagene Abfragen als `None` gecacht** → behoben durch manuelles Caching ausschließlich erfolgreicher Treffer.
+Fahrzeug-Optionswerte werden über die bestehende Map und einen Best-Guess-Resolver in Anzeigenamen übersetzt. Unbekannte Werte werden humanisiert, gewarnt und für den Report gespeichert.
 
-Zusätzlich wurde der vorhandene `nominatim`-Cache mit `utils/clear_nominatim_cache.py` bereinigt. Auf beiden Servern muss dieses Skript nach dem Deployment einmal ausgeführt werden.
+Die Cache-Schlüssel sind mit `api-v1` versioniert, damit alte HTML-Scraper-Einträge den ersten API-Lauf nicht verfälschen. Ein 403 bei einzelnen Profilen bricht den Lauf nicht mehr ab, sondern führt zu einer Warnung und zur Beibehaltung der vorhandenen Daten.
 
-Am 23.10.2026 wurden die Cache-TTLs für `user_details` und `nominatim` extern konfigurierbar gemacht und zufällig gestreut. Dadurch verteilen sich die Aktualisierungen über die Zeit, statt in einem 14-Tage-Burst zu laufen. Die Karte zeigt pro Profil den Stand der zuletzt gecachten Profildaten.
-
-Die früheren Debug-Abweichungen (deaktivierter Scraper, falscher Ausgabepfad, fehlende `members.json` im Container) sind mit dem Masterstand entfallen.
+Die früheren Nominatim-Korrekturen (User-Agent, Timeout, Negativ-Cache) bleiben unverändert gültig.
 
 ---
 
 ## 16. Geänderte Dateien
+
+### 31.10.2026
+
+- `src/data_grabber/libs/forum_api_lib.py`: neuer XenForo-REST-API-Client mit Paginierung, Feld-Mapping, Cache-Namespace `api-v1`, Best-Guess-Resolver, Cache für unbekannte Werte und Warnung statt Abbruch bei Einzelprofil-403.
+- `src/data_grabber/libs/vehicle_label_lib.py`: Resolver für exakte, normalisierte, tokenbasierte und erweiterte Label-Treffer sowie Humanisierung.
+- `src/data_grabber/libs/vehicle_label_map.json`: Übersetzung der API-Optionswerte für `vm`, `lr` und `tr` in Anzeigenamen; um neun vorhandene Rohwerte ergänzt.
+- `src/data_grabber/utils/vehicle_label_map_report.py`: Report für fehlende Fahrzeuglabels aus Cache und Unknown-Log.
+- `src/data_grabber/tests/test_vehicle_labels.py`: Tests für Normalisierung, Token-Matching, Erweiterung und Fallback.
+- `src/data_grabber/libs/data_scraper_lib.py`: entfernt.
+- `src/data_grabber/data_grabber.py`: Import auf `forum_api_lib` umgestellt; interne API-Felder werden aus dem Debug-`members.json` entfernt.
+- `src/data_grabber/smoke_test.py`: API-basierter Smoke-Test; Detailabruf mit `force_refresh=True`.
+- `src/data_grabber/config.example.json` und `config/config.json.sample`: API-Konfiguration statt Foren-Login.
+- `requirements.txt` und `setup.py`: `bs4` entfernt, `requests` ergänzt.
+- `src/data_grabber/libs/location_nominatim_lib.py`: Default-User-Agent auf `vmkarte/2.0` angehoben.
+- `src/data_grabber/utils/delete_user_cash_entry.py`: löscht den namensräumlichen API-Key und den alten HTML-Cache-Key.
+- `README.md`, `DOKUMENTATION.md`, `docs/upgrade-native.md`, `docs/upgrade-docker.md`: API-Stand, Konfiguration, offene Punkte und nächste Schritte.
+- `.gitignore`: lokale `.fleet/`-Konfiguration ignoriert.
 
 ### 23.10.2026
 
@@ -1090,3 +1140,99 @@ Die früheren Debug-Abweichungen (deaktivierter Scraper, falscher Ausgabepfad, f
 - `docker/webserver/www_data/karte.html`: OSM/ODbL- und Nominatim-Attribution im Leaflet-Control aktiviert.
 - `.gitignore`: Laufzeit- und Konfigurationsdateien werden nicht mehr erfasst.
 - `DOKUMENTATION.md`: Analyse, Architektur, Betrieb und Verifikation.
+
+---
+
+## 17. Umbau auf REST-API (31.10.2026)
+
+Der HTML-Scraper wurde vollständig durch `src/data_grabber/libs/forum_api_lib.py` ersetzt. Login, Session, `_xfToken`, HTML-Selektoren und BeautifulSoup werden nicht mehr verwendet.
+
+### Getesteter API-Stand
+
+Getestet mit dem vom Forenbetreiber bereitgestellten Key und der URL `https://www.velomobilforum.de/forum/index.php?api/`:
+
+| Prüfung | Ergebnis |
+|---|---|
+| `GET /index/` | HTTP 200, Key-Typ `guest`, Scope `user:read` |
+| `GET /users/1/` | HTTP 200, `location` vorhanden, `custom_fields` **nicht** vorhanden |
+| `GET /users/?page=1` | HTTP 403 `do_not_have_permission` |
+| `GET /users/?page=1` mit `XF-Api-User: 1` | HTTP 403 `user_id_not_allowed` |
+| Profilseite `?members/{id}/about` ohne Login | HTTP 403 |
+
+Mit dem später bereitgestellten User-Key (ID 29111) liefert die Mitgliederliste HTTP 200; `custom_fields` sind vorhanden. Die folgenden Einschränkungen gelten nur für den ursprünglichen Guest-Key.
+
+Die OpenAPI-Spezifikation enthält zwar ein `UserField`-Schema mit `field_choices`, aber keinen passenden Endpunkt. `/custom-fields/`, `/profile-fields/`, `/users/fields/` und `/users/custom-fields/` liefern 404. Die sichtbaren Labels werden daher lokal gepflegt und per Best Guess ergänzt.
+
+### Bewertung
+
+Der ursprüngliche Guest-Key reichte **nicht** aus, um die bisherigen Daten vollständig abzubilden:
+
+- Die Mitgliederliste ist für Gäste gesperrt. Ohne Liste können neue Mitglieder nicht gefunden werden.
+- Einzelprofile liefern `location`, aber keine `custom_fields`. Damit fehlen `Velomobil`, `Liegerad`, `Trike` und `sonstige Fahrzeuge/Bemerkungen`.
+- `XF-Api-User` kann mit einem Guest-Key nicht gesetzt werden.
+
+### Benötigte Rechte
+
+Für den vollständigen Betrieb wird einer der folgenden Keys benötigt:
+
+1. **User-Key** eines Forenkontos, das die Mitgliederliste und Profile sehen darf, mit Scope `user:read`.
+2. **Super-User-Key** mit Scope `user:read` und einem Kontextbenutzer, der Mitgliederliste und Profile sehen darf. Dann muss `api.api_user_id` auf die numerische Benutzer-ID gesetzt werden.
+
+Zusätzlich muss der Key-Kontext die gewünschten Profilfelder (`custom_fields`) sehen dürfen. Der Betreiber kann das mit einem Aufruf von `GET /users/{id}/` prüfen: In der Antwort muss neben `location` auch `custom_fields` erscheinen.
+
+### Empfehlung zum Key-Typ
+
+Ein **dedizierter User-Key** für ein Lese-/Bot-Konto ist die bessere Wahl:
+
+- Er ist an genau dieses Konto gebunden und benötigt keinen `XF-Api-User`-Kontext.
+- Er lässt sich unabhängig vom Hauptkonto widerrufen.
+- Er zwingt nicht zu `api_bypass_permissions=1`.
+- Die Rechte lassen sich auf das Notwendige beschränken.
+
+Ein Super-User-Key ist nur dann sinnvoll, wenn der Betreiber keinen User-Key bereitstellen möchte. Dann sollte der Kontextbenutzer ebenfalls nur die benötigten Lese-Rechte haben und `api_bypass_permissions` möglichst nicht verwendet werden.
+
+### Client-Verhalten nach dem Umbau
+
+- Die Cache-Schlüssel tragen den Namespace `api-v1`. Alte HTML-Scraper-Einträge werden ignoriert.
+- Ein 403 bei einem einzelnen Profil führt zu einer Warnung; vorhandene Daten bleiben erhalten und werden kurz gecacht. Ein 403 auf die Mitgliederliste bleibt ein harter Fehler.
+- Mit dem bereitgestellten User-Key funktionieren Mitgliederliste, Detailabrufe und das bisherige Cache-/Refresh-Verhalten ohne weitere Codeänderung.
+
+---
+
+## 18. Arbeitsstand und nächste Schritte (31.10.2026)
+
+### Erledigt
+
+- HTML-Scraper durch `forum_api_lib.py` ersetzt; `data_scraper_lib.py` entfernt.
+- `data_grabber.py` und `smoke_test.py` auf die API umgestellt.
+- API-Konfiguration in den Vorlagen und in den lokalen, nicht versionierten Configs.
+- `bs4` aus `requirements.txt` und `setup.py` entfernt; `requests` ist enthalten.
+- Cache-Namespace `api-v1` eingeführt, damit alte HTML-Caches ignoriert werden.
+- `custom_fields` werden pro Benutzer geprüft, nicht nur anhand der ersten Listenseite.
+- Ein 403 bei einem einzelnen Profil wird als Warnung behandelt; die Mitgliederliste bleibt hart fehlerhaft.
+- API-Optionswerte werden über `vehicle_label_map.json` und `vehicle_label_lib.py` in Anzeigenamen übersetzt; vorhandene Cachewerte werden beim Lesen normalisiert.
+- Neun vorhandene Rohwerte wurden in die Map aufgenommen (`vm=57`, `lr=156`, `tr=77`).
+- Unbekannte Rohwerte werden 90 Tage im Unknown-Log gespeichert; humanisierte Werte werden zusätzlich gewarnt. Der Report zeigt alle offenen Werte.
+- Live-Smoke-Test mit dem User-Key für `vmkarte` (ID 29111) läuft durch: Mitgliederliste HTTP 200, `custom_fields` vorhanden.
+- Vollständiger Lauf erfolgreich: 6.907 Mitglieder geladen, 3.275 Einträge in `docker/webserver/www_data/shared/vmforum_members.json`.
+- `--refresh-user 1` erfolgreich getestet; `members.json` bleibt ohne `--debug` nicht liegen.
+- Stichprobe UID 1 (`Reinhard`): `other` ist `"Brompton, Tern HSD"`; Namen und Fahrzeugfelder stimmen mit dem bisherigen Stand überein.
+- `py_compile` und 14 `unittest`-Tests für Normalisierung, Token-Matching, Erweiterung und Fallback wurden ausgeführt.
+
+### Hinweise
+
+- `--debug` ist optional und erzeugt nur zusätzlich `src/data_grabber/members.json`; die Kartenausgabe ist ohne `--debug` identisch.
+- Die Laufzeit wird vor allem von neuen Nominatim-Abfragen bestimmt. Mit gefülltem Cache ist ein erneuter Lauf deutlich schneller.
+- Der Best-Guess-Resolver ist bewusst konservativ: Ähnliche Modellnamen werden nicht per Fuzzy-String aufeinander abgebildet, um falsche Labels zu vermeiden.
+
+### Nächste Schritte
+
+1. `--refresh-members` vollständig testen; der bisherige Lauf wurde nach 7 Minuten bei Seite 206/346 abgebrochen.
+2. Datenabweichungen prüfen: 11 neue und 1 entfernter Eintrag; UID 23194 und UID 16380 weichen in den Fahrzeugfeldern ab.
+3. Änderungen auf `feature/forum-api` committen.
+
+### Offene Punkte
+
+- Private Profile: entscheiden, ob sie dauerhaft nur gewarnt oder separat dokumentiert werden.
+- Klären, ob beide Server denselben Key verwenden dürfen.
+- Alte Cache-Einträge können zusätzlich manuell gelöscht werden; der Namespace `api-v1` macht das normalerweise unnötig.

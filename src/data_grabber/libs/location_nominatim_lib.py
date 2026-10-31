@@ -26,7 +26,7 @@ with CONFIG_PATH.open('r', encoding='utf-8') as f:
 EMAIL = config['email']
 
 # Default User-Agent for Nominatim; override per deployment via config or environment
-DEFAULT_NOMINATIM_USER_AGENT = 'vmkarte/1.0 (+https://github.com/juefried/vmkarte)'
+DEFAULT_NOMINATIM_USER_AGENT = 'vmkarte/2.0 (+https://github.com/juefried/vmkarte)'
 
 
 def _resolve_nominatim_user_agent(config_data):

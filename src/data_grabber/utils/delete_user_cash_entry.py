@@ -25,8 +25,9 @@ def main():
     # Get the uid from the command line arguments
     uid = args.uid
 
-    # Set the name of the cache
+    # Set the name of the cache and the current key namespace
     cache_name = 'user_details'
+    cache_namespace = 'api-v1'
 
     # Calculate the path to the cache relative to the script
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -35,12 +36,18 @@ def main():
     # Open the named cache
     cache = dc.Cache(cache_path)
 
-    # Key for the uid in the cache
-    key = (cache_name, uid)
+    # Delete both the namespaced API key and the legacy HTML scraper key
+    keys = [
+        (cache_name, cache_namespace, uid),
+        (cache_name, uid),
+    ]
+    deleted = []
+    for key in keys:
+        if key in cache:
+            del cache[key]
+            deleted.append(key)
 
-    # Delete the uid from the cache
-    if key in cache:
-        del cache[key]
+    if deleted:
         print(f'uid "{uid}" was deleted from the cache "{cache_name}".')
     else:
         print(f'uid "{uid}" was not found in the cache "{cache_name}".')

@@ -5,9 +5,9 @@ setup(
     version='0.1',
     packages=find_packages(),
     install_requires=[
-        'bs4',
         'geopy',
-        'diskcache'
+        'diskcache',
+        'requests',
     ],
     entry_points={
         'console_scripts': [

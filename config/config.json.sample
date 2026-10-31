@@ -1,6 +1,14 @@
 {
-  "username": "username",
-  "password": "password",
   "email": "email",
-  "nominatim_user_agent": "vmkarte/1.0 (+irgendwas, was dich identifiziert)"
+  "nominatim_user_agent": "vmkarte/2.0 (+irgendwas, was dich identifiziert)",
+  "api": {
+    "base_url": "https://www.velomobilforum.de/forum/index.php?api/",
+    "api_key": "your-forum-api-key",
+    "custom_field_map": {
+      "vm": "",
+      "lr": "",
+      "tr": "",
+      "other": ""
+    }
+  }
 }

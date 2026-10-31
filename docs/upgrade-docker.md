@@ -1,9 +1,20 @@
 # Upgrade der Docker-Installation
 
 - **Ausgangsversion:** Tag `20261022`
-- **Zielversion:** Branch `feature/profile-update-date` (nach dem Merge: aktueller Master)
+- **Zielversion:** Branch `feature/forum-api` (nach dem Merge: aktueller Master)
 
 Diese Anleitung beschreibt das Upgrade einer bestehenden Docker-Installation. Die Installation mit `docker compose` wird dabei nicht neu aufgesetzt; Konfiguration, Cache und Karten-Daten bleiben erhalten.
+
+> **Hinweis 31.10.2026:** Diese Anleitung beschreibt das Upgrade auf den Stand vom 23.10.2026. Der spätere Umbau auf die XenForo-REST-API ist in `DOKUMENTATION.md`, Abschnitte 17 und 18, dokumentiert. Die zusätzlichen Schritte für den Branch `feature/forum-api` stehen direkt unten.
+
+## Zusätzlich für Branch `feature/forum-api`
+
+- `config/config.json` um den `api`-Block erweitern und `username`/`password` entfernen. Vorlage: `config/config.json.sample`.
+- `api.base_url` auf `https://www.velomobilforum.de/forum/index.php?api/` setzen und `api.api_key` mit dem vom Forenbetreiber bereitgestellten User-Key füllen. `api.custom_field_map` ist optional.
+- `docker compose build` und anschließend `docker compose up -d` ausführen. Der bestehende Cache unter `volumes/cron/cache` kann bleiben; die API-Caches verwenden den Namespace `api-v1` und ignorieren alte HTML-Einträge.
+- Das Dockerfile kopiert `src/data_grabber/libs/*` und `src/data_grabber/utils/*`. Damit sind `forum_api_lib.py`, `vehicle_label_lib.py`, `vehicle_label_map.json` und `vehicle_label_map_report.py` im Image enthalten.
+- `--debug` ist für den Normalbetrieb nicht nötig. Die Kartenausgabe ist ohne `--debug` identisch.
+- Nach dem ersten Lauf prüfen: `docker compose exec cron python3 /app/data_grabber.py` schreibt `/app/shared/vmforum_members.json`; anschließend den Report mit `docker compose exec cron python3 /app/utils/vehicle_label_map_report.py` ausführen. Erwartet: keine unbekannten Fahrzeugwerte.
 
 ## Was sich ändert
 
@@ -39,14 +50,14 @@ Neuen Stand auschecken:
 
 ```bash
 git fetch --all --tags
-git checkout feature/profile-update-date
+git checkout feature/forum-api
 ```
 
 Falls der Branch noch nicht lokal vorhanden ist:
 
 ```bash
-git fetch origin feature/profile-update-date
-git checkout feature/profile-update-date
+git fetch origin feature/forum-api
+git checkout feature/forum-api
 ```
 
 ## docker-compose.yml anpassen

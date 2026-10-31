@@ -1,9 +1,11 @@
 # Upgrade der nativen Server-Installation
 
 - **Ausgangsversion:** Tag `20261022`
-- **Zielversion:** Branch `feature/profile-update-date` (nach dem Merge: aktueller Master)
+- **Zielversion:** Branch `feature/forum-api` (nach dem Merge: aktueller Master)
 
 Diese Anleitung beschreibt das Upgrade einer Installation, bei der der Datengrabber direkt auf dem Server läuft (Cron oder systemd) und der Webserver die Karte als statische Dateien ausliefert.
+
+> **Hinweis 31.10.2026:** Diese Anleitung beschreibt das Upgrade auf den Stand vom 23.10.2026. Der spätere Umbau auf die XenForo-REST-API ist in `DOKUMENTATION.md`, Abschnitte 17 und 18, dokumentiert.
 
 ## Was sich ändert
 
@@ -45,21 +47,21 @@ cp src/data_grabber/cache_config.json /tmp/cache_config.json.local
 
 ```bash
 git fetch --all --tags
-git checkout feature/profile-update-date
+git checkout feature/forum-api
 ```
 
 Falls der Branch noch nicht lokal vorhanden ist:
 
 ```bash
-git fetch origin feature/profile-update-date
-git checkout feature/profile-update-date
+git fetch origin feature/forum-api
+git checkout feature/forum-api
 ```
 
 Bei einer Installation ohne Git-Checkout müssen mindestens folgende Dateien übernommen werden:
 
 - `src/data_grabber/data_grabber.py`
 - `src/data_grabber/cache_config.json`
-- `src/data_grabber/libs/` (insbesondere `cache_config_lib.py`, `paths_lib.py`, `data_scraper_lib.py`, `location_nominatim_lib.py`)
+- `src/data_grabber/libs/` (insbesondere `cache_config_lib.py`, `paths_lib.py`, `forum_api_lib.py`, `location_nominatim_lib.py`)
 - `docker/webserver/www_data/karte.html`
 
 `src/data_grabber/libs/cache_thinning_lib.py` wird nicht mehr verwendet und kann entfernt werden. Das Weglassen ist unschädlich.
