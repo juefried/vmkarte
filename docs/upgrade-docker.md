@@ -9,7 +9,7 @@ Diese Anleitung beschreibt das Upgrade einer bestehenden Docker-Installation. Di
 
 ## Zusätzlich für Branch `feature/forum-api`
 
-- `config/config.json` um den `api`-Block erweitern und `username`/`password` entfernen. Vorlage: `config/config.json.sample`.
+- `config/config.json` um den `api`-Block erweitern und `username`/`password` entfernen. `email` und `nominatim_user_agent` beibehalten; `nominatim_user_agent` wird weiterhin für identifizierbare Nominatim-Anfragen benötigt. Vorlage: `config/config.json.sample`.
 - `api.base_url` auf `https://www.velomobilforum.de/forum/index.php?api/` setzen und `api.api_key` mit dem vom Forenbetreiber bereitgestellten User-Key füllen. `api.custom_field_map` ist optional.
 - `docker compose build` und anschließend `docker compose up -d` ausführen. Der bestehende Cache unter `volumes/cron/cache` kann bleiben; die API-Caches verwenden den Namespace `api-v1` und ignorieren alte HTML-Einträge.
 - Das Dockerfile kopiert `src/data_grabber/libs/*` und `src/data_grabber/utils/*`. Damit sind `forum_api_lib.py`, `vehicle_label_lib.py`, `vehicle_label_map.json` und `vehicle_label_map_report.py` im Image enthalten.

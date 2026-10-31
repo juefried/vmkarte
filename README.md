@@ -39,11 +39,14 @@ Für Docker wird `config/config.json` verwendet (Vorlage: `config/config.json.sa
 }
 ```
 
+`email` und `nominatim_user_agent` bleiben unverändert erforderlich. `nominatim_user_agent` darf beim Ergänzen des API-Blocks nicht entfallen.
+
 `api_key` wird als `XF-Api-Key` gesendet. Der Key benötigt den Scope `user:read` und
 muss die Mitgliederliste sowie Profile sehen dürfen. Für dieses Forum reicht ein
 Guest-Key nicht aus: Die Mitgliederliste liefert damit HTTP 403, und `custom_fields`
 fehlen. Empfohlen ist ein dedizierter User-Key für ein Lese-/Bot-Konto; ein
 Super-User-Key mit `XF-Api-User` ist nur die Ausweichlösung.
+
 `custom_field_map` ist optional. Ohne Eintrag werden die Feld-IDs anhand ihrer
 Namen erkannt (z. B. `velomobil`, `liegerad`, `trike`, `sonstige`).
 
