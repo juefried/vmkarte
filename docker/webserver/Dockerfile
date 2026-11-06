@@ -13,11 +13,12 @@ COPY www_data /www_data
 # Copy nginx server block configuration
 COPY default.conf /etc/nginx/conf.d/default.conf
 
-# Copy custom nginx.conf
+# Copy custom nginx.conf and shared security headers
 COPY nginx.conf /etc/nginx/nginx.conf
+COPY security-headers.conf /etc/nginx/security-headers.conf
 
 # Set permissions for the copied files
-RUN chown -R nginx:nginx /etc/nginx/conf.d/default.conf /etc/nginx/nginx.conf
+RUN chown -R nginx:nginx /etc/nginx/conf.d/default.conf /etc/nginx/nginx.conf /etc/nginx/security-headers.conf
 
 # Switch to the non-root user
 USER nginx
