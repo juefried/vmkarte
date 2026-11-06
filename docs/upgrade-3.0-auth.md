@@ -451,12 +451,12 @@ Android/iPhone „Zum Home-Bildschirm“ verwenden.
 
 Die App-Version wird beim Docker-Build erzeugt. Quelle ist die gepflegte Datei
 `docker/webserver/www_data/VERSION`; sie enthält genau eine Zeile, zum Beispiel
-`3.0.1`. Das Dockerfile schreibt daraus:
+`3.0.2`. Das Dockerfile schreibt daraus:
 
 - `/app-version.json` für die Laufzeitprüfung:
 
   ```json
-  {"version":"3.0.1","buildDate":"2026-11-06T10:15:00Z"}
+  {"version":"3.0.2","buildDate":"2026-11-06T10:15:00Z"}
   ```
 
 - `/js/version.js` als importierbares Modul mit `APP_VERSION` und
@@ -588,7 +588,7 @@ curl -sSI https://karte.jfr-service.de/app-version.json | \
   grep -iE 'HTTP/|content-type|cache-control'
 ```
 
-Erwartet: `{"version":"3.0.1","buildDate":"…"}`, `application/json` und
+Erwartet: `{"version":"3.0.2","buildDate":"…"}`, `application/json` und
 `Cache-Control: no-store`.
 
 Nach dem Deployment im Browser prüfen:

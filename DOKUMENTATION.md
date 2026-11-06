@@ -433,7 +433,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 ### 5.10 App-Version und Entwicklungsmodus
 
 - `docker/webserver/www_data/VERSION` ist die gepflegte Versionsquelle
-  (aktuell `3.0.1`).
+  (aktuell `3.0.2`).
 - Das Dockerfile erzeugt beim Build daraus `app-version.json` und
   `js/version.js`; `APP_VERSION` und `BUILD_DATE` können als Build-Args
   überschrieben werden. Ohne Docker gelten die lokalen Dev-Fallbacks `dev`
@@ -1435,6 +1435,11 @@ Die früheren Nominatim-Korrekturen (User-Agent, Timeout, Negativ-Cache) bleiben
 ---
 
 ## 16. Geänderte Dateien
+
+### 06.11.2026 (Branch `fix/version-3.0.2`)
+
+- `docker/webserver/www_data/VERSION`: App-Version auf `3.0.2` erhöht.
+- `DOKUMENTATION.md` und `docs/upgrade-3.0-auth.md`: Versionsbeispiele auf `3.0.2` aktualisiert.
 
 ### 06.11.2026 (Branch `feature/search-suggestions-scroll`)
 
