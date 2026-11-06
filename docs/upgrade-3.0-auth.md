@@ -77,7 +77,9 @@ docker compose exec auth \
   /run/secrets/htpasswd
 ```
 
-Erwartet: genau eine passende Zeile mit Präfix `$2y$` oder `$2b$`.
+Erwartet: genau eine passende Zeile mit Präfix `$2y$` oder `$2b$` und einer
+Länge von etwa 60 Zeichen. Ein Eintrag mit Präfix `$apr` und Länge 37 ist
+Apache MD5 und wird vom Auth-Service nicht akzeptiert.
 
 Hash und Passwort unabhängig mit Apache prüfen:
 
