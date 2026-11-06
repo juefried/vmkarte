@@ -1,16 +1,47 @@
-
 services:
 
   web:
     build:
       context: docker/webserver
+    # Only reachable through the local reverse proxy. Remove this mapping if the
+    # proxy runs in the same Docker network (for example Traefik) and use
+    # web:8080 with loadbalancer.server.port=8080 instead.
     ports:
-      - "80"
+      - "127.0.0.1:8080:8080"
     volumes:
       - /etc/timezone:/etc/timezone:ro
       - /etc/localtime:/etc/localtime:ro
-      - ./config/.htpasswd:/etc/nginx/.htpasswd
       - ./docker/webserver/www_data/shared:/www_data/shared:ro
+    depends_on:
+      auth:
+        condition: service_healthy
+    restart: unless-stopped
+
+  auth:
+    build:
+      context: docker/auth
+    # No published port: nginx reaches the auth service via the internal network.
+    expose:
+      - "8080"
+    environment:
+      PASSWORD_FILE: /run/secrets/htpasswd
+      SESSION_KEY_FILE: /run/secrets/session_signing_key
+    secrets:
+      - htpasswd
+      - session_signing_key
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     restart: unless-stopped
 
   cron:
@@ -25,3 +56,9 @@ services:
       - ./volumes/cron/cache:/app/cache
       - ./docker/webserver/www_data/shared:/app/shared
     restart: unless-stopped
+
+secrets:
+  htpasswd:
+    file: ./config/.htpasswd
+  session_signing_key:
+    file: ./config/session_signing_key

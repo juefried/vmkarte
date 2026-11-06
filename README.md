@@ -151,6 +151,14 @@ Die Ortsangabe stammt aus der Mitgliederliste. Ohne `--refresh-members` kann sie
 python data_grabber.py --refresh-members --refresh-user 12345
 ```
 
+## Release 3.0 (Branch `release/3.0-pwa`)
+
+- [Auth-Service und formularbasierte Anmeldung](docs/upgrade-3.0-auth.md)
+
+Dieser Stand ersetzt HTTP Basic Authentication durch einen Go-Auth-Service und
+nginx `auth_request`. PWA, Offline-Cache und Domainumzug folgen in weiteren
+Ausbaustufen.
+
 ## Upgrade von der Version 20261022
 
 - [Docker-Installation](docs/upgrade-docker.md)
