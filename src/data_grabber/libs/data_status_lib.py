@@ -58,6 +58,7 @@ def write_data_status(path, member_count, generated_at=None, run_started_at=None
             temp_file.write('\n')
             temp_file.flush()
             os.fsync(temp_file.fileno())
+        os.chmod(temp_name, 0o644)
         os.replace(temp_name, path)
     except BaseException:
         try:
