@@ -37,7 +37,7 @@ let cachedEtag = null;
 let cachedLastModified = null;
 let updateInProgress = false;
 let update_reload_pending = false;
-let update_message_visible = false;
+let keep_message_on_sync = false;
 
 // Make the div element #map cover the whole window.
 function resize_map_to_full_window()
@@ -215,7 +215,7 @@ function show_update_message() {
 	if (!statusUi)
 		return;
 
-	update_message_visible = true;
+	keep_message_on_sync = true;
 	statusUi.setMessage({
 		type: 'info',
 		text: 'Eine neue Version ist verfügbar.',
@@ -459,7 +459,7 @@ async function syncFromServer({ manual = false } = {}) {
 
 		if (members.length > 0) {
 			show_current_status(false);
-			if (!update_message_visible)
+			if (!keep_message_on_sync)
 				statusUi.clearMessage();
 			if (manual)
 				statusUi.setMessage({ type: 'success', text: 'Kartendaten aktualisiert.' });
@@ -935,6 +935,7 @@ async function create_map() {
 
 	if (devMode.enabled) {
 		await clearAppCaches();
+		keep_message_on_sync = true;
 		statusUi.setMessage({
 			type: 'info',
 			text: 'Entwicklungsmodus aktiv: Service Worker und App-Caches sind deaktiviert.',
