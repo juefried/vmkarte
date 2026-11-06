@@ -20,6 +20,7 @@ services:
   auth:
     build:
       context: docker/auth
+    image: localhost/${COMPOSE_PROJECT_NAME}_auth:latest
     # No published port: nginx reaches the auth service via the internal network.
     expose:
       - "8080"
