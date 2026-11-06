@@ -1,0 +1,27 @@
+body { max-width: initial; margin: 0; padding: 0; }
+
+.leaflet-control-zoom a[href]	{ color: black; text-decoration: inherit; }	/* zoom buttons: black, instead of links */
+.leaflet-control-layers	{ text-align: left; }			/* layer control: show the layer names left aligned */
+.leaflet-popup-content	{ font-size: initial; }			/* larger font in popups */
+.leaflet-div-icon	{ border: none; background: none; }	/* remove DIV of icons */
+
+/* make the search controls more beautiful: white background, rounded corners, shadow, a bit padding */
+#search_controls	{ background-color: #fff; border-radius: 5px; box-shadow: 0 1px 7px rgba(0,0,0,0.65); padding: 6px; }
+
+/* action buttons inside the search controls */
+#search_controls button	{ width: 100%; margin-top: 6px; padding: 6px 8px; border: 0; border-radius: 4px;
+			  background: #2e7d32; color: #fff; font: inherit; cursor: pointer; }
+#search_controls button:hover	{ background: #256428; }
+#search_controls #action_buttons	{ display: flex; gap: 6px; margin-top: 6px; }
+#search_controls #action_buttons button	{ flex: 1 1 0; width: auto; margin-top: 0;
+					  padding: 6px 4px; font-size: 0.9em; white-space: nowrap; }
+#search_controls #reset_button	{ background: #1565c0; }
+#search_controls #reset_button:hover	{ background: #0d47a1; }
+#search_controls #logout_button	{ background: #c62828; }
+#search_controls #logout_button:hover	{ background: #8e0000; }
+
+/* red circles for hashtags */
+.tag_circle	{ stroke: red; fill: red; }
+
+/* profile data timestamp in popups */
+.stand		{ color: #666; font-size: 0.9em; }
