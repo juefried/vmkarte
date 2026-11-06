@@ -265,6 +265,35 @@ docker compose ps
 docker compose logs --tail=100 auth web
 ```
 
+## Login-Hintergrund
+
+Die Login-Seite verwendet ein weichgezeichnetes Kartenbild als Hintergrund.
+
+- Das Bild liegt unter `docker/auth/assets/login-background.jpg` und wird per
+  `//go:embed` in den Auth-Service eingebettet.
+- Der Auth-Service liefert es unter `GET /login-background.jpg` mit
+  `Content-Type: image/jpeg` und `Cache-Control: public, max-age=604800`.
+- nginx leitet `/login-background.jpg` über einen exakten `location`-Block an
+  den Auth-Service weiter. Die Login-Seite selbst bleibt unter `/login`.
+- Das CSS nutzt `background-size: cover` und `background-position: center`, damit
+  bei jedem Seitenverhältnis die Bildmitte sichtbar bleibt. Ein dezenter
+  Overlay verbessert die Lesbarkeit der Anmeldekarte.
+- Das Bild ist bereits stark weichgezeichnet; EXIF-/IPTC-Metadaten wurden
+  entfernt. Es sind keine Mitgliederdaten mehr erkennbar.
+- Das Bild wird mit `?v=1` referenziert. Bei einem Bildwechsel die Version im
+  CSS anheben, damit Browser und Zwischencaches die neue Datei laden.
+- Diese Änderung betrifft `auth` (Bild und HTML) und `web` (nginx-Location).
+  Deployment daher mit `docker compose build web auth` und
+  `docker compose up -d --force-recreate web auth`.
+
+Prüfen:
+
+```bash
+curl -sSI https://karte.jfr-service.de/login-background.jpg | \
+  grep -iE 'HTTP/|content-type|cache-control|x-content-type-options'
+# erwartet: 200, image/jpeg, Cache-Control: public, max-age=604800
+```
+
 ## Frontend-Dateien (Phase 5)
 
 Die Karte lädt zusätzlich:

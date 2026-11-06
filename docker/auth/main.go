@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	_ "embed"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -36,6 +37,9 @@ const (
 	maxPasswordLen    = 1024
 )
 
+//go:embed assets/login-background.jpg
+var loginBackgroundJPEG []byte
+
 var loginTemplate = template.Must(template.New("login").Parse(`<!doctype html>
 <html lang="de">
 <head>
@@ -45,10 +49,14 @@ var loginTemplate = template.Must(template.New("login").Parse(`<!doctype html>
 <style>
 :root { color-scheme: light dark; }
 * { box-sizing: border-box; }
-body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1.5rem;
-       font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background: #eef2ef; color: #14231b; }
-main { width: min(100%, 24rem); padding: 2rem; border-radius: 1rem; background: #fff;
-       box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12); }
+body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 1.5rem;
+       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+       background: #eef2ef url("/login-background.jpg?v=1") center / cover no-repeat;
+       color: #14231b; }
+body::before { content: ""; position: fixed; inset: 0; z-index: 0;
+               background: rgba(238, 242, 239, 0.22); pointer-events: none; }
+main { position: relative; z-index: 1; width: 100%; max-width: 24rem; padding: 2rem;
+       border-radius: 1rem; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12); }
 h1 { margin: 0 0 0.5rem; font-size: 1.5rem; }
 p { margin: 0 0 1.25rem; color: #4b5d53; line-height: 1.45; }
 label { display: block; margin-bottom: 1rem; font-weight: 600; }
@@ -60,7 +68,8 @@ button { width: 100%; margin-top: 0.5rem; padding: 0.8rem 1rem; border: 0; borde
 button:hover { background: #256428; }
 .error { padding: 0.75rem; border-radius: 0.5rem; background: #fdecea; color: #8a1c16; }
 @media (prefers-color-scheme: dark) {
-  body { background: #101814; color: #e7efe9; }
+  body { background-color: #101814; color: #e7efe9; }
+  body::before { background: rgba(16, 24, 20, 0.55); }
   main { background: #1a2620; }
   p { color: #b7c8be; }
   input { background: #101814; border-color: #4f6558; }
@@ -133,6 +142,7 @@ func main() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", srv.health)
 	mux.HandleFunc("/login", srv.login)
+	mux.HandleFunc("/login-background.jpg", srv.loginBackground)
 	mux.HandleFunc("/logout", srv.logout)
 	mux.HandleFunc("/session-check", srv.sessionCheck)
 
@@ -254,6 +264,23 @@ func (s *server) health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write([]byte("ok\n"))
+}
+
+func (s *server) loginBackground(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "image/jpeg")
+	w.Header().Set("Cache-Control", "public, max-age=604800")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Length", strconv.Itoa(len(loginBackgroundJPEG)))
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	_, _ = w.Write(loginBackgroundJPEG)
 }
 
 func (s *server) login(w http.ResponseWriter, r *http.Request) {

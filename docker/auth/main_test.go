@@ -285,3 +285,51 @@ func TestHealth(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 }
+
+func TestLoginBackgroundIsServed(t *testing.T) {
+	srv, _ := testServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/login-background.jpg", nil)
+	rec := httptest.NewRecorder()
+	srv.loginBackground(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "image/jpeg" {
+		t.Fatalf("Content-Type = %q", got)
+	}
+	if rec.Body.Len() == 0 {
+		t.Fatal("background image is empty")
+	}
+	if got := rec.Header().Get("Cache-Control"); !strings.Contains(got, "max-age") {
+		t.Fatalf("Cache-Control = %q", got)
+	}
+}
+
+func TestLoginBackgroundRejectsOtherMethods(t *testing.T) {
+	srv, _ := testServer(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/login-background.jpg", nil)
+	rec := httptest.NewRecorder()
+	srv.loginBackground(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestLoginPageUsesBackground(t *testing.T) {
+	srv, _ := testServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/login", nil)
+	rec := httptest.NewRecorder()
+	srv.login(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), "/login-background.jpg") {
+		t.Fatal("login page does not reference the background image")
+	}
+}

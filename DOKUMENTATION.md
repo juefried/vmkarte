@@ -405,6 +405,18 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 - Details zu Deployment, Rollback und Cache-Löschung stehen in
   `docs/upgrade-3.0-auth.md`.
 
+### 5.11 Login-Hintergrund
+
+- `docker/auth/assets/login-background.jpg` ist ein bereits weichgezeichnetes
+  Kartenbild ohne erkennbare Mitgliederdaten und ohne EXIF-/IPTC-Metadaten.
+- Der Auth-Service bettet das Bild per `//go:embed` ein und liefert es unter
+  `/login-background.jpg`; nginx leitet die Route an `auth` weiter.
+- Das Login-CSS nutzt `cover` und `center`, damit die Bildmitte bei jedem
+  Seitenverhältnis sichtbar bleibt. Ein leichter Overlay verbessert die
+  Lesbarkeit der Anmeldekarte.
+- Änderungen am Bild erfordern einen Neubau von `auth` und `web` sowie ein
+  Anheben von `?v=` in der CSS-Referenz.
+
 ---
 
 ## 6. Datenformate
