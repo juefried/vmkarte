@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { collectSearchSuggestions } from '../../docker/webserver/www_data/js/search-suggestions.js';
+import { collectSearchSuggestions, filterSearchSuggestions } from '../../docker/webserver/www_data/js/search-suggestions.js';
 
 test('collects names, vehicle labels and hashtags', () => {
 	const suggestions = collectSearchSuggestions([
@@ -50,4 +50,34 @@ test('ignores empty and non-string values', () => {
 test('handles missing members gracefully', () => {
 	assert.deepEqual(collectSearchSuggestions(null), []);
 	assert.deepEqual(collectSearchSuggestions([]), []);
+});
+
+test('shows only hashtags for an empty query', () => {
+	const suggestions = ['Alpha', '#berlin', 'DF XL', '#übernachtung'];
+
+	assert.deepEqual(filterSearchSuggestions(suggestions, ''), ['#berlin', '#übernachtung']);
+	assert.deepEqual(filterSearchSuggestions(suggestions, '   '), ['#berlin', '#übernachtung']);
+});
+
+test('filters suggestions case-insensitively as substrings', () => {
+	const suggestions = ['Alpha', 'DF XL', '#berlin', '#übernachtung'];
+
+	assert.deepEqual(filterSearchSuggestions(suggestions, 'al'), ['Alpha']);
+	assert.deepEqual(filterSearchSuggestions(suggestions, 'XL'), ['DF XL']);
+	assert.deepEqual(filterSearchSuggestions(suggestions, 'ÜBER'), ['#übernachtung']);
+	assert.deepEqual(filterSearchSuggestions(suggestions, 'lin'), ['#berlin']);
+});
+
+test('keeps the frequency order while filtering', () => {
+	const suggestions = ['Zeta', 'Alpha', 'Beta'];
+
+	assert.deepEqual(filterSearchSuggestions(suggestions, ''), []);
+	assert.deepEqual(filterSearchSuggestions(suggestions, 'a'), ['Zeta', 'Alpha', 'Beta']);
+});
+
+test('returns an empty list for invalid input', () => {
+	assert.deepEqual(filterSearchSuggestions(null, 'alpha'), []);
+	assert.deepEqual(filterSearchSuggestions(undefined, ''), []);
+	assert.deepEqual(filterSearchSuggestions(['Alpha', '#berlin', null, 42], ''), ['#berlin']);
+	assert.deepEqual(filterSearchSuggestions(['Alpha', null, 42], 'alpha'), ['Alpha']);
 });

@@ -3,7 +3,7 @@ import { createStatusUi } from './status-ui.js';
 import { validateMembers, parseDataStatus, deriveStatusFromLastModified } from './data.js';
 import { resolveInitialMapState, filterSearchString, FILTER_PARAMS, shouldPersistMapState } from './map-state.js';
 import { HASHTAG_REGEX, HASHTAG_NAME_REGEX } from './hashtags.js';
-import { collectSearchSuggestions } from './search-suggestions.js';
+import { collectSearchSuggestions, filterSearchSuggestions } from './search-suggestions.js';
 import { describeGeolocationError, GEOLOCATION_OPTIONS } from './location.js';
 import { APP_VERSION } from './version.js';
 import { DEV_MODE_KEY, parseAppVersion, isNewVersion, resolveDevMode } from './version-check.js';
@@ -19,6 +19,10 @@ var error_circle;
 var layer_circles;
 var form_select;
 var form_search;
+var search_suggestions;
+var all_search_suggestions = [];
+var active_search_suggestion = -1;
+var search_suggestion_close_timer;
 var member_update_timer;
 var map_state_save_timer;
 var map_state_save_promise = null;
@@ -127,6 +131,7 @@ async function reset_search() {
 
 	form_search.value = '';
 	form_select.selectedIndex = 0;
+	close_search_suggestions();
 
 	const url = new URL(window.location);
 	if (url.search) {
@@ -510,20 +515,104 @@ function format_profile_date(value) {
 	return value.slice(0, 10).split('-').reverse().join('.');
 }
 
-// Fill the datalist with search terms from names, vehicles and hashtags.
+// Fill the suggestion list with search terms from names, vehicles and hashtags.
 function add_search_suggestions() {
+	all_search_suggestions = collectSearchSuggestions(members);
+	if (!search_suggestions.hidden)
+		render_search_suggestions();
+}
 
-	const suggestionList = document.getElementById('tags');
-	suggestionList.replaceChildren();
+function render_search_suggestions() {
+	const values = filterSearchSuggestions(all_search_suggestions, form_search.value);
+	active_search_suggestion = -1;
+	search_suggestions.replaceChildren();
 
-	const frag = document.createDocumentFragment();
-	for (const value of collectSearchSuggestions(members)) {
-		const option = document.createElement('option');
-		option.value = value;
-		frag.appendChild(option);
+	if (values.length === 0) {
+		close_search_suggestions();
+		return;
 	}
 
-	suggestionList.appendChild(frag);
+	const frag = document.createDocumentFragment();
+	values.forEach((value, index) => {
+		const option = document.createElement('li');
+		option.id = `search_suggestion_${index}`;
+		option.setAttribute('role', 'option');
+		option.setAttribute('aria-selected', 'false');
+		option.textContent = value;
+		frag.appendChild(option);
+	});
+
+	search_suggestions.appendChild(frag);
+	search_suggestions.hidden = false;
+	form_search.setAttribute('aria-expanded', 'true');
+	form_search.removeAttribute('aria-activedescendant');
+}
+
+function close_search_suggestions() {
+	if (!search_suggestions)
+		return;
+
+	search_suggestions.hidden = true;
+	search_suggestions.replaceChildren();
+	active_search_suggestion = -1;
+	form_search.setAttribute('aria-expanded', 'false');
+	form_search.removeAttribute('aria-activedescendant');
+}
+
+function open_search_suggestions() {
+	clearTimeout(search_suggestion_close_timer);
+	render_search_suggestions();
+}
+
+function set_active_search_suggestion(index) {
+	const options = search_suggestions.querySelectorAll('[role="option"]');
+	if (options.length === 0)
+		return;
+
+	const next = (index + options.length) % options.length;
+	options.forEach((option, optionIndex) => {
+		option.setAttribute('aria-selected', optionIndex === next ? 'true' : 'false');
+	});
+	active_search_suggestion = next;
+	form_search.setAttribute('aria-activedescendant', options[next].id);
+	options[next].scrollIntoView({ block: 'nearest' });
+}
+
+function move_search_suggestion(direction) {
+	if (search_suggestions.hidden)
+		render_search_suggestions();
+	if (search_suggestions.hidden)
+		return;
+
+	const count = search_suggestions.querySelectorAll('[role="option"]').length;
+	if (count === 0)
+		return;
+
+	const index = active_search_suggestion < 0
+		? (direction > 0 ? 0 : count - 1)
+		: active_search_suggestion + direction;
+	set_active_search_suggestion(index);
+}
+
+function sync_search_type(value, key) {
+	if (/^#/.test(value))
+		form_select.selectedIndex = 7;
+	else if ((/^[^#]$/.test(value) && key !== 'Backspace' && key !== 'Delete')
+		|| (/^[^#]/.test(value) && form_select.selectedIndex === 7))
+		form_select.selectedIndex = 8;
+}
+
+function select_search_suggestion(value) {
+	form_search.value = value;
+	close_search_suggestions();
+	sync_search_type(value, null);
+	schedule_member_update();
+}
+
+function select_active_search_suggestion() {
+	const option = search_suggestions.querySelectorAll('[role="option"]')[active_search_suggestion];
+	if (option)
+		select_search_suggestion(option.textContent);
 }
 
 function log_member_stats() {
@@ -791,6 +880,7 @@ async function create_map() {
 
 	form_select = document.getElementById('form_select');
 	form_search = document.getElementById('form_search');
+	search_suggestions = document.getElementById('search_suggestions');
 	location_button = document.getElementById('location_button');
 
 	L.DomEvent.on(document.getElementById('reset_button'), 'click', reset_search);
@@ -845,37 +935,61 @@ async function create_map() {
 	search_control.onAdd = map => document.getElementById('search_controls');
 	search_control.addTo(map);
 
-	// Update the markers immediately when the filter dropdown or a
-	// datalist selection changes; no extra Enter key should be needed.
+	// Update the markers immediately when the filter dropdown changes; a
+	// suggestion pick is handled by select_search_suggestion().
 	form_select.addEventListener('input', schedule_member_update);
 	form_select.addEventListener('change', schedule_member_update);
 	form_search.addEventListener('change', schedule_member_update);
 
-	form_search.addEventListener('input', e => {
-		// Chrome/Edge mark a datalist pick with insertReplacementText.
-		if (e.inputType === 'insertReplacementText') {
-			schedule_member_update();
-			return;
-		}
-		// Fallback for browsers that do not expose inputType reliably:
-		// apply immediately if the value exactly matches a known suggestion.
-		const tags = document.getElementById('tags');
-		if (tags && Array.from(tags.options).some(o => o.value === form_search.value))
+	form_search.addEventListener('focus', open_search_suggestions);
+	form_search.addEventListener('blur', () => {
+		clearTimeout(search_suggestion_close_timer);
+		search_suggestion_close_timer = setTimeout(close_search_suggestions, 200);
+	});
+
+	form_search.addEventListener('input', () => {
+		render_search_suggestions();
+		if (all_search_suggestions.includes(form_search.value))
 			schedule_member_update();
 	});
 
-	// Enter key: perform the search; already at keydown, but also when selecting from autocomplete, value is only available after keyup.
-	L.DomEvent.on(form_search, 'keydown keyup', e => e.key === 'Enter' && add_vmforum_members());
+	search_suggestions.addEventListener('pointerdown', e => {
+		clearTimeout(search_suggestion_close_timer);
+		if (e.pointerType === 'mouse')
+			e.preventDefault();
+	});
+
+	search_suggestions.addEventListener('click', e => {
+		const option = e.target.closest('[role="option"]');
+		if (option)
+			select_search_suggestion(option.textContent);
+	});
+
+	L.DomEvent.on(form_search, 'keydown', function(e) {
+		if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+			e.preventDefault();
+			move_search_suggestion(e.key === 'ArrowDown' ? 1 : -1);
+			return;
+		}
+
+		if (e.key === 'Escape') {
+			close_search_suggestions();
+			return;
+		}
+
+		if (e.key === 'Enter') {
+			if (!search_suggestions.hidden && active_search_suggestion >= 0) {
+				select_active_search_suggestion();
+				return;
+			}
+			close_search_suggestions();
+			add_vmforum_members();
+		}
+	});
 
 	// Switch search type, but only after key is released, when the value has been updated.
 	L.DomEvent.on(form_search, 'keyup', function(e) {
-		// First character = "#": switch to hashtag search.
-		if (form_search.value.match(/^#/))
-			form_select.selectedIndex = 7;
-		// Other first character: switch to general search if first character entered or in hashtag search
-		else if ((form_search.value.match(/^[^#]$/) && e.key !== 'Backspace' && e.key !== 'Delete')
-			|| (form_search.value.match(/^[^#]/) && form_select.selectedIndex === 7))
-			form_select.selectedIndex = 8;
+		sync_search_type(form_search.value, e.key);
 	});
 
 	// Add a layerGroup for all hashtag circles; empty at the beginning.

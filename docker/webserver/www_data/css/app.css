@@ -11,6 +11,15 @@ body { max-width: initial; margin: 0; padding: 0; }
 			  padding: clamp(4px, 1.5vw, 6px); }
 #form_search, #form_select	{ width: 100%; box-sizing: border-box;
 				  font-size: clamp(14px, 4vw, 16px); padding: clamp(4px, 1.5vw, 6px); }
+#search_field			{ position: relative; }
+#search_suggestions		{ position: absolute; top: 100%; left: 0; right: 0; z-index: 1000;
+				  margin: 2px 0 0; padding: 0; list-style: none;
+				  background: #fff; border-radius: 5px; box-shadow: 0 1px 7px rgba(0,0,0,0.65);
+				  max-height: min(40vh, 15rem); overflow-y: auto;
+				  overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+#search_suggestions [role="option"]	{ min-height: 2.5rem; box-sizing: border-box;
+				  padding: 6px 8px; cursor: pointer; }
+#search_suggestions [role="option"][aria-selected="true"]	{ background: #e3f2fd; }
 
 /* action buttons inside the search controls */
 #search_controls button	{ width: 100%; margin-top: 6px; padding: 6px 8px; border: 0; border-radius: 4px;

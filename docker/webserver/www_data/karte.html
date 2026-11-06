@@ -27,7 +27,10 @@
 <body>
 	<div id="map" name="map"></div>
 	<div id="search_controls">
-		<input id="form_search" list="tags" title="Suche (siehe Auswahl rechts) (Regex);&#10;abschicken = Eingabetaste oder klick rechts" autocomplete="off" enterkeyhint="search" accesskey="f">
+		<div id="search_field">
+			<input id="form_search" title="Suche (siehe Auswahl rechts) (Regex);&#10;abschicken = Eingabetaste oder klick rechts" autocomplete="off" enterkeyhint="search" accesskey="f" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="search_suggestions">
+			<ul id="search_suggestions" role="listbox" aria-label="Suchvorschläge" hidden></ul>
+		</div>
 		<select id="form_select" title="Auswahl oder Textsuche" accesskey="s">
 			<option value="1" selected="selected">alle</option>
 			<option value="2" title="Velomobil angegeben">nur mit Velomobil</option>
@@ -39,8 +42,6 @@
 			<option value="48" title="mit Suchfeld links; Freitext und Tags (Regex)">suche Hashtags/Sonstiges</option>
 			<option value="63" title="mit Suchfeld links; überall (Regex)">suche überall</option>
 		</select>
-		<datalist id="tags">
-		</datalist>
 		<div id="action_buttons">
 			<button type="button" id="reset_button" class="icon-button" title="Suchfelder und Filter zurücksetzen" aria-label="Zurücksetzen">
 				<svg viewBox="0 0 24 24" aria-hidden="true">

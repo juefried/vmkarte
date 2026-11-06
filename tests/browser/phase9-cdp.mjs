@@ -331,18 +331,59 @@ async function main() {
 	await waitForMap();
 	await delay(300);
 	assert.equal(await evaluate(`document.getElementById('data_message').textContent.includes('neue Version')`), false);
-	assert.equal(await evaluate(`Array.from(document.querySelectorAll('#tags option')).some(option => option.value === '#übernachtung')`), true);
-	assert.equal(await evaluate(`Array.from(document.querySelectorAll('#tags option')).some(option => option.value === 'Alpha')`), true);
-	assert.equal(await evaluate(`Array.from(document.querySelectorAll('#tags option')).some(option => option.value === 'Flevo')`), true);
-	check.pass('Start mit gleicher App-Version zeigt keinen Update-Hinweis; Namen, Fahrzeuge und Unicode-Hashtags erscheinen in der Autocomplete-Liste');
+	assert.equal(await evaluate(`document.getElementById('search_suggestions').hidden`), true);
+	await evaluate(`(() => {
+		const input = document.getElementById('form_search');
+		input.focus();
+		input.dispatchEvent(new FocusEvent('focus'));
+	})()`);
+	await waitFor(`document.getElementById('search_suggestions').hidden === false`, 'empty search suggestions');
+	assert.deepEqual(
+		await evaluate(`Array.from(document.querySelectorAll('#search_suggestions [role="option"]')).map(option => option.textContent)`),
+		['#berlin', '#übernachtung'],
+	);
+	assert.equal(await evaluate(`getComputedStyle(document.getElementById('search_suggestions')).overflowY`), 'auto');
+	assert.notEqual(await evaluate(`getComputedStyle(document.getElementById('search_suggestions')).maxHeight`), 'none');
+	await evaluate(`(() => {
+		const input = document.getElementById('form_search');
+		input.value = 'Al';
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+	})()`);
+	assert.deepEqual(
+		await evaluate(`Array.from(document.querySelectorAll('#search_suggestions [role="option"]')).map(option => option.textContent)`),
+		['Alpha'],
+	);
+	await evaluate(`(() => {
+		const input = document.getElementById('form_search');
+		input.value = 'Fle';
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+	})()`);
+	assert.deepEqual(
+		await evaluate(`Array.from(document.querySelectorAll('#search_suggestions [role="option"]')).map(option => option.textContent)`),
+		['Flevo'],
+	);
+	await evaluate(`document.querySelector('#search_suggestions [role="option"]').click()`);
+	assert.equal(await evaluate(`document.getElementById('form_search').value`), 'Flevo');
+	assert.equal(await evaluate(`document.getElementById('search_suggestions').hidden`), true);
+	await evaluate(`(() => {
+		const input = document.getElementById('form_search');
+		input.value = '';
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+		input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+	})()`);
+	assert.equal(await evaluate(`document.getElementById('form_search').value`), '#berlin');
+	assert.equal(await evaluate(`document.getElementById('form_select').selectedIndex`), 7);
+	assert.equal(await evaluate(`document.getElementById('search_suggestions').hidden`), true);
+	check.pass('Leeres Suchfeld zeigt nur Unicode-Hashtags; Eingaben filtern Namen und Fahrzeuge; Auswahl per Klick und Tastatur funktioniert');
 
 	// 2. Service worker installs and does not cache app-version.json.
 	await waitFor(`navigator.serviceWorker.getRegistration().then(registration => Boolean(registration))`, 'service worker registration');
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache');
 	assert.equal(await cacheContains('/app-version.json'), false);
 	const serviceWorkerSource = await (await fetch(ORIGIN + '/service-worker.js')).text();
-	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v9';"));
-	check.pass('Service Worker installiert, Cache ist v9 und app-version.json bleibt network-only');
+	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v10';"));
+	check.pass('Service Worker installiert, Cache ist v10 und app-version.json bleibt network-only');
 
 	// 3. ?dev=1 disables the service worker, removes caches and skips the version check.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };
