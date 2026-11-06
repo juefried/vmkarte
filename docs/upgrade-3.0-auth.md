@@ -196,6 +196,10 @@ nginx löst `auth:8080` über den Docker-DNS-Server `127.0.0.11` mit
 `auth`-Containers nicht mehr zu einer veralteten Upstream-IP. Ein
 `web`-Restart nach einem Auth-Restart ist dann nicht mehr nötig.
 
+`absolute_redirect off;` hält nginx-Weiterleitungen relativ. Ohne diese Option
+würde nginx die interne Portnummer `8080` in `Location`-Header schreiben und
+der Browser würde auf `https://karte.jfr-service.de:8080/...` umgeleitet.
+
 ## Start
 
 ```bash
