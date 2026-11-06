@@ -2,6 +2,7 @@
 
 import argparse
 import json
+from datetime import datetime
 
 from libs.data_status_lib import write_data_status
 from libs.forum_api_lib import get_member_data
@@ -142,6 +143,7 @@ def main():
     # Parse the command line arguments
     args = parser.parse_args()
     refresh_user_tokens = parse_refresh_user_tokens(args.refresh_user)
+    run_started_at = datetime.now().astimezone()
 
     # Raw member data must never be exposed through the web server. Remove
     # stale copies before the long scrape starts.
@@ -175,7 +177,11 @@ def main():
     # abort the grabber run or invalidate the freshly written member data.
     try:
         print(f"Writing data status to {DATA_STATUS_JSON_PATH}")
-        write_data_status(DATA_STATUS_JSON_PATH, len(vmforum_members))
+        write_data_status(
+            DATA_STATUS_JSON_PATH,
+            len(vmforum_members),
+            run_started_at=run_started_at,
+        )
     except Exception as error:
         print(f"Warning: Could not write {DATA_STATUS_JSON_PATH}: {error}")
 
