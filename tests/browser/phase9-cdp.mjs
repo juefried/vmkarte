@@ -313,6 +313,17 @@ async function main() {
 		await waitFor(`document.querySelectorAll('.leaflet-marker-icon').length > 0`, 'member markers');
 	}
 
+	async function openMarkerPopup() {
+		await waitFor(`document.querySelectorAll('.leaflet-marker-icon').length > 0`, 'marker icons');
+		for (let attempt = 0; attempt < 8; attempt += 1) {
+			if (await evaluate(`document.querySelector('.leaflet-popup-content') !== null`))
+				return;
+			await evaluate(`document.querySelector('.leaflet-marker-icon').click()`);
+			await delay(400);
+		}
+		await waitFor(`document.querySelector('.leaflet-popup-content') !== null`, 'marker popup');
+	}
+
 	async function cacheContains(url) {
 		return evaluate(`(async () => {
 			for (const key of await caches.keys()) {
@@ -382,8 +393,8 @@ async function main() {
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache');
 	assert.equal(await cacheContains('/app-version.json'), false);
 	const serviceWorkerSource = await (await fetch(ORIGIN + '/service-worker.js')).text();
-	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v10';"));
-	check.pass('Service Worker installiert, Cache ist v10 und app-version.json bleibt network-only');
+	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v11';"));
+	check.pass('Service Worker installiert, Cache ist v11 und app-version.json bleibt network-only');
 
 	// 3. ?dev=1 disables the service worker, removes caches and skips the version check.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };
@@ -444,6 +455,19 @@ async function main() {
 	assert.equal(await evaluate(`document.getElementById('data_message').classList.contains('data-message-error')`), false);
 	assert.equal(await evaluate(`document.querySelectorAll('.leaflet-marker-icon').length > 0`), true);
 	check.pass('Fehler bei app-version.json bleibt ohne Meldung und blockiert die Karte nicht');
+
+	// 7. Forum profile links open in a new tab; hashtag and geo links stay in place.
+	appVersionStatus = 200;
+	await navigate('/karte.html?other=%23berlin');
+	await waitForMap();
+	await openMarkerPopup();
+	const profileSelector = '.leaflet-popup-content a[title="Mitglieder-Profil im Forum"]';
+	assert.equal(await evaluate(`Boolean(document.querySelector(${JSON.stringify(profileSelector)}))`), true);
+	assert.equal(await evaluate(`document.querySelector(${JSON.stringify(profileSelector)}).target`), '_blank');
+	assert.equal(await evaluate(`document.querySelector(${JSON.stringify(profileSelector)}).relList.contains('noopener')`), true);
+	assert.equal(await evaluate(`document.querySelector('.leaflet-popup-content a[href^="karte.html?other="]').getAttribute('target')`), null);
+	assert.equal(await evaluate(`document.querySelector('.leaflet-popup-content a[href^="geo:"]').getAttribute('target')`), null);
+	check.pass('Forenprofil-Links öffnen in einem neuen Tab; Hashtag- und geo-Links bleiben im selben Tab');
 
 	console.log(`\n${check.count} browser checks passed.`);
 }

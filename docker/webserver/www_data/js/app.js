@@ -724,7 +724,7 @@ function add_vmforum_members() {
 				.bindPopup(
 					'<a href="https://www.velomobilforum.de/forum/index.php?members/'
 					+ v.id
-					+ '/" title="Mitglieder-Profil im Forum"><b>'
+					+ '/" target="_blank" rel="noopener" title="Mitglieder-Profil im Forum"><b>'
 					+ html_escape(v.name)
 					+ '</b></a>'
 					+ ' <a href="geo:' + v.lat + ',' + v.lon + '" title="Koordinaten, z.B. für BRouter">🌐</a>'
