@@ -90,6 +90,8 @@ vmkarte/
 │   └── webserver/                      # nginx + statische Karte
 ├── docker/webserver/www_data/
 │   ├── karte.html                      # App-Shell
+│   ├── offline.html                    # Offline-Fallback
+│   ├── service-worker.js               # App-Shell-/Offline-Cache
 │   ├── geo-handler.html                # Same-origin-Weiterleitung zu BRouter
 │   ├── geo-handler.php                 # Legacy (nginx führt kein PHP aus)
 │   ├── css/
@@ -337,6 +339,20 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
   - `./docker/webserver/www_data/shared` → `/www_data/shared`
 
 Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/shared/vmforum_members.json` schreiben. Derselbe Host-Pfad wird auch vom Web-Container gelesen. IDE und native Installation schreiben standardmäßig direkt nach `<repo>/docker/webserver/www_data/shared`.
+
+### 5.8 Service Worker und Offline
+
+- `js/app.js` registriert `/service-worker.js` mit Scope `/`.
+- Cache `vmkarte-shell-v1` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html` und `offline.html`.
+- Navigationen laufen network-first mit Fallback auf den angeforderten Cache-Eintrag, `/karte.html`, `/` und schließlich `/offline.html`.
+- Statische Assets laufen stale-while-revalidate.
+- `/shared/`, `/login`, `/logout`, `/session-check` und `/_internal/session-check` bleiben network-only. `data-status.json` liegt unter `/shared/` und wird daher nie gecacht.
+- Login-Weiterleitungen werden nicht als App-Shell gecacht (`response.redirected`).
+- Ein neuer Service Worker wartet zunächst. Die Seite zeigt „Eine neue Version ist verfügbar.“ mit „Neu laden“; erst nach Bestätigung wird `SKIP_WAITING` gesendet und die Seite neu geladen.
+- Logout und `401` löschen IndexedDB und alle Cache-Storage-Einträge mit Präfix `vmkarte-`.
+- Bei Änderungen an App-Dateien muss `CACHE_NAME` in `service-worker.js` erhöht werden, damit Clients den neuen Worker installieren.
+- Der Offline-Reload der App-Shell funktioniert; ohne lokale Daten zeigt die Karte ihre verständliche Fehlermeldung.
+- Phase 6 (Manifest und Icons) ist noch offen; die Karte ist daher noch nicht als PWA installierbar.
 
 ---
 

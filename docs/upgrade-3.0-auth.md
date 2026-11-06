@@ -15,8 +15,10 @@ Diese Anleitung beschreibt das Deployment der ersten Ausbaustufe:
 Enthalten seit Phase 5: Frontend-Datenloader mit IndexedDB, dauerhafte
 Datenstatusanzeige, ETag-Abgleich und manueller Refresh.
 
-Noch nicht enthalten: PWA-Manifest, Icons, Service Worker, Offline-App-Shell,
-Standortfunktion und Domainumzug.
+Enthalten seit Phase 7: Service Worker, App-Shell-Cache, Offline-Reload und
+kontrollierter Update-Hinweis.
+
+Noch nicht enthalten: PWA-Manifest, Icons, Standortfunktion und Domainumzug.
 
 ## Voraussetzungen
 
@@ -305,6 +307,33 @@ chmod 644 docker/webserver/www_data/shared/data-status.json
 Der `geo:`-Protokollhandler zeigt auf `/geo-handler?l=%s` (same-origin).
 `geo-handler.html` und `js/geo-handler.js` leiten gültige Koordinaten zu
 BRouter weiter. `geo-handler.php` ist nur noch eine Legacy-Datei.
+
+## Service Worker und Offline (Phase 7)
+
+- `/service-worker.js` wird beim Laden der Karte registriert (Scope `/`).
+- Cache `vmkarte-shell-v1` enthält App-Shell (`/`, `/karte.html`), CSS/JS,
+  Leaflet, MarkerCluster, `geo-handler.html` und `offline.html`.
+- Navigationen laufen network-first mit Cache-/`offline.html`-Fallback.
+- Statische Assets laufen stale-while-revalidate.
+- `/shared/`, `/login`, `/logout` und `/_internal/session-check` bleiben
+  network-only. `data-status.json` wird dadurch nie gecacht.
+- Login-Weiterleitungen werden nicht als App-Shell gecacht
+  (`response.redirected`).
+- Logout und `401` löschen IndexedDB und alle Cache-Storage-Einträge mit
+  Präfix `vmkarte-`.
+- Ein Update wird erst nach Klick auf „Neu laden“ aktiv (`SKIP_WAITING`).
+- Bei Änderungen an App-Dateien `CACHE_NAME` in `service-worker.js` erhöhen,
+  damit Clients den neuen Worker installieren.
+- Phase 6 (Manifest und Icons) ist noch offen; die Karte ist daher noch nicht
+  als PWA installierbar.
+
+Prüfen:
+
+```bash
+curl -sSI https://karte.jfr-service.de/service-worker.js | \
+  grep -iE 'service-worker-allowed|cache-control|content-type'
+# erwartet: Service-Worker-Allowed: /, Cache-Control: no-cache
+```
 
 ## Tests
 

@@ -52,6 +52,20 @@ function reset_search() {
 	add_vmforum_members();
 }
 
+async function clearAppCaches() {
+	if (!('caches' in window))
+		return;
+	try {
+		const keys = await caches.keys();
+		await Promise.all(keys
+			.filter(key => key.startsWith('vmkarte-'))
+			.map(key => caches.delete(key)));
+	}
+	catch (error) {
+		console.warn('App-Caches konnten nicht gelöscht werden.', error);
+	}
+}
+
 async function logout() {
 	try {
 		await clearCache();
@@ -59,6 +73,7 @@ async function logout() {
 	catch (e) {
 		console.error(e);
 	}
+	await clearAppCaches();
 	try {
 		await fetch('/logout', {
 			method: 'POST',
@@ -79,8 +94,56 @@ async function handleUnauthorized() {
 	catch (error) {
 		console.warn('Lokaler Kartenstand konnte nicht gelöscht werden.', error);
 	}
+	await clearAppCaches();
 	const next = encodeURIComponent(window.location.pathname + window.location.search);
 	window.location.assign('/login?next=' + next);
+}
+
+function show_update_message(registration) {
+	if (!statusUi)
+		return;
+
+	statusUi.setMessage({
+		type: 'info',
+		text: 'Eine neue Version ist verfügbar.',
+		actionLabel: 'Neu laden',
+		autoHideMs: 0,
+		onRetry: () => {
+			const waiting = registration.waiting;
+			if (!waiting) {
+				window.location.reload();
+				return;
+			}
+			navigator.serviceWorker.addEventListener('controllerchange', () => {
+				window.location.reload();
+			}, { once: true });
+			waiting.postMessage({ type: 'SKIP_WAITING' });
+		},
+	});
+}
+
+async function register_service_worker() {
+	if (!('serviceWorker' in navigator))
+		return;
+
+	try {
+		const registration = await navigator.serviceWorker.register('/service-worker.js');
+		if (registration.waiting && navigator.serviceWorker.controller)
+			show_update_message(registration);
+
+		registration.addEventListener('updatefound', () => {
+			const worker = registration.installing;
+			if (!worker)
+				return;
+			worker.addEventListener('statechange', () => {
+				if (worker.state === 'installed' && navigator.serviceWorker.controller)
+					show_update_message(registration);
+			});
+		});
+	}
+	catch (error) {
+		console.warn('Service Worker konnte nicht registriert werden.', error);
+	}
 }
 
 function setRefreshBusy(busy) {
@@ -566,6 +629,7 @@ async function create_map() {
 	update_online_state();
 
 	syncFromServer();
+	register_service_worker();
 
 	// Add the accessKey of the element to its tooltip.
 	Object
