@@ -93,14 +93,33 @@ function reset_search() {
 	save_map_state();
 }
 
+async function deleteAppCaches() {
+	const keys = await caches.keys();
+	await Promise.all(keys
+		.filter(key => key.startsWith('vmkarte-'))
+		.map(key => caches.delete(key)));
+}
+
 async function clearAppCaches() {
+	if ('serviceWorker' in navigator && navigator.serviceWorker.getRegistrations) {
+		try {
+			const registrations = await navigator.serviceWorker.getRegistrations();
+			await Promise.all(registrations.map(registration => registration.unregister()));
+		}
+		catch (error) {
+			console.warn('Service Worker konnte nicht abgemeldet werden.', error);
+		}
+	}
+
 	if (!('caches' in window))
 		return;
+
 	try {
-		const keys = await caches.keys();
-		await Promise.all(keys
-			.filter(key => key.startsWith('vmkarte-'))
-			.map(key => caches.delete(key)));
+		await deleteAppCaches();
+		// In-flight service worker handlers may recreate the cache after the
+		// first delete. Give them a moment, then delete again.
+		await new Promise(resolve => setTimeout(resolve, 100));
+		await deleteAppCaches();
 	}
 	catch (error) {
 		console.warn('App-Caches konnten nicht gelöscht werden.', error);
