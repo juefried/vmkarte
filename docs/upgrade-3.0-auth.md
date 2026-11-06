@@ -18,7 +18,9 @@ Datenstatusanzeige, ETag-Abgleich und manueller Refresh.
 Enthalten seit Phase 7: Service Worker, App-Shell-Cache, Offline-Reload und
 kontrollierter Update-Hinweis.
 
-Noch nicht enthalten: PWA-Manifest, Icons, Standortfunktion und Domainumzug.
+Enthalten seit Phase 6: PWA-Manifest, Icons und Installierbarkeit.
+
+Noch nicht enthalten: Standortfunktion und Domainumzug.
 
 ## Voraussetzungen
 
@@ -334,6 +336,41 @@ curl -sSI https://karte.jfr-service.de/service-worker.js | \
   grep -iE 'service-worker-allowed|cache-control|content-type'
 # erwartet: Service-Worker-Allowed: /, Cache-Control: no-cache
 ```
+
+## PWA-Manifest und Icons (Phase 6)
+
+- `/manifest.webmanifest` ist öffentlich und wird als
+  `application/manifest+json` mit `Cache-Control: no-cache` ausgeliefert.
+- Manifest:
+  - `name: Velomobil-Forum Karte`, `short_name: VMKarte`
+  - `start_url: /karte.html`, `scope: /`, `display: standalone`
+  - `theme_color: #1565c0`, `background_color: #ffffff`
+- Icons:
+  - `/icons/icon-192.png` (192×192, any)
+  - `/icons/icon-512.png` (512×512, any)
+  - `/icons/icon-maskable-512.png` (512×512, maskable)
+  - `/icons/apple-touch-icon.png` (180×180)
+- `karte.html` bindet Manifest, Theme-Farbe, Favicon und Apple-Touch-Icon ein.
+- `/icons/` ist öffentlich mit `expires 7d`; `/favicon.ico` zeigt auf
+  `/icons/icon-192.png`.
+- Der Service-Worker-Cache `vmkarte-shell-v2` enthält Manifest und Icons.
+- Bei künftigen App-Änderungen `CACHE_NAME` in `service-worker.js` erhöhen.
+- Quellen der Icons: `icons/icon-any.svg` und `icons/icon-maskable.svg`.
+
+Prüfen:
+
+```bash
+curl -sSI https://karte.jfr-service.de/manifest.webmanifest | \
+  grep -iE 'HTTP/|content-type|cache-control'
+# erwartet: 200, application/manifest+json, Cache-Control: no-cache
+
+curl -sSI https://karte.jfr-service.de/icons/icon-192.png | \
+  grep -iE 'HTTP/|content-type'
+# erwartet: 200, image/png
+```
+
+Danach im Browser (Chrome/Edge) die Installationsaufforderung prüfen; auf
+Android/iPhone „Zum Home-Bildschirm“ verwenden.
 
 ## Tests
 

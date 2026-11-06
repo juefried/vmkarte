@@ -92,6 +92,8 @@ vmkarte/
 │   ├── karte.html                      # App-Shell
 │   ├── offline.html                    # Offline-Fallback
 │   ├── service-worker.js               # App-Shell-/Offline-Cache
+│   ├── manifest.webmanifest            # PWA-Manifest
+│   ├── icons/                          # PWA-/Apple-Icons und SVG-Quellen
 │   ├── geo-handler.html                # Same-origin-Weiterleitung zu BRouter
 │   ├── geo-handler.php                 # Legacy (nginx führt kein PHP aus)
 │   ├── css/
@@ -352,7 +354,25 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 - Logout und `401` löschen IndexedDB und alle Cache-Storage-Einträge mit Präfix `vmkarte-`.
 - Bei Änderungen an App-Dateien muss `CACHE_NAME` in `service-worker.js` erhöht werden, damit Clients den neuen Worker installieren.
 - Der Offline-Reload der App-Shell funktioniert; ohne lokale Daten zeigt die Karte ihre verständliche Fehlermeldung.
-- Phase 6 (Manifest und Icons) ist noch offen; die Karte ist daher noch nicht als PWA installierbar.
+
+### 5.9 PWA-Manifest und Icons
+
+- `manifest.webmanifest`:
+  - Name `Velomobil-Forum Karte`, Kurzname `VMKarte`
+  - `start_url: /karte.html`, `scope: /`, `display: standalone`
+  - `theme_color: #1565c0`, `background_color: #ffffff`
+  - Icons 192×192 und 512×512 (`purpose: any`) sowie 512×512 maskable
+- `icons/`:
+  - `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`,
+    `apple-touch-icon.png` (180×180)
+  - SVG-Quellen: `icon-any.svg`, `icon-maskable.svg`
+- `karte.html` bindet Manifest, Theme-Farbe, Favicon und Apple-Touch-Icon ein.
+- nginx liefert `/manifest.webmanifest` als `application/manifest+json` mit
+  `Cache-Control: no-cache`; `/icons/` ist öffentlich mit `expires 7d`.
+- `/favicon.ico` wird auf `/icons/icon-192.png` abgebildet.
+- Der Service-Worker-Cache `vmkarte-shell-v2` enthält Manifest und Icons.
+- Chrome-Installability-Check: keine Manifest- und keine Installability-Fehler.
+- Phase 8–10 sind noch offen.
 
 ---
 

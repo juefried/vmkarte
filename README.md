@@ -158,10 +158,10 @@ python data_grabber.py --refresh-members --refresh-user 12345
 - Frontend-Datenloader mit IndexedDB, lokalem Start, ETag-Abgleich und manuellem Refresh
 - Dauerhafte, dezente Statusanzeige mit Quelle `Server`/`lokal` und Offline-Badge
 - Service Worker mit App-Shell-Cache, Offline-Reload und kontrolliertem Update-Hinweis
+- PWA-Manifest, Icons und Installierbarkeit
 
 Dieser Stand ersetzt HTTP Basic Authentication durch einen Go-Auth-Service und
-nginx `auth_request`. PWA-Manifest/Icons, Standortfunktion und Domainumzug
-folgen in Phase 6, 8 und 10.
+nginx `auth_request`. Standortfunktion und Domainumzug folgen in Phase 8 und 10.
 
 ## Upgrade von der Version 20261022
 
