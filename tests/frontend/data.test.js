@@ -110,4 +110,13 @@ test('formatStatusText marks source and stale state', () => {
 		formatStatusText({ generatedAt: null, source: 'local', updateFailed: false, stale: false }),
 		'Datenstand: unbekannt · lokal',
 	);
+	assert.equal(
+		formatStatusText({
+			generatedAt: '2026-11-06T03:33:00+01:00',
+			source: 'server',
+			updateFailed: true,
+			stale: false,
+		}),
+		'Datenstand: 06.11.2026, 03:33 · Server (Aktualisierung fehlgeschlagen)',
+	);
 });

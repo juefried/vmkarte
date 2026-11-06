@@ -2,6 +2,7 @@ import { formatStatusText, formatStatusTimestamp, isStale } from './data.js';
 
 export function createStatusUi({ statusElement, messageElement }) {
 	let retryButton = null;
+	let messageTimer = null;
 
 	function setStatus({ generatedAt, runStartedAt, source, updateFailed = false, stale = null }) {
 		if (!statusElement)
@@ -41,6 +42,8 @@ export function createStatusUi({ statusElement, messageElement }) {
 		if (!messageElement)
 			return;
 
+		clearTimeout(messageTimer);
+		messageTimer = null;
 		messageElement.hidden = false;
 		messageElement.textContent = '';
 		messageElement.className = `data-message data-message-${type}`;
@@ -53,12 +56,17 @@ export function createStatusUi({ statusElement, messageElement }) {
 			retryButton.addEventListener('click', onRetry);
 			messageElement.appendChild(retryButton);
 		}
+
+		if (type === 'success')
+			messageTimer = setTimeout(clearMessage, 3000);
 	}
 
 	function clearMessage() {
 		if (!messageElement)
 			return;
 
+		clearTimeout(messageTimer);
+		messageTimer = null;
 		messageElement.hidden = true;
 		messageElement.textContent = '';
 		retryButton = null;

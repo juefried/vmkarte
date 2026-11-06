@@ -109,7 +109,7 @@ export function formatStatusText({ generatedAt, source, updateFailed, stale } = 
 	const sourceLabel = source === 'server' ? 'Server' : 'lokal';
 
 	let text = `Datenstand: ${timestamp} · ${sourceLabel}`;
-	if (updateFailed && source !== 'server')
+	if (updateFailed)
 		text += ' (Aktualisierung fehlgeschlagen)';
 	if (stale)
 		text += ' · älter als 48 h';

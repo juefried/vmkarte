@@ -1,5 +1,9 @@
-import { readCache, clearCache } from './storage.js';
+import { readCache, writeCache, clearCache } from './storage.js';
 import { createStatusUi } from './status-ui.js';
+import { validateMembers, parseDataStatus, deriveStatusFromLastModified } from './data.js';
+
+const DATA_STATUS_URL = 'shared/data-status.json';
+const MEMBERS_URL = 'shared/vmforum_members.json';
 
 // Global variables
 var map;
@@ -16,6 +20,9 @@ let members = [];
 let dataStatus = null;
 let dataSource = 'local';
 let statusUi;
+let cachedEtag = null;
+let cachedLastModified = null;
+let updateInProgress = false;
 
 // Make the div element #map cover the whole window.
 function resize_map_to_full_window()
@@ -63,6 +70,160 @@ async function logout() {
 		console.error(e);
 	}
 	window.location.assign('/login');
+}
+
+async function handleUnauthorized() {
+	try {
+		await clearCache();
+	}
+	catch (error) {
+		console.warn('Lokaler Kartenstand konnte nicht gelöscht werden.', error);
+	}
+	const next = encodeURIComponent(window.location.pathname + window.location.search);
+	window.location.assign('/login?next=' + next);
+}
+
+function setRefreshBusy(busy) {
+	const button = document.getElementById('refresh_button');
+	if (!button)
+		return;
+	button.disabled = busy;
+	button.textContent = busy ? 'lädt …' : 'Kartendaten aktualisieren';
+}
+
+async function loadDataStatus() {
+	const response = await fetch(DATA_STATUS_URL, {
+		cache: 'no-store',
+		credentials: 'same-origin',
+	});
+	if (response.status === 401) {
+		await handleUnauthorized();
+		return { unauthorized: true, status: null };
+	}
+	if (!response.ok)
+		throw new Error(`HTTP ${response.status}`);
+
+	const raw = await response.json();
+	return { unauthorized: false, status: parseDataStatus(raw) };
+}
+
+async function syncFromServer({ manual = false } = {}) {
+	if (updateInProgress)
+		return;
+
+	updateInProgress = true;
+	setRefreshBusy(true);
+
+	try {
+		const statusResult = await loadDataStatus().catch(error => {
+			console.warn('Datenstand konnte nicht geladen werden.', error);
+			return { unauthorized: false, status: null };
+		});
+		if (statusResult.unauthorized)
+			return;
+
+		const headers = {};
+		if (!manual && cachedEtag)
+			headers['If-None-Match'] = cachedEtag;
+
+		const response = await fetch(MEMBERS_URL, {
+			cache: 'no-store',
+			credentials: 'same-origin',
+			headers,
+		});
+
+		if (response.status === 401) {
+			await handleUnauthorized();
+			return;
+		}
+
+		let membersChanged = false;
+		if (response.status === 304) {
+			// The locally stored member data is still current.
+		}
+		else if (response.ok) {
+			const raw = await response.json();
+			const validated = validateMembers(raw);
+			if (!validated)
+				throw new Error('Ungültige Mitgliederdaten');
+
+			members = validated.members;
+			membersChanged = true;
+			cachedEtag = response.headers.get('ETag');
+			cachedLastModified = response.headers.get('Last-Modified');
+		}
+		else {
+			throw new Error(`HTTP ${response.status}`);
+		}
+
+		let serverStatus = statusResult.status;
+		if (!serverStatus && cachedLastModified)
+			serverStatus = deriveStatusFromLastModified(cachedLastModified, members.length);
+		if (!serverStatus) {
+			serverStatus = {
+				generatedAt: new Date().toISOString(),
+				runStartedAt: null,
+				memberCount: members.length,
+			};
+		}
+
+		dataStatus = serverStatus;
+		dataSource = 'server';
+
+		await writeCache({
+			members,
+			status: dataStatus,
+			etag: cachedEtag,
+			lastModified: cachedLastModified,
+		});
+
+		if (membersChanged) {
+			add_vmforum_members();
+			add_vmforum_tags();
+			log_member_stats();
+		}
+
+		if (members.length > 0) {
+			statusUi.setStatus({
+				generatedAt: dataStatus ? dataStatus.generatedAt : null,
+				runStartedAt: dataStatus ? dataStatus.runStartedAt : null,
+				source: 'server',
+				updateFailed: false,
+			});
+			statusUi.clearMessage();
+			if (manual)
+				statusUi.setMessage({ type: 'success', text: 'Kartendaten aktualisiert.' });
+		}
+	}
+	catch (error) {
+		console.warn('Serverabgleich fehlgeschlagen.', error);
+		if (members.length > 0) {
+			statusUi.setStatus({
+				generatedAt: dataStatus ? dataStatus.generatedAt : null,
+				runStartedAt: dataStatus ? dataStatus.runStartedAt : null,
+				source: dataSource,
+				updateFailed: true,
+			});
+			if (manual) {
+				statusUi.setMessage({
+					type: 'error',
+					text: 'Die Kartendaten konnten nicht aktualisiert werden. Der zuletzt geladene Stand bleibt sichtbar.',
+				});
+			}
+		}
+		else {
+			statusUi.clearStatus();
+			statusUi.setMessage({
+				type: 'error',
+				text: 'Die Kartendaten konnten nicht geladen werden. Bitte die Verbindung prüfen.',
+				onRetry: () => syncFromServer({ manual: true }),
+			});
+		}
+	}
+	finally {
+		updateInProgress = false;
+		setRefreshBusy(false);
+	}
 }
 
 function html_escape(str) {
@@ -137,10 +298,6 @@ function add_vmforum_members() {
 	// If there is a tag parameter, add it to the search for others (with # prepended).
 	if (urlparams.has('tag') && urlparams.get('tag').match(/[a-zA-Z]\w+/))
 		urlparams.set('other', (urlparams.has('other') ? urlparams.get('other') + ' ' : '') + '#' + urlparams.get('tag'));
-
-	// A circle showing the size of the bounding box given by Nominatim.
-	// Create only one circle and move it to the current marker.
-	error_circle = L.circle([0, 0]).addTo(map);
 
 	// Look if we have a hashtag (take only the first one):
 	// * If we a searching in the free-text field (bit 4 = other and bit 5 = search), look there.
@@ -356,6 +513,12 @@ async function create_map() {
 	layer_circles = L.layerGroup();
 	map.addLayer(layer_circles);
 
+	// A circle showing the size of the bounding box given by Nominatim.
+	// Create only one circle and move it to the current marker.
+	error_circle = L.circle([0, 0], { stroke: false, fill: false }).addTo(map);
+
+	document.getElementById('refresh_button').addEventListener('click', () => syncFromServer({ manual: true }));
+
 	const cache = await readCache().catch(error => {
 		console.warn('Lokaler Kartenstand konnte nicht gelesen werden.', error);
 		return null;
@@ -365,6 +528,8 @@ async function create_map() {
 		members = cache.members;
 		dataStatus = cache.status;
 		dataSource = 'local';
+		cachedEtag = cache.etag;
+		cachedLastModified = cache.lastModified;
 
 		add_vmforum_members();
 		add_vmforum_tags();
@@ -381,6 +546,8 @@ async function create_map() {
 		statusUi.clearStatus();
 		statusUi.setMessage({ type: 'loading', text: 'Kartendaten werden geladen …' });
 	}
+
+	syncFromServer();
 
 	// Add the accessKey of the element to its tooltip.
 	Object

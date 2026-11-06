@@ -33,7 +33,7 @@ body { max-width: initial; margin: 0; padding: 0; }
 .data-status	{ position: fixed; left: 10px; bottom: 10px; z-index: 1000;
 		  padding: 4px 8px; border-radius: 4px;
 		  background: rgba(255, 255, 255, 0.88); color: #333;
-		  font-size: 0.8em; pointer-events: none;
+		  font-size: 0.8em; cursor: default;
 		  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); }
 .data-status.status-server::before	{ content: '●'; color: #2e7d32; margin-right: 4px; }
 .data-status.status-local::before	{ content: '●'; color: #777; margin-right: 4px; }
