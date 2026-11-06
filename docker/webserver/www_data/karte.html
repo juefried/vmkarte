@@ -22,6 +22,11 @@
 	
 		/* make the search controls more beautiful: white background, rounded corners, shadow, a bit padding */
 		#search_controls	{ background-color: #fff; border-radius: 5px; box-shadow: 0 1px 7px rgba(0,0,0,0.65); padding: 6px; }
+
+		/* logout button inside the search controls */
+		#search_controls button	{ width: 100%; margin-top: 6px; padding: 6px 8px; border: 0; border-radius: 4px;
+					  background: #2e7d32; color: #fff; font: inherit; cursor: pointer; }
+		#search_controls button:hover	{ background: #256428; }
 		
 		/* red circles for hashtags */
 		.tag_circle	{ stroke: red; fill: red; }
@@ -57,6 +62,20 @@
 		document.getElementById("map").style.width = window.innerWidth + "px";
 		document.getElementById("map").style.height = window.innerHeight + "px";
 		document.getElementById("map").style.marginBottom = "0px";
+	}
+
+	async function logout() {
+		try {
+			await fetch('/logout', {
+				method: 'POST',
+				credentials: 'same-origin',
+				redirect: 'manual'
+			});
+		}
+		catch (e) {
+			console.error(e);
+		}
+		window.location.assign('/login');
 	}
 
 	function html_escape(str) {
@@ -275,6 +294,8 @@
 		form_select = document.getElementById('form_select');
 		form_search = document.getElementById('form_search');
 
+		L.DomEvent.on(document.getElementById('logout_button'), 'click', logout);
+
 		// Make the map container cover the whole browser window.
 		resize_map_to_full_window();
 
@@ -358,6 +379,7 @@
 		</select>
 		<datalist id="tags">
 		</datalist>
+		<button type="button" id="logout_button" title="Abmelden">Abmelden</button>
 	</div>
 </body>
 </html>

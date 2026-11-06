@@ -350,12 +350,12 @@ func (s *server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) logout(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.Header().Set("Allow", http.MethodPost)
+	if r.Method != http.MethodGet && r.Method != http.MethodPost {
+		w.Header().Set("Allow", "GET, POST")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if isCrossSite(r) {
+	if r.Method == http.MethodPost && isCrossSite(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
