@@ -4,9 +4,12 @@ import assert from 'node:assert/strict';
 import {
 	DEFAULT_MAP_VIEW,
 	FILTER_PARAMS,
+	LOCATION_TOLERANCE_DEGREES,
 	filterSearchString,
+	isSamePosition,
 	parseMapState,
 	resolveInitialMapState,
+	shouldPersistMapState,
 } from '../../docker/webserver/www_data/js/map-state.js';
 
 test('FILTER_PARAMS lists the supported URL filter keys', () => {
@@ -42,6 +45,24 @@ test('parseMapState rejects invalid state', () => {
 	assert.equal(parseMapState({ center: [50, 11], zoom: 99, search: '' }), null);
 	assert.equal(parseMapState({ center: [50, 11], zoom: 'nope', search: '' }), null);
 	assert.equal(parseMapState({ center: [50, 11], zoom: 7, search: 42 }), null);
+	assert.equal(parseMapState({ center: [null, null], zoom: 7, search: '' }), null);
+	assert.equal(parseMapState({ center: ['', ''], zoom: 7, search: '' }), null);
+	assert.equal(parseMapState({ center: [50, 11], zoom: null, search: '' }), null);
+	assert.equal(parseMapState({ center: [50, 11], zoom: '', search: '' }), null);
+});
+
+test('isSamePosition compares coordinates within the location tolerance', () => {
+	assert.equal(isSamePosition([52.5, 13.4], [52.5, 13.4]), true);
+	assert.equal(isSamePosition([52.5, 13.4], [52.5 + LOCATION_TOLERANCE_DEGREES / 2, 13.4]), true);
+	assert.equal(isSamePosition([52.5, 13.4], [52.6, 13.4]), false);
+	assert.equal(isSamePosition(null, [52.5, 13.4]), false);
+});
+
+test('shouldPersistMapState blocks geolocation centers and suspended saves', () => {
+	assert.equal(shouldPersistMapState({ center: [50, 11], lastLocation: null }), true);
+	assert.equal(shouldPersistMapState({ center: [52.5, 13.4], lastLocation: [52.5, 13.4] }), false);
+	assert.equal(shouldPersistMapState({ center: [52.5, 13.4], lastLocation: [52.5, 13.4], suspended: true }), false);
+	assert.equal(shouldPersistMapState({ center: [50, 11], lastLocation: [52.5, 13.4] }), true);
 });
 
 test('resolveInitialMapState prefers URL filters over stored filters', () => {

@@ -1,7 +1,7 @@
 import { readCache, writeCache, clearCache, readMapState, writeMapState } from './storage.js';
 import { createStatusUi } from './status-ui.js';
 import { validateMembers, parseDataStatus, deriveStatusFromLastModified } from './data.js';
-import { resolveInitialMapState, filterSearchString, FILTER_PARAMS } from './map-state.js';
+import { resolveInitialMapState, filterSearchString, FILTER_PARAMS, shouldPersistMapState } from './map-state.js';
 import { describeGeolocationError, GEOLOCATION_OPTIONS } from './location.js';
 
 const DATA_STATUS_URL = 'shared/data-status.json';
@@ -17,7 +17,10 @@ var form_select;
 var form_search;
 var member_update_timer;
 var map_state_save_timer;
+var map_state_save_promise = null;
+var map_state_save_suspended = false;
 var suppress_map_state_save_until = 0;
+var last_location = null;
 var location_layer;
 var location_button;
 var location_request_in_progress = false;
@@ -56,6 +59,9 @@ function apply_filter_search_to_url(search) {
 }
 
 function schedule_map_state_save() {
+	if (map_state_save_suspended)
+		return;
+
 	// Centering on the geolocation result must not persist the position via
 	// the map center. Ignore the move/zoom events caused by that setView.
 	if (Date.now() < suppress_map_state_save_until)
@@ -65,21 +71,55 @@ function schedule_map_state_save() {
 	map_state_save_timer = setTimeout(save_map_state, 300);
 }
 
+function suspend_map_state_save() {
+	map_state_save_suspended = true;
+	clearTimeout(map_state_save_timer);
+	map_state_save_timer = null;
+}
+
 async function save_map_state() {
 	clearTimeout(map_state_save_timer);
 	map_state_save_timer = null;
-	if (!map)
-		return;
+	if (!map || map_state_save_suspended)
+		return false;
+
+	const pending = map_state_save_promise;
+	if (pending)
+		await pending.catch(() => {});
+	if (map_state_save_suspended)
+		return false;
 
 	const center = map.getCenter();
-	await writeMapState({
+	if (!shouldPersistMapState({
+		center: [center.lat, center.lng],
+		lastLocation: last_location,
+		suspended: map_state_save_suspended,
+	}))
+		return false;
+
+	map_state_save_promise = writeMapState({
 		center: [center.lat, center.lng],
 		zoom: map.getZoom(),
 		search: filterSearchString(window.location.search),
 	});
+	try {
+		return await map_state_save_promise;
+	}
+	finally {
+		map_state_save_promise = null;
+	}
 }
 
-function reset_search() {
+async function clear_stored_map_filter() {
+	const stored = await readMapState();
+	if (stored)
+		await writeMapState({ ...stored, search: '' });
+}
+
+async function reset_search() {
+	if (!map)
+		return;
+
 	form_search.value = '';
 	form_select.selectedIndex = 0;
 
@@ -90,7 +130,8 @@ function reset_search() {
 	}
 
 	add_vmforum_members();
-	save_map_state();
+	if (!(await save_map_state()))
+		await clear_stored_map_filter();
 }
 
 async function deleteAppCaches() {
@@ -127,7 +168,10 @@ async function clearAppCaches() {
 }
 
 async function logout() {
+	suspend_map_state_save();
 	try {
+		if (map_state_save_promise)
+			await map_state_save_promise.catch(() => {});
 		await clearCache();
 	}
 	catch (e) {
@@ -148,7 +192,10 @@ async function logout() {
 }
 
 async function handleUnauthorized() {
+	suspend_map_state_save();
 	try {
+		if (map_state_save_promise)
+			await map_state_save_promise.catch(() => {});
 		await clearCache();
 	}
 	catch (error) {
@@ -575,6 +622,12 @@ function set_location_busy(busy) {
 
 function show_position(position) {
 	const { latitude, longitude, accuracy } = position.coords;
+
+	// A pending save from before the click must not run after the map has
+	// been centered on the location.
+	clearTimeout(map_state_save_timer);
+	map_state_save_timer = null;
+	last_location = [latitude, longitude];
 
 	if (!location_layer)
 		location_layer = L.layerGroup().addTo(map);
