@@ -107,6 +107,9 @@ def prepare_location(location: str) -> str:
     location = location.replace("in obb", "in oberbayern")
     location = location.replace("79***", "schwarzwald")
     location = location.replace("75... enzkreis", "enzkreis")
+    location = location.replace("south florida", "florida, usa")
+    location = location.replace("nordbayern", "bayern")
+    location = re.sub(r'(?<![\w-])franken(?![\w-])', 'bayern', location)
 
     # Replace 'kreis' with 'landkreis' if followed by a lowercase word
     location = re.sub(r'\bkreis\b(?=\s+[a-zäöüß\-]+)', 'landkreis', location)

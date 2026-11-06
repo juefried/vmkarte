@@ -6,10 +6,25 @@ import os
 import time
 
 import requests
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 from geopy.distance import geodesic
 from libs.cache_config_lib import get_negative_ttl_seconds, get_ttl_seconds
 from libs.location_mapping_rules_lib import analyze_location_for_country, analyze_location_for_postal_code, prepare_location
+from libs.location_precision_lib import (
+    PRECISION_CACHE_VERSION,
+    build_precision_queries,
+    calculate_radius_from_point,
+    candidate_is_good_enough,
+    candidate_sort_key,
+    choose_smaller_area,
+    extract_place_name,
+    is_postcode,
+    postcode_matches,
+    precision_cache_key,
+    precision_rejection,
+    rank_nominatim_candidates,
+    summarize_candidate,
+)
 from libs.paths_lib import CACHE_DIR, CONFIG_PATH
 import diskcache as dc
 import re
@@ -19,6 +34,9 @@ cache = dc.Cache(str(CACHE_DIR))
 
 # Marks a successful Nominatim request that returned no result
 NOMINATIM_NEGATIVE = '__nominatim_negative__'
+
+LOCATION_STRATEGIES = ('classic', 'precision')
+PRECISION_GUARDS = ('none', 'old-radius', 'disjoint')
 
 # Read configuration file
 with CONFIG_PATH.open('r', encoding='utf-8') as f:
@@ -77,7 +95,7 @@ def _get_nominatim(url):
         time.sleep(1)
 
 
-def query_nominatim(searchstring, country_code, use_cache=True):
+def query_nominatim(searchstring, country_code, use_cache=True, cache_only=False):
     """
     Queries the Nominatim API for location details based on the search string and country code.
 
@@ -91,6 +109,8 @@ def query_nominatim(searchstring, country_code, use_cache=True):
         country_code (str): The country code to narrow down the search, can be None.
         use_cache (bool): Read an existing Nominatim cache entry. Fresh results are
             still written to the cache.
+        cache_only (bool): Return None instead of performing a network request on
+            a cache miss. Used for the precision guard, which must stay offline.
 
     Returns:
         dict or None: The location details if found, otherwise None.
@@ -118,6 +138,9 @@ def query_nominatim(searchstring, country_code, use_cache=True):
             if cached_result == NOMINATIM_NEGATIVE:
                 return None
             return cached_result
+
+    if cache_only:
+        return None
 
     try:
         # Construct the URL for the Nominatim API request
@@ -184,6 +207,104 @@ def query_nominatim(searchstring, country_code, use_cache=True):
     return None
 
 
+def _build_nominatim_url(params, countrycodes):
+    """Builds a Nominatim search URL from structured parameters."""
+    url = (
+        "https://nominatim.openstreetmap.org/search?"
+        f"{urlencode(params)}&format=json&addressdetails=1&email={quote(EMAIL)}&limit=10"
+    )
+    if countrycodes:
+        url += f"&countrycodes={countrycodes}"
+    return url
+
+
+def _request_precision_candidates(variant, params, countrycodes, use_cache=True):
+    """
+    Requests one structured Nominatim query variant and returns the raw list.
+
+    Empty successful responses are negatively cached. Exceptions are never
+    cached, matching the classic query behavior.
+    """
+    cache_key = precision_cache_key(
+        variant, params, countrycodes, PRECISION_CACHE_VERSION
+    )
+    if use_cache:
+        cached_result = cache.get(cache_key)
+        if cached_result is not None:
+            if cached_result == NOMINATIM_NEGATIVE:
+                return []
+            return cached_result
+
+    try:
+        url = _build_nominatim_url(params, countrycodes)
+        response = _get_nominatim(url)
+        response.raise_for_status()
+        data = response.json()
+        if not isinstance(data, list):
+            data = []
+    except (requests.RequestException, ValueError) as e:
+        print(
+            "An error occurred while fetching precision location details for "
+            f"{params!r}, countrycodes={countrycodes}: {e}"
+        )
+        return []
+
+    if data:
+        cache.set(cache_key, data, expire=get_ttl_seconds('nominatim'))
+    else:
+        negative_ttl = get_negative_ttl_seconds('nominatim')
+        if negative_ttl > 0:
+            cache.set(cache_key, NOMINATIM_NEGATIVE, expire=negative_ttl)
+
+    return data
+
+
+def query_nominatim_precision(location, place_name, postal_code, countrycodes, use_cache=True):
+    """
+    Tries structured query variants and returns the best matching candidate.
+
+    The most specific variant is tried first. As soon as it yields a preferred
+    result (a settlement when a place name is known, a postal code area when only
+    a postal code is known), no further requests are made.
+
+    Returns:
+        tuple: (candidate dict or None, variant name or None)
+    """
+    best_candidate = None
+    best_variant = None
+
+    for variant, params in build_precision_queries(location, place_name, postal_code):
+        data = _request_precision_candidates(
+            variant, params, countrycodes, use_cache=use_cache
+        )
+        candidate = rank_nominatim_candidates(data, place_name, postal_code)
+        if candidate is None:
+            continue
+
+        if (
+            best_candidate is None
+            or candidate_sort_key(candidate, place_name, postal_code)
+            < candidate_sort_key(best_candidate, place_name, postal_code)
+        ):
+            best_candidate = candidate
+            best_variant = variant
+
+        if candidate_is_good_enough(candidate, place_name):
+            return candidate, variant
+
+    return best_candidate, best_variant
+
+
+def _country_code_candidates(postal_code, country_code):
+    """Returns the country code candidates to try, most likely first."""
+    if country_code is not None:
+        return [country_code]
+    if postal_code is not None:
+        if len(postal_code) == 5:
+            return ['de', 'fr,fi,it', None]
+        return ['at,ch', 'dk,nl', None]
+    return ['de,at,ch', None]
+
 
 def calculate_radius(boundingbox):
     """
@@ -205,7 +326,13 @@ def calculate_radius(boundingbox):
         return round(radius)
     return 'N/A'
 
-def examine_locations(members, refresh_uids=()):
+def examine_locations(
+    members,
+    refresh_uids=(),
+    strategy='classic',
+    refresh_locations=False,
+    precision_guard='disjoint',
+):
     """
     Examines the locations of the members and updates their information.
 
@@ -213,10 +340,31 @@ def examine_locations(members, refresh_uids=()):
         members (dict): A dictionary containing the members' information.
         refresh_uids (iterable): UIDs whose Nominatim lookups must bypass the cache.
             Fresh results are still written to the cache.
+        strategy (str): 'classic' keeps the historical behavior. 'precision'
+            uses structured Nominatim queries and prefers settlements over
+            postal code areas.
+        refresh_locations (bool): Bypass the Nominatim cache for every member.
+        precision_guard (str): 'disjoint' keeps the classic result when the
+            precision and classic areas do not overlap. 'old-radius' is the
+            stricter variant that rejects every marker outside the classic
+            circle. 'none' accepts every precision result. The classic result
+            is read from the cache only, so the guard never triggers new
+            requests.
 
     Returns:
         list: A list of updated members' information.
     """
+    if strategy not in LOCATION_STRATEGIES:
+        raise ValueError(
+            f"Unknown location strategy {strategy!r}. "
+            f"Valid values: {', '.join(LOCATION_STRATEGIES)}."
+        )
+    if precision_guard not in PRECISION_GUARDS:
+        raise ValueError(
+            f"Unknown precision guard {precision_guard!r}. "
+            f"Valid values: {', '.join(PRECISION_GUARDS)}."
+        )
+
     updated_members = []  # Initialize an empty list to store updated members' information
     total_members = len(members)  # Get the total number of members
     if isinstance(refresh_uids, str):
@@ -226,7 +374,7 @@ def examine_locations(members, refresh_uids=()):
     for index, uid in enumerate(members, start=1):
         member = members[uid]  # Get the member's information
         location = member.get('location', "").lower().strip()  # Get the member's location
-        use_nominatim_cache = str(uid) not in refresh_uids
+        use_nominatim_cache = (not refresh_locations) and str(uid) not in refresh_uids
 
         postal_code = None  # Initialize variable to store postal code
         country_code = None  # Initialize variable to store country code
@@ -245,20 +393,141 @@ def examine_locations(members, refresh_uids=()):
             location = new_location  # Update location
 
             nominatim_data = None  # Initialize variable to store Nominatim data
+            match_metadata = None
+            classic_fallback = False
+            use_classic_radius = False
 
-            if country_code is not None:
-                nominatim_data = query_nominatim(location, country_code, use_cache=use_nominatim_cache)  # Query Nominatim with country code
-            else:
-                cc_try_list = None  # Initialize variable to store country code try list
-                if postal_code is not None:
-                    if len(postal_code) == 5:
-                        cc_try_list = ['de', 'fr,fi,it', None]  # Set country code try list for postal code length 5
-                    else:
-                        cc_try_list = ['at,ch', 'dk,nl', None]  # Set country code try list for postal code length not 5
+            if strategy == 'precision':
+                if not location:
+                    continue
+
+                precision_postal_code = analyze_location_for_postal_code(location)
+                place_name = extract_place_name(location, precision_postal_code, country_code)
+                query_variant = None
+                used_countrycodes = None
+
+                fallback = None
+                for cc_try in _country_code_candidates(precision_postal_code, country_code):
+                    candidate, candidate_variant = query_nominatim_precision(
+                        location,
+                        place_name,
+                        precision_postal_code,
+                        cc_try,
+                        use_cache=use_nominatim_cache,
+                    )
+                    if candidate is None:
+                        continue
+                    if fallback is None:
+                        fallback = (candidate, candidate_variant, cc_try)
+                    if candidate_is_good_enough(candidate, place_name):
+                        nominatim_data = candidate
+                        query_variant = candidate_variant
+                        used_countrycodes = cc_try
+                        break
                 else:
-                    cc_try_list = ['de,at,ch', None]  # Set country code try list for no postal code
+                    if fallback is not None:
+                        nominatim_data, query_variant, used_countrycodes = fallback
 
-                for cc_try in cc_try_list:
+                classic_data = None
+                classic_countrycodes = None
+                for cc_try in _country_code_candidates(postal_code, country_code):
+                    classic_data = query_nominatim(
+                        location,
+                        cc_try,
+                        use_cache=True,
+                        cache_only=True,
+                    )
+                    if classic_data:
+                        classic_countrycodes = cc_try
+                        break
+
+                selection_info = None
+                if place_name and precision_postal_code and nominatim_data:
+                    postcode_candidate = None
+                    postcode_variant = None
+                    postcode_countrycodes = None
+
+                    if (
+                        classic_data is not None
+                        and is_postcode(classic_data)
+                        and postcode_matches(classic_data, precision_postal_code)
+                    ):
+                        postcode_candidate = classic_data
+                        postcode_variant = 'postcode_classic'
+                        postcode_countrycodes = classic_countrycodes
+                    else:
+                        for cc_try in _country_code_candidates(precision_postal_code, country_code):
+                            data = _request_precision_candidates(
+                                'postcode',
+                                {'postalcode': precision_postal_code},
+                                cc_try,
+                                use_cache=use_nominatim_cache,
+                            )
+                            candidate = rank_nominatim_candidates(
+                                data, '', precision_postal_code
+                            )
+                            if candidate is not None and is_postcode(candidate):
+                                postcode_candidate = candidate
+                                postcode_variant = 'postcode'
+                                postcode_countrycodes = cc_try
+                                break
+
+                    if postcode_candidate is not None:
+                        if is_postcode(nominatim_data):
+                            chosen = postcode_candidate
+                            chosen_variant = postcode_variant
+                            chosen_countrycodes = postcode_countrycodes
+                            selection_info = {'selection': 'only_postcode'}
+                        else:
+                            chosen, selection_info = choose_smaller_area(
+                                nominatim_data, postcode_candidate
+                            )
+                            if chosen is postcode_candidate:
+                                chosen_variant = postcode_variant
+                                chosen_countrycodes = postcode_countrycodes
+                            else:
+                                chosen_variant = query_variant
+                                chosen_countrycodes = used_countrycodes
+
+                        nominatim_data = chosen
+                        query_variant = chosen_variant
+                        used_countrycodes = chosen_countrycodes
+                        if is_postcode(nominatim_data):
+                            use_classic_radius = True
+
+                precision_data = nominatim_data
+                if nominatim_data and precision_guard != 'none':
+                    rejection = precision_rejection(
+                        precision_data, classic_data, precision_guard
+                    )
+                    if rejection is not None:
+                        match_metadata = summarize_candidate(
+                            classic_data, 'classic_fallback', classic_countrycodes
+                        )
+                        match_metadata.update({
+                            'strategy': 'classic_fallback',
+                            'guard': precision_guard,
+                            'guard_distance_m': rejection['distance_m'],
+                            'guard_old_radius_m': rejection['old_radius_m'],
+                            'guard_precision_radius_m': rejection['precision_radius_m'],
+                            'guard_threshold_m': rejection['threshold_m'],
+                            'selection': selection_info,
+                            'rejected_precision': summarize_candidate(
+                                precision_data, query_variant, used_countrycodes
+                            ),
+                        })
+                        nominatim_data = classic_data
+                        classic_fallback = True
+                        use_classic_radius = True
+
+                if nominatim_data and not classic_fallback:
+                    match_metadata = summarize_candidate(
+                        nominatim_data, query_variant, used_countrycodes
+                    )
+                    if selection_info:
+                        match_metadata.update(selection_info)
+            else:
+                for cc_try in _country_code_candidates(postal_code, country_code):
                     nominatim_data = query_nominatim(location, cc_try, use_cache=use_nominatim_cache)  # Query Nominatim with country code try
                     if nominatim_data:
                         break  # Break loop if Nominatim data is found
@@ -266,7 +535,16 @@ def examine_locations(members, refresh_uids=()):
             if nominatim_data:
                 member['lat'] = nominatim_data.get('lat', 'N/A')  # Update member's latitude
                 member['lon'] = nominatim_data.get('lon', 'N/A')  # Update member's longitude
-                member['radius'] = calculate_radius(nominatim_data.get('boundingbox'))  # Calculate radius
+                if strategy == 'precision' and not use_classic_radius:
+                    member['radius'] = calculate_radius_from_point(
+                        nominatim_data.get('boundingbox'),
+                        nominatim_data.get('lat'),
+                        nominatim_data.get('lon'),
+                    )
+                else:
+                    member['radius'] = calculate_radius(nominatim_data.get('boundingbox'))  # Calculate radius
+                if strategy == 'precision' and match_metadata is not None:
+                    member['_location_match'] = match_metadata
             else:
                 continue  # Continue to next member if no Nominatim data is found
 

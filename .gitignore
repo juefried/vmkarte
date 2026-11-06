@@ -181,3 +181,7 @@ cython_debug/
 
 # Local IDE run configurations
 .fleet/
+
+# Local working data (contains personal data)
+/local/
+/src/data_grabber/location-details.json

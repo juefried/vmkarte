@@ -11,7 +11,7 @@ Diese Anleitung beschreibt das Upgrade einer Installation, bei der der Datengrab
 
 - Die TTL-Bereiche für `user_details` und `nominatim` stehen jetzt in `cache_config.json`.
 - Die TTL wird pro Cacheeintrag zufällig gezogen. Das frühere 1-%-Thinning entfällt.
-- `--fast` wird weiterhin akzeptiert, hat aber keine Wirkung mehr. Die bestehende Cron- oder systemd-Konfiguration muss nicht geändert werden.
+- `--fast` wird weiterhin akzeptiert, hat aber keine Wirkung mehr. Für den Precision-Rollout muss die Cron- oder systemd-Konfiguration angepasst werden; siehe Abschnitt oben.
 - Jedes Mitglied erhält `profile_updated_at`. Die Karte zeigt im Popup `Stand: TT.MM.JJJJ`; der exakte Zeitstempel steht im Tooltip.
 - Alte Cacheeinträge bleiben gültig. Bei `user_details`-Einträgen ohne Zeitstempel wird der Abrufzeitpunkt aus dem bisherigen Ablaufdatum rekonstruiert.
 - Die neuen TTLs gelten nur für neu geschriebene Cacheeinträge. Der erste Lauf nach dem Upgrade erzwingt keine vollständige Aktualisierung.
@@ -21,6 +21,28 @@ Diese Anleitung beschreibt das Upgrade einer Installation, bei der der Datengrab
 - Es werden keine neuen Python-Pakete benötigt; `requirements.txt` bleibt unverändert.
 - Alle Laufzeitpfade werden script-relativ aufgelöst. Die Kartendaten gehen standardmäßig nach `<repo>/docker/webserver/www_data/shared`; für einen separaten Web-Root kann `VMKARTE_SHARED_DIR` gesetzt werden.
 - Das Debug-`members.json` wird nur mit `--debug` nach `src/data_grabber/members.json` geschrieben. Ohne `--debug` wird die Datei nicht erzeugt; vorhandene Kopien am aktuellen Pfad sowie in alten Shared-Verzeichnissen werden beim nächsten Lauf gelöscht.
+
+## Zusätzlich für Precision-Rollout (`feature/location-precision`)
+
+- Cron oder systemd auf die Precision-Strategie umstellen:
+
+  ```cron
+  VMKARTE_SHARED_DIR=/var/www/vmforum-karte/shared
+  33 3 * * * cd /pfad/zu/vmkarte/src/data_grabber && /pfad/zu/venv/bin/python data_grabber.py --location-strategy precision
+  ```
+
+  systemd entsprechend `ExecStart=.../data_grabber.py --location-strategy precision`.
+
+- `--fast` entfällt (war ohnehin wirkungslos).
+- `--write-location-details` wird in Produktion nicht gesetzt; die Datei dient nur der lokalen Auswertung.
+- Der erste Precision-Lauf füllt den Cache-Namespace `precision-v1` und kann mehrere Stunden dauern. Vor dem ersten Cron-/systemd-Lauf einmal manuell vorwärmen:
+
+  ```bash
+  cd /pfad/zu/vmkarte/src/data_grabber
+  /pfad/zu/venv/bin/python data_grabber.py --location-strategy precision
+  ```
+
+- Rollback: Parameter entfernen und Cron/systemd neu laden. Der Precision-Cache kann bleiben.
 
 ## Vorbereitung
 
@@ -106,7 +128,7 @@ Fehlt die Datei oder ein Wert, greifen diese Defaults. Ungültige Werte brechen 
 
 ## Datengrabber starten
 
-Die bestehende Cron- oder systemd-Konfiguration bleibt unverändert. Für einen manuellen Testlauf:
+Für das API-Upgrade bleibt die bestehende Cron- oder systemd-Konfiguration unverändert; für den Precision-Rollout siehe den Abschnitt oben. Für einen manuellen Testlauf:
 
 ```bash
 cd /pfad/zu/vmkarte/src/data_grabber
@@ -144,7 +166,7 @@ Die Variable muss in der Umgebung des Cron-/systemd-Laufs gesetzt sein. Beispiel
 
 ```cron
 VMKARTE_SHARED_DIR=/var/www/vmforum-karte/shared
-33 3 * * * cd /pfad/zu/vmkarte/src/data_grabber && /pfad/zu/venv/bin/python data_grabber.py
+33 3 * * * cd /pfad/zu/vmkarte/src/data_grabber && /pfad/zu/venv/bin/python data_grabber.py --location-strategy precision
 ```
 
 ```ini

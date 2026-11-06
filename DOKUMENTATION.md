@@ -71,7 +71,8 @@ vmkarte/
 │   │   ├── forum_api_lib.py            # XenForo-REST-API-Client
 │   │   ├── vehicle_label_lib.py        # Best-Guess-Resolver für Fahrzeuglabels
 │   │   ├── vehicle_label_map.json      # API-Optionswert → Anzeigename
-│   │   ├── location_nominatim_lib.py   # Nominatim-Abfragen und Radius
+│   │   ├── location_nominatim_lib.py   # Nominatim-Abfragen, Strategien und Radius
+│   │   ├── location_precision_lib.py   # Query-Varianten, Ranking, Radius (pure)
 │   │   ├── location_mapping_rules_lib.py # Orts-/Länder-/PLZ-Normalisierung
 │   │   ├── cache_config_lib.py         # Laden/Validieren der Cache-TTLs
 │   │   ├── paths_lib.py                # Einheitliche Laufzeitpfade
@@ -80,10 +81,14 @@ vmkarte/
 │   │   └── kuerzel_mapping.json        # Deutsche Kfz-/Ortskürzel → Ortsname
 │   ├── tests/
 │   │   ├── test_vehicle_labels.py      # Tests für Label-Resolver
-│   │   └── test_data_status.py         # Tests für data-status.json
+│   │   ├── test_data_status.py         # Tests für data-status.json
+│   │   ├── test_location_precision.py  # Tests für Auswahl und Ranking
+│   │   └── test_compare_locations.py   # Tests für den Standortvergleich
 │   └── utils/
 │       ├── clear_nominatim_cache.py    # Löscht den Nominatim-Cache
 │       ├── delete_user_cash_entry.py   # Löscht einen user_details-Cacheeintrag
+│       ├── freeze_location_baseline.py # Friert members.json + Karten-JSON ein
+│       ├── compare_locations.py        # Vergleicht Baseline und neuen Lauf
 │       └── vehicle_label_map_report.py # Report fehlender Fahrzeuglabels
 ├── docker/
 │   ├── cron/                           # Cron-Container für den Datengrabber
@@ -159,6 +164,11 @@ Einstiegspunkt und Orchestrierung.
 - CLI-Parameter `--refresh-members`: ignoriert den 23-Stunden-Cache `members_dict`, lädt alle Mitgliederseiten neu und ersetzt den Cache. Damit werden auch neu registrierte Benutzer innerhalb des 24-Stunden-Fensters gefunden.
 - CLI-Parameter `--refresh-user UID|NAME`: erzwingt einen frischen Profilabruf für einen Benutzer (Bypass von `user_details`). Mehrfach und kommagetrennt möglich. Akzeptiert numerische UIDs oder exakte Forennamen; mehrdeutige Namen führen zu einem Fehler mit den passenden UIDs. Ist das Ziel nicht im aktuellen Mitglieder-Cache, wird die Mitgliederliste automatisch einmal neu geladen. Für dieses Profil wird zusätzlich der Nominatim-Cache nicht gelesen; das frische Ergebnis wird mit neuer TTL gespeichert.
 - `--refresh-members` und `--refresh-user` lassen sich kombinieren. Dann stammen auch die Ortsangaben des Zielprofils garantiert aus der frisch geladenen Mitgliederliste.
+- CLI-Parameter `--location-strategy {classic,precision}`: wählt die Ortsauflösung. Default ist `classic`; `precision` ist die opt-in Alternative für den lokalen Vergleich und nutzt strukturierte Nominatim-Abfragen sowie einen separaten Cache-Namespace.
+- CLI-Parameter `--precision-guard {none,old-radius,disjoint}`: Sicherheitsnetz für `precision`. Default `disjoint` verwirft einen Precision-Kandidaten nur, wenn sich sein Bereich nicht mit dem Classic-Bereich überschneidet. `old-radius` ist strenger, `none` deaktiviert den Guard.
+- CLI-Parameter `--refresh-locations`: umgeht den Nominatim-Cache für alle Mitglieder. Sinnvoll beim lokalen Iterieren an der Ortslogik.
+- CLI-Parameter `--members-from PATH`: liest die Rohdaten aus einer eingefrorenen Debug-`members.json`, statt die Forum-API abzufragen. Damit laufen Baseline- und Vergleichslauf auf exakt derselben Mitgliederbasis. Nicht mit `--refresh-members` oder `--refresh-user` kombinierbar.
+- Mit `--write-location-details` schreibt ein Precision-Lauf zusätzlich `src/data_grabber/location-details.json` mit dem jeweils gewählten OSM-Objekt. Die Datei ist gitignoriert und wird nicht über den Web-Root ausgeliefert. In Produktion bleibt der Schalter aus.
 - Ohne `--debug` werden vorhandene `members.json`-Kopien am aktuellen Pfad sowie im Shared-/Web-Verzeichnis, im alten lokalen `shared/`-Verzeichnis und im Repository-Root gelöscht. Die Datei liegt außerhalb des Web-Roots.
 - `get_member_data()` ist aktiv.
 - Die Kartenausgabe erfolgt nach `docker/webserver/www_data/shared/vmforum_members.json` (Docker: `/app/shared/vmforum_members.json`).
@@ -220,10 +230,13 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 |---|---|---|---|
 | `members_dict` | `('members_dict', 'api-v1')` | 23 h | komplettes Mitglieder-Dictionary |
 | `user_details` | `('user_details', 'api-v1', uid)` | 7–14 Tage (konfigurierbar) | angereichertes Mitgliedsobjekt inkl. `profile_updated_at` |
-| `nominatim` | `('nominatim', searchstring, country_code)` | 180–365 Tage (konfigurierbar) | erfolgreiche Nominatim-Antworten |
-| `nominatim` (negativ) | `('nominatim', searchstring, country_code)` | 30 Tage (konfigurierbar) | Sentinel für „erfolgreich abgefragt, kein Treffer“ |
+| `nominatim` | `('nominatim', searchstring, country_code)` | 180–365 Tage (konfigurierbar) | erfolgreiche Nominatim-Antworten (classic) |
+| `nominatim` (negativ) | `('nominatim', searchstring, country_code)` | 30 Tage (konfigurierbar) | Sentinel für „erfolgreich abgefragt, kein Treffer“ (classic) |
+| `nominatim` (precision) | `('nominatim', 'precision-v1', variant, params, countrycodes)` | 180–365 Tage (konfigurierbar) | Rohkandidaten je strukturierter Query-Variante |
+| `nominatim` (precision, negativ) | wie oben | 30 Tage (konfigurierbar) | Sentinel für „Variante ohne Treffer“ |
 
 - Der Namespace `api-v1` trennt die API-Caches von den alten HTML-Scraper-Einträgen. Alte Einträge werden ignoriert und laufen mit ihrer bisherigen TTL aus.
+- Der Precision-Namespace `precision-v1` ist vom Classic-Schlüssel getrennt. Dadurch kann eine neue strukturierte Anfrage niemals den alten Freitext-Treffer aus dem Cache erhalten; neue Einträge werden unter dem neuen Schlüssel angelegt.
 - Die TTL wird für jeden neuen Cacheeintrag zufällig aus `cache_config.json` gezogen.
 - `--refresh-members` umgeht den `members_dict`-Cache. Ein leeres oder fehlerhaftes Ergebnis wird nicht gecacht.
 - `--refresh-user` umgeht `user_details` für die Ziel-UIDs und erzwingt einen Detailabruf.
@@ -256,15 +269,43 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 
 **`calculate_radius(boundingbox)`**
 
-- Berechnet die geodätische Distanz von der Bounding-Box-Mitte zur Nordwest-Ecke.
+- Berechnet die geodätische Distanz von der Bounding-Box-Mitte zur Nordwest-Ecke (Classic-Verhalten).
 - Gibt einen gerundeten Radius in Metern oder `'N/A'` zurück.
 
-**`examine_locations(members, refresh_uids=())`**
+**`query_nominatim_precision(location, place_name, postal_code, countrycodes, use_cache=True)`**
+
+- Opt-in Alternative zur Classic-Abfrage.
+- Baut strukturierte Query-Varianten in dieser Reihenfolge:
+  1. `city=<Ortsname>&postalcode=<PLZ>` (wenn beides bekannt ist)
+  2. `q=<Ortsname>` (ohne PLZ)
+  3. `postalcode=<PLZ>` (wenn nur die PLZ bekannt ist)
+  4. `q=<vollständige Angabe>` als Fallback
+- Stoppt vorzeitig, sobald eine Variante einen bevorzugten Treffer liefert (Siedlung bei bekanntem Ortsnamen, PLZ-Fläche bei reiner PLZ-Angabe).
+- Nutzt `limit=10` und wählt aus allen Kandidaten den besten Treffer über `rank_nominatim_candidates()`.
+- Cacht die Rohkandidaten jeder Variante unter `('nominatim', 'precision-v1', …)`; Classic-Einträge werden nie gelesen.
+
+**`location_precision_lib.py` (pure Helfer)**
+
+- `extract_place_name()` entfernt PLZ, Länderpräfix und Ländernamen aus der normalisierten Ortsangabe.
+- `build_precision_queries()` erzeugt die Query-Varianten.
+- `rank_nominatim_candidates()` ordnet Städte/Gemeinden, Regionen/Landkreise und Dörfer; PLZ-Flächen stehen zuletzt. Innerhalb einer Prioritätsstufe entscheidet die Nominatim-`importance` (absteigend); Namensgleichheit wird diakritiknormalisiert und ohne Klammer-/Verwaltungspräfixe verglichen (`Brügge` = `Brugge`, `Landkreis Ammerland` = `Ammerland`).
+- `candidate_is_good_enough()` steuert den frühen Abbruch der Varianten.
+- `choose_smaller_area()` vergleicht Siedlung und PLZ-Fläche über den klassischen Radius; die kleinere Fläche gewinnt, bei Gleichstand die PLZ-Fläche.
+- `postcode_matches()` prüft, ob ein Kandidat zur angegebenen PLZ gehört.
+- `calculate_radius_from_point()` berechnet den Radius als maximale Distanz vom gesetzten Marker zu den vier Bounding-Box-Ecken.
+- `calculate_radius_from_bbox_center()` liefert den klassischen Vergleichsradius für `compare_locations.py`.
+- `summarize_candidate()` speichert Query-Metadaten, `boundingbox` und `radius_classic` für den Standortvergleich.
+
+**`examine_locations(members, refresh_uids=(), strategy='classic', refresh_locations=False, precision_guard='disjoint')`**
 
 - Iteriert über das Dictionary `uid → Mitglied`.
 - Normalisiert den Ort, ermittelt Land/PLZ.
 - Probiert bei unbekanntem Land verschiedene Ländercode-Kombinationen.
 - Für UIDs in `refresh_uids` werden alle Nominatim-Abfragen mit `use_cache=False` ausgeführt. Alle anderen Mitglieder nutzen den Cache unverändert.
+- `refresh_locations=True` umgeht den Cache für alle Mitglieder.
+- `strategy='precision'` nutzt strukturierte Abfragen, PLZ-bewusste Flächenauswahl, Ranking und den marker-relativen Radius; `classic` bleibt Default und unverändert.
+- Bei `PLZ + Ortsname` wird zusätzlich die PLZ-Fläche aus dem Classic-Cache bzw. Precision-Cache verglichen; die kleinere Fläche gewinnt.
+- `precision_guard` (`disjoint` Default, `old-radius`, `none`) verwirft Precision-Kandidaten, wenn die Bereiche nicht überlappen bzw. der Marker außerhalb des alten Radius liegt.
 - Übernimmt `lat`, `lon`, `radius` nur bei erfolgreicher Nominatim-Antwort.
 - Mitglieder ohne Ortsangabe oder ohne Nominatim-Treffer werden nicht in die Ausgabe übernommen.
 
@@ -323,7 +364,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
   - `src/data_grabber/cache_config.json` → `/app/cache_config.json` (Default, wird durch den Compose-Mount überschrieben)
 - **Kopiert bewusst nicht** `members.json` oder `vmforum_members.json`. Beide Dateien sind Laufzeitartefakte: `members.json` entsteht durch `get_member_data()`, `vmforum_members.json` durch `examine_locations()`.
 - Voraussetzung dafür ist, dass der Scraper aktiv ist. Das ist seit der Rückkehr zum Masterstand wieder der Fall; siehe Befund C.
-- Cronjob: täglich 03:33 Uhr, `cd /app && python3 /app/data_grabber.py --fast` (`docker/cron/crontab:5`). `--fast` hat inzwischen keine Wirkung mehr.
+- Cronjob: täglich 03:33 Uhr, `cd /app && python3 /app/data_grabber.py --location-strategy precision` (`docker/cron/crontab:5`). `--fast` entfällt; die Kartenauflösung nutzt jetzt die Precision-Strategie mit dem Default-Guard `disjoint`. Die erste Ausführung füllt den Precision-Cache und kann mehrere Stunden dauern.
 
 **Web-Container** (`docker/webserver`)
 
@@ -590,6 +631,107 @@ Die Karte verwendet nicht die Wohnadresse, sondern die freiwillige Ortsangabe au
 - Positive Nominatim-Ergebnisse werden standardmäßig 180–365 Tage gecacht. Erfolgreiche Abfragen ohne Treffer werden 30 Tage negativ gecacht. Beide Werte sind über `cache_config.json` konfigurierbar; Exceptions werden nicht gecacht.
 - Durch die zufällige TTL laufen nicht alle Profile am selben Tag ab; die Aktualisierungen verteilen sich über den konfigurierten Zeitraum.
 - Die API kann `location` als `null` oder als Nicht-String liefern. `_extract_location()` behandelt das als leere Ortsangabe; solche Mitglieder werden nicht geocodiert.
+
+### 6.5 Präzisionsstrategie und lokaler Standortvergleich
+
+Die Classic-Strategie bevorzugt bei der Trefferauswahl `postal_code` vor Siedlungen. Das ist für reine PLZ-Angaben sinnvoll, kann aber bei kombinierten Angaben zu einer ungenaueren Position führen. Beispiel Ebersberg:
+
+| Eingabe | OSM-Objekt | Marker | Radius |
+|---|---|---|---|
+| `Ebersberg` | `administrative`/`town` | Stadtzentrum | ca. 6,3 km |
+| `85560 Ebersberg` | `postal_code`/`postcode` | im Ebersberger Forst, ca. 3,8 km vom Zentrum | ca. 10,1 km |
+
+Die PLZ-Fläche umfasst in OSM auch den Ebersberger Forst. Deshalb liegt der PLZ-Marker weiter weg und der Radius ist größer. Die `precision`-Strategie behebt das nicht punktuell, sondern systematisch:
+
+- strukturierte Nominatim-Abfragen (`city` + `postalcode`, `q` ohne PLZ, `postalcode` als Fallback),
+- Ranking: Städte/Gemeinden, dann Regionen/Landkreise, dann Dörfer; PLZ-Flächen zuletzt. Namensgleichheit wird diakritiknormalisiert und ohne Klammer-/Verwaltungspräfixe verglichen,
+- PLZ-bewusste Auswahl: Bei `PLZ + Ortsname` werden Siedlung und PLZ-Fläche verglichen; die kleinere vergleichbare Fläche gewinnt, bei Gleichstand die PLZ-Fläche. Das erhält urbane PLZ-Bereiche und wählt bei Ebersberg trotzdem die kleinere Stadtfläche,
+- Radius relativ zum gesetzten Marker statt zur Bounding-Box-Mitte,
+- Guard: Das Classic-Ergebnis bleibt erhalten, wenn die neue Fläche nicht mit der alten überlappt,
+- Fallback auf die vollständige Angabe, wenn keine strukturierte Variante greift.
+
+Ortsnamen-Sonderkorrekturen stehen in `country_mapping.json` (z. B. `Stockholm` → Schweden) und in `prepare_location()` (z. B. `Franken` → Bayern, `South Florida` → Florida, USA).
+
+`classic` bleibt Default; `precision` wird nur bewusst per CLI aktiviert. Da sich die Verbesserung nicht automatisch messen lässt, wird sie über eine eingefrorene Baseline und viele manuelle Stichproben in der Karte bewertet.
+
+**Ablauf für den lokalen Vergleich**
+
+1. Produktionsnahen Stand mit Debug-Rohdaten erzeugen:
+
+   ```bash
+   cd src/data_grabber
+   python data_grabber.py --debug
+   ```
+
+   `members.json` enthält die Rohdaten inklusive Adressangabe; `shared/vmforum_members.json` enthält die daraus ermittelten Koordinaten.
+
+2. Beide Dateien als Baseline einfrieren:
+
+   ```bash
+   python utils/freeze_location_baseline.py
+   ```
+
+   Ziel ist `local/baseline/members.json` und `local/baseline/vmforum_members.json`. Ein vorhandener Baseline-Stand wird nur mit `--force` überschrieben.
+
+3. Vergleichslauf auf derselben Mitgliederbasis:
+
+   ```bash
+   python data_grabber.py \
+     --members-from ../../local/baseline/members.json \
+     --location-strategy precision --write-location-details
+   ```
+
+   `--refresh-locations` erzwingt frische Nominatim-Abfragen. Ohne das Flag werden neue Precision-Einträge aus dem versionierten Cache verwendet. Classic- und Precision-Cache sind getrennt; ein alter Freitext-Treffer kann eine neue strukturierte Anfrage nicht bedienen.
+
+4. Änderungen sortiert ausgeben:
+
+   ```bash
+   python utils/compare_locations.py --output ../../local/compare/locations.csv
+   ```
+
+   Der Report verbindet `members.json` (Adresse) und `vmforum_members.json` (Koordinaten) über die UID, berechnet Verschiebung und Radius-Delta und sortiert nach Auffälligkeit. Mit `--write-location-details` liefert `location-details.json` aus dem Precision-Lauf zusätzlich das gewählte OSM-Objekt (`query_variant`, `type`, `addresstype`, `display_name`). Ausgabeformate: `.csv`, `.json` oder `.md`.
+
+   **Signale**
+
+   - `outside_old_radius`: Der neue Marker liegt außerhalb des alten Radius-Kreises (`distance > old_radius`).
+   - `areas_disjoint`: Alter und neuer Kreis überschneiden sich nicht (`distance > old_radius + neuer_radius`).
+   - `radius_grew` / `radius_shrank`: Der neue Radius ist größer bzw. kleiner als der alte.
+   - `radius_not_comparable`: Für den Vergleich fehlt ein numerischer alter oder neuer Radius.
+   - `precision_rejected`: Der Precision-Kandidat wurde vom Guard verworfen; Classic bleibt erhalten.
+
+   **Precision-Guard**
+
+   `--precision-guard disjoint` (Default) verwirft einen Precision-Kandidaten nur, wenn sich sein Bereich nicht mit dem Classic-Bereich überschneidet (`distance > old_radius + precision_radius`). Das verhindert weit entfernte Fehltreffer, ohne sinnvolle Präzisierungen aus einem sehr kleinen alten Punkt-Radius zu blockieren. `old-radius` verwirft jeden Marker außerhalb des alten Kreises und ist deutlich strenger. `none` deaktiviert den Guard.
+
+   Bei aktivem `--write-location-details` werden verworfene Fälle in `location-details.json` mit `strategy=classic_fallback`, `guard`, `guard_distance_m`, `guard_threshold_m` und dem verworfenen Kandidaten (`rejected_precision`) gespeichert und im Report mit `--focus rejected` angezeigt.
+
+   **Radius-Basis**
+
+   Alt und neu berechnen den Radius unterschiedlich: `classic` nutzt die halbe Diagonale ab der Bounding-Box-Mitte, `precision` die maximale Distanz vom Marker zur Bounding-Box-Ecke. Damit Radius-Wachstum nicht allein durch diese Formeländerung entsteht, ermittelt `compare_locations.py` für das neue OSM-Objekt zusätzlich den klassischen Radius:
+
+   1. direkt aus `radius_classic` in `location-details.json`,
+   2. aus der dort gespeicherten `boundingbox`,
+   3. aus dem Precision-Cache anhand von `query_variant`, `countrycodes`, `osm_type` und `osm_id`.
+
+   `--radius-basis auto` (Default) nutzt den abgeleiteten Wert, wenn verfügbar, sonst den Karten-Radius. `map` und `derived` erzwingen die jeweilige Basis; bei `derived` ohne ableitbaren Wert wird der Fall als nicht vergleichbar markiert. Der Report weist `radius_basis`, `radius_map_m`, `radius_classic_m` und `effective_radius_m` pro Zeile aus.
+
+   **Filter und Sortierung**
+
+   - `--focus suspicious` (Default): außerhalb des alten Radius oder Radius gewachsen.
+   - `--focus all` bzw. `--all`: alle Änderungen.
+   - `--focus outside-old-radius` bzw. `--focus radius-grew`: nur das jeweilige Signal.
+   - `--focus radius-shrank` bzw. `--focus improvements`: nur Fälle mit kleinerem Radius, die nicht außerhalb des alten Radius liegen und sich nicht überschneiden (echte Verbesserungen).
+   - `--focus rejected`: vom Precision-Guard verworfene Kandidaten.
+   - `--user UID|NAME`: zeigt einen detaillierten Einzelbericht (auch für unveränderte Mitglieder). Mehrfach und kommagetrennt möglich.
+   - `--min-radius-growth-m` und `--min-radius-growth-pct` steuern die Wachstumsschwelle.
+   - Sortierung: getrennte Kreise, außerhalb des alten Radius, Radius gewachsen, verworfene Precision, danach Distanz und Radius-Delta.
+   - `--output` schreibt alle Änderungen inklusive Flags; mit `--user` nur die ausgewählten Benutzer. `--focus` filtert nur die Konsole.
+
+   **Objektbezeichnung im Einzelbericht**
+
+   `--user` zeigt eine bereinigte Bezeichnung aus `name`, `addresstype` sowie Landkreis/Bundesland, dazu OSM-ID, rohe Nominatim-Adresse und die Adressfelder. Das Adressfeld `municipality` wird bewusst nicht in die Kurzbezeichnung übernommen, weil es irreführend sein kann: Die Stadt Ebersberg (Relation 929913) trägt in Nominatim z. B. `municipality=Baiern (VGem Glonn)`, obwohl der Marker in Ebersberg und 13 km von Baiern entfernt liegt. Die Kurzbezeichnung lautet dort `Ebersberg (town), Landkreis Ebersberg, Bayern`; die rohe Adresse bleibt als separate Zeile sichtbar.
+
+Der gesamte Ordner `local/` und `location-details.json` enthalten personenbezogene Daten und sind gitignoriert (`/local/`, `/src/data_grabber/location-details.json`).
 
 ---
 
@@ -1291,6 +1433,18 @@ Die früheren Nominatim-Korrekturen (User-Agent, Timeout, Negativ-Cache) bleiben
 ---
 
 ## 16. Geänderte Dateien
+
+### 06.11.2026 (Branch `feature/location-precision`)
+
+- `src/data_grabber/libs/location_precision_lib.py`: pure Helfer für Ortsnamen-Extraktion, strukturierte Query-Varianten, Kandidaten-Ranking und marker-relativen Radius. Ranking nutzt Städte/Gemeinden, Regionen/Landkreise und Dörfer in dieser Reihenfolge, die Nominatim-`importance` vor `place_rank` und vergleicht Namen diakritiknormalisiert inklusive Klammer-/Verwaltungspräfixen; mehrteilige Ortsnamen, die zugleich Länder-Alias sind (z. B. `New York`), bleiben vollständig erhalten. `choose_smaller_area()` wählt bei PLZ+Name die kleinere Fläche (bei Gleichstand PLZ), der Guard `precision_rejection()` kennt `disjoint` und `old-radius`.
+- `src/data_grabber/libs/location_nominatim_lib.py`: opt-in Strategie `precision`, versionierter Cache-Namespace `precision-v1`, PLZ-bewusste Flächenauswahl, `refresh_locations` und Precision-Guard (`disjoint` Default); `classic` bleibt unverändert.
+- `src/data_grabber/data_grabber.py`: neue Parameter `--location-strategy`, `--precision-guard`, `--refresh-locations`, `--members-from` und `--write-location-details`; schreibt bei `precision` nur mit `--write-location-details` zusätzlich `location-details.json`.
+- `src/data_grabber/libs/country_mapping.json` und `libs/location_mapping_rules_lib.py`: Korrekturen für eindeutig falsche Ortsangaben, u. a. `Stockholm` → Schweden, `Franken` → Bayern, `South Florida` → Florida, USA.
+- `src/data_grabber/libs/paths_lib.py`: Pfad für `location-details.json`.
+- `src/data_grabber/utils/freeze_location_baseline.py`: friert `members.json` und `vmforum_members.json` unter `local/baseline/` ein.
+- `src/data_grabber/utils/compare_locations.py`: sortierter Standortvergleich mit CSV-, JSON- und Markdown-Ausgabe sowie den Signalen `outside_old_radius`, `areas_disjoint`, `radius_grew`, `radius_shrank` und `precision_rejected`. Der Radius wird standardmäßig über den klassisch abgeleiteten Radius des neuen OSM-Objekts verglichen (Cache-Fallback auf den Karten-Radius). `--focus rejected` zeigt Guard-Verwürfe, `--user UID|NAME` einen detaillierten Einzelbericht mit bereinigter Objektbezeichnung (ohne irreführendes `municipality`), OSM-ID und roher Nominatim-Adresse.
+- `src/data_grabber/tests/test_location_precision.py` und `test_compare_locations.py`: Tests für Parsing, Ranking, Cache-Trennung, Radius, Guard, Mapping-Korrekturen, Benutzerauflösung und Vergleich.
+- `README.md`, `DOKUMENTATION.md`, `.gitignore`: lokalen Vergleichsablauf dokumentiert; `local/` und `location-details.json` wegen personenbezogener Daten ignoriert.
 
 ### 31.10.2026
 
