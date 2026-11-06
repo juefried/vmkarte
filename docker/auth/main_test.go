@@ -88,6 +88,30 @@ func TestReadCredentialsNormalizesBcryptPrefix(t *testing.T) {
 	}
 }
 
+func TestReadCredentialsPrefersBcryptOverLegacy(t *testing.T) {
+	hash, err := bcrypt.GenerateFromPassword([]byte("secret"), bcrypt.MinCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), ".htpasswd")
+	content := "vmkarte:$apr1$legacy$not-used\n" +
+		"vmkarte:" + string(hash) + "\n"
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got, found, err := readCredentials(path, "vmkarte")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !found {
+		t.Fatal("user not found")
+	}
+	if err := bcrypt.CompareHashAndPassword(got, []byte("secret")); err != nil {
+		t.Fatalf("bcrypt hash was not preferred: %v", err)
+	}
+}
+
 func TestSanitizeNext(t *testing.T) {
 	cases := map[string]string{
 		"":                     "/",

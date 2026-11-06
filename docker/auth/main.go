@@ -427,6 +427,8 @@ func readCredentials(path, username string) ([]byte, bool, error) {
 	if err != nil {
 		return nil, false, err
 	}
+
+	var lastHash, lastBcrypt string
 	for _, line := range strings.Split(string(raw), "\n") {
 		line = strings.TrimSpace(strings.TrimSuffix(line, "\r"))
 		if line == "" || strings.HasPrefix(line, "#") {
@@ -436,11 +438,32 @@ func readCredentials(path, username string) ([]byte, bool, error) {
 		if !ok {
 			continue
 		}
-		if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(user)), []byte(username)) == 1 {
-			return []byte(normalizeBcrypt(strings.TrimSpace(hash))), true, nil
+		if subtle.ConstantTimeCompare([]byte(strings.TrimSpace(user)), []byte(username)) != 1 {
+			continue
+		}
+		normalized := normalizeBcrypt(strings.TrimSpace(hash))
+		lastHash = normalized
+		if isBcryptHash(normalized) {
+			lastBcrypt = normalized
 		}
 	}
+
+	// A legacy $apr1$ line may still precede a newly appended bcrypt line.
+	// Prefer the last bcrypt entry so the bcrypt migration works without
+	// manually rewriting an existing file first.
+	if lastBcrypt != "" {
+		return []byte(lastBcrypt), true, nil
+	}
+	if lastHash != "" {
+		return []byte(lastHash), true, nil
+	}
 	return nil, false, nil
+}
+
+func isBcryptHash(hash string) bool {
+	return strings.HasPrefix(hash, "$2a$") ||
+		strings.HasPrefix(hash, "$2b$") ||
+		strings.HasPrefix(hash, "$2y$")
 }
 
 func normalizeBcrypt(hash string) string {

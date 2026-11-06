@@ -62,6 +62,47 @@ grep -c ':\$2[aby]\$' config/.htpasswd
 # erwartet: 1
 ```
 
+Falls für denselben Benutzer noch eine alte `$apr1$`-Zeile vorhanden ist:
+Der Auth-Service bevorzugt die letzte bcrypt-Zeile. Besser ist trotzdem, die
+alte Zeile zu entfernen und nur eine bcrypt-Zeile pro Benutzer zu behalten.
+
+## Passwort wird nicht akzeptiert
+
+Zuerst die Datei im Container prüfen (zeigt nur Zeilennummer, Benutzername,
+Hash-Präfix und Länge, nicht den Hash):
+
+```bash
+docker compose exec auth \
+  awk -F: '{print NR, $1, substr($2,1,4), length($2)}' \
+  /run/secrets/htpasswd
+```
+
+Erwartet: genau eine passende Zeile mit Präfix `$2y$` oder `$2b$`.
+
+Hash und Passwort unabhängig mit Apache prüfen:
+
+```bash
+docker run --rm -it \
+  -v "$PWD/config/.htpasswd:/tmp/.htpasswd:ro" \
+  httpd:2.4-alpine htpasswd -v /tmp/.htpasswd BENUTZER
+```
+
+Falls das fehlschlägt, die Zeile direkt in der Datei aktualisieren:
+
+```bash
+docker run --rm -it \
+  -v "$PWD/config:/config" \
+  httpd:2.4-alpine htpasswd -B -C 12 /config/.htpasswd BENUTZER
+
+sudo chown 10001:10001 config/.htpasswd
+sudo chmod 600 config/.htpasswd
+
+docker compose up -d --force-recreate auth
+```
+
+Der Login-Benutzername muss exakt dem Benutzernamen in der Datei entsprechen
+(Groß-/Kleinschreibung beachten).
+
 ## Signaturschlüssel
 
 ```bash
