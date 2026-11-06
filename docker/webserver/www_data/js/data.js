@@ -104,7 +104,7 @@ export function deriveStatusFromLastModified(lastModified, memberCount) {
 	};
 }
 
-export function formatStatusText({ generatedAt, source, updateFailed, stale } = {}) {
+export function formatStatusText({ generatedAt, source, updateFailed, stale, offline } = {}) {
 	const timestamp = generatedAt ? formatStatusTimestamp(generatedAt) : 'unbekannt';
 	const sourceLabel = source === 'server' ? 'Server' : 'lokal';
 
@@ -113,6 +113,8 @@ export function formatStatusText({ generatedAt, source, updateFailed, stale } = 
 		text += ' (Aktualisierung fehlgeschlagen)';
 	if (stale)
 		text += ' · älter als 48 h';
+	if (offline)
+		text += ' · offline';
 
 	return text;
 }
