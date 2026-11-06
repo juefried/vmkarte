@@ -275,6 +275,10 @@ curl -i -c cookies.txt -b cookies.txt \
   --data-urlencode 'next=/'
 unset VMKARTE_USER VMKARTE_PASSWORD
 
+# -c cookies.txt legt die Cookie-Datei an; -b liest sie.
+# Die Datei liegt im aktuellen Arbeitsverzeichnis.
+# Nach den Tests: rm -f cookies.txt
+
 # Mit Sitzung
 curl -i -b cookies.txt https://karte.jfr-service.de/shared/vmforum_members.json
 # 200
