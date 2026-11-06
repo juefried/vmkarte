@@ -337,7 +337,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - `karte.html` ist die App-Shell. Styles liegen in `css/app.css`, das JavaScript in `js/app.js` und den Modulen `js/data.js`, `js/storage.js`, `js/status-ui.js`, `js/hashtags.js` und `js/search-suggestions.js`.
 - Lädt `shared/vmforum_members.json` und `shared/data-status.json`.
 - Speichert den zuletzt geladenen Stand in IndexedDB (`vmkarte`, Store `kv`) und zeigt ihn beim Start sofort an. Ohne lokalen Stand erscheint `Kartendaten werden geladen …`.
-- Gleicht im Hintergrund mit dem Server ab und nutzt ETag/`304`, wenn ein lokaler Stand vorhanden ist. Der manuelle Button `Kartendaten aktualisieren` lädt ohne HTTP-Cache.
+- Gleicht im Hintergrund mit dem Server ab und nutzt ETag/`304`, wenn ein lokaler Stand vorhanden ist. Der manuelle Button `Kartendaten aktualisieren` lädt ohne HTTP-Cache und prüft zusätzlich die App-Version.
 - Zeigt unten links den Datenstand inklusive Quelle `Server`/`lokal`, Warnung bei mehr als 48 Stunden und `runStartedAt` im Tooltip. Die Anzeige blendet nach einigen Sekunden aus und erscheint bei Änderungen erneut.
 - Zeigt bei fehlender Verbindung ein dauerhaftes Offline-Badge; der Status ergänzt `· offline`.
 - Die Buttons sind kompakte Lucide-Icons (`filter-x`, `refresh-cw`, `log-out`) mit weißen Symbolen auf farbigem Hintergrund; die Größen skalieren responsiv.
@@ -390,7 +390,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 ### 5.8 Service Worker und Offline
 
 - `js/app.js` registriert `/service-worker.js` mit Scope `/`.
-- Cache `vmkarte-shell-v11` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html`, `offline.html`, `js/version.js` und `js/version-check.js`.
+- Cache `vmkarte-shell-v12` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html`, `offline.html`, `js/version.js` und `js/version-check.js`.
 - Navigationen laufen network-first mit Fallback auf den angeforderten Cache-Eintrag, `/karte.html`, `/` und schließlich `/offline.html`.
 - Statische Assets laufen stale-while-revalidate.
 - `/shared/`, `/login`, `/logout`, `/session-check`, `/_internal/session-check` und `/app-version.json` bleiben network-only. `data-status.json` liegt unter `/shared/` und wird daher nie gecacht.
@@ -424,7 +424,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
   - `screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
   - Die Screenshots zeigen ausschließlich fiktive Testmarker, keine echten
     Mitgliederdaten.
-- Der Service-Worker-Cache `vmkarte-shell-v11` enthält Manifest, Icons und
+- Der Service-Worker-Cache `vmkarte-shell-v12` enthält Manifest, Icons und
   Screenshots.
 - Chrome-Installability-Check: keine Manifest-, Installability- oder
   Screenshot-Warnungen.
