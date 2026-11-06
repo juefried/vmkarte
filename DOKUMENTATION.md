@@ -4,6 +4,12 @@
 **Gegenstand:** Analyse des bestehenden Codes, Dokumentation der Architektur und Eingrenzung der aktuellen Fehlerursachen.
 
 > **Aktueller Stand 31.10.2026:** Der HTML-Scraper wurde durch einen XenForo-REST-API-Client (`src/data_grabber/libs/forum_api_lib.py`) ersetzt. Die Abschnitte 1 und 9–12 dokumentieren die historische HTML-Scraper-Analyse. Maßgeblich für den aktuellen Betrieb sind die Abschnitte 2–8, 13–18 sowie `README.md`.
+>
+> **Release 3.0 (Branch `release/3.0-pwa`):** HTTP Basic Authentication ist
+> durch einen Go-Auth-Service und formularbasierte Anmeldung ersetzt. nginx
+> schützt Karte und Mitgliederdaten über `auth_request`. Die Abschnitte 5.7 und
+> 8 beschreiben noch den alten Basic-Auth-Stand. Aktuelle Deployment-Hinweise:
+> [docs/upgrade-3.0-auth.md](docs/upgrade-3.0-auth.md).
 
 ---
 
