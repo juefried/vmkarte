@@ -931,9 +931,12 @@ async function create_map() {
 	);
 
 	// Add the input form as a Leaflet control into the top right corner.
+	const search_controls = document.getElementById('search_controls');
 	const search_control = new L.Control({ position: 'topright'});
-	search_control.onAdd = map => document.getElementById('search_controls');
+	search_control.onAdd = map => search_controls;
 	search_control.addTo(map);
+	L.DomEvent.disableClickPropagation(search_controls);
+	L.DomEvent.disableScrollPropagation(search_controls);
 
 	// Update the markers immediately when the filter dropdown changes; a
 	// suggestion pick is handled by select_search_suggestion().

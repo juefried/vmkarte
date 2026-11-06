@@ -345,7 +345,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - Erstellt eine Leaflet-Karte mit MarkerCluster.
 - Zeigt die vorgeschriebene Attribution im Leaflet-Attribution-Control unten rechts: „© OpenStreetMap-Mitwirkende, ODbL“ sowie „Geocoding: Nominatim“.
 - Filtert nach URL-Parametern und Formularfeldern.
-- Das Suchfeld zeigt bei Fokus und leerem Inhalt nur Hashtags; beim Tippen werden Namen, Fahrzeuglabels und Hashtags case-insensitiv gefiltert, häufige Werte zuerst. Die Vorschlagsliste ist auf etwa sechs Zeilen begrenzt, bleibt scrollbar und liegt direkt unter dem Eingabefeld.
+- Das Suchfeld zeigt bei Fokus und leerem Inhalt nur Hashtags; beim Tippen werden Namen, Fahrzeuglabels und Hashtags case-insensitiv gefiltert, häufige Werte zuerst. Die Vorschlagsliste ist auf etwa sechs Zeilen begrenzt, bleibt scrollbar und liegt direkt unter dem Eingabefeld. Scrollen und Wischen auf der Liste bewegen die Karte nicht.
 - Zeigt Name, Velomobil, Liegerad, Trike, Freitext/Hashtags und den Stand der Profildaten im Popup.
 - Links zu Forenprofilen öffnen in einem neuen Tab; Hashtag-Links filtern die Karte weiterhin im selben Tab.
 - Hashtags werden aus dem Freitextfeld `other` erkannt: `#`, danach ein Unicode-Buchstabe und mindestens ein weiteres Unicode-Buchstaben-, Ziffern- oder Unterstrichzeichen. Umlaute, Akzente und nicht-lateinische Buchstaben sind erlaubt.
@@ -390,7 +390,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 ### 5.8 Service Worker und Offline
 
 - `js/app.js` registriert `/service-worker.js` mit Scope `/`.
-- Cache `vmkarte-shell-v12` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html`, `offline.html`, `js/version.js` und `js/version-check.js`.
+- Cache `vmkarte-shell-v13` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html`, `offline.html`, `js/version.js` und `js/version-check.js`.
 - Navigationen laufen network-first mit Fallback auf den angeforderten Cache-Eintrag, `/karte.html`, `/` und schließlich `/offline.html`.
 - Statische Assets laufen stale-while-revalidate.
 - `/shared/`, `/login`, `/logout`, `/session-check`, `/_internal/session-check` und `/app-version.json` bleiben network-only. `data-status.json` liegt unter `/shared/` und wird daher nie gecacht.
@@ -424,7 +424,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
   - `screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
   - Die Screenshots zeigen ausschließlich fiktive Testmarker, keine echten
     Mitgliederdaten.
-- Der Service-Worker-Cache `vmkarte-shell-v12` enthält Manifest, Icons und
+- Der Service-Worker-Cache `vmkarte-shell-v13` enthält Manifest, Icons und
   Screenshots.
 - Chrome-Installability-Check: keine Manifest-, Installability- oder
   Screenshot-Warnungen.
@@ -1435,6 +1435,14 @@ Die früheren Nominatim-Korrekturen (User-Agent, Timeout, Negativ-Cache) bleiben
 ---
 
 ## 16. Geänderte Dateien
+
+### 06.11.2026 (Branch `feature/search-suggestions-scroll`)
+
+- `docker/webserver/www_data/js/app.js`: Wheel-, Maus- und Touch-Ereignisse der Suchsteuerung werden nicht mehr an die Leaflet-Karte weitergereicht.
+- `docker/webserver/www_data/css/app.css`: `touch-action: pan-y` für die Vorschlagsliste, damit Wischgesten nativ scrollen.
+- `docker/webserver/www_data/service-worker.js`: Cache auf `vmkarte-shell-v13` erhöht.
+- `tests/browser/phase9-cdp.mjs`: Regressionstest für Scrollen und Event-Trennung der Vorschlagsliste.
+- `DOKUMENTATION.md`: Verhalten der Vorschlagsliste und Cache-Version aktualisiert.
 
 ### 06.11.2026 (Branch `feature/location-precision`)
 
