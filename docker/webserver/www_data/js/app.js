@@ -37,6 +37,7 @@ let cachedEtag = null;
 let cachedLastModified = null;
 let updateInProgress = false;
 let update_reload_pending = false;
+let update_message_visible = false;
 
 // Make the div element #map cover the whole window.
 function resize_map_to_full_window()
@@ -214,6 +215,7 @@ function show_update_message() {
 	if (!statusUi)
 		return;
 
+	update_message_visible = true;
 	statusUi.setMessage({
 		type: 'info',
 		text: 'Eine neue Version ist verfügbar.',
@@ -457,7 +459,8 @@ async function syncFromServer({ manual = false } = {}) {
 
 		if (members.length > 0) {
 			show_current_status(false);
-			statusUi.clearMessage();
+			if (!update_message_visible)
+				statusUi.clearMessage();
 			if (manual)
 				statusUi.setMessage({ type: 'success', text: 'Kartendaten aktualisiert.' });
 		}
