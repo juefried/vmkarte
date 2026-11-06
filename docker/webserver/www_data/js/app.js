@@ -3,9 +3,12 @@ import { createStatusUi } from './status-ui.js';
 import { validateMembers, parseDataStatus, deriveStatusFromLastModified } from './data.js';
 import { resolveInitialMapState, filterSearchString, FILTER_PARAMS, shouldPersistMapState } from './map-state.js';
 import { describeGeolocationError, GEOLOCATION_OPTIONS } from './location.js';
+import { APP_VERSION } from './version.js';
+import { parseAppVersion, isNewVersion } from './version-check.js';
 
 const DATA_STATUS_URL = 'shared/data-status.json';
 const MEMBERS_URL = 'shared/vmforum_members.json';
+const APP_VERSION_URL = 'app-version.json';
 
 // Global variables
 var map;
@@ -33,6 +36,7 @@ let statusUi;
 let cachedEtag = null;
 let cachedLastModified = null;
 let updateInProgress = false;
+let update_reload_pending = false;
 
 // Make the div element #map cover the whole window.
 function resize_map_to_full_window()
@@ -206,7 +210,7 @@ async function handleUnauthorized() {
 	window.location.assign('/login?next=' + next);
 }
 
-function show_update_message(registration) {
+function show_update_message() {
 	if (!statusUi)
 		return;
 
@@ -215,18 +219,76 @@ function show_update_message(registration) {
 		text: 'Eine neue Version ist verfügbar.',
 		actionLabel: 'Neu laden',
 		autoHideMs: 0,
-		onRetry: () => {
-			const waiting = registration.waiting;
-			if (!waiting) {
-				window.location.reload();
-				return;
-			}
-			navigator.serviceWorker.addEventListener('controllerchange', () => {
-				window.location.reload();
-			}, { once: true });
-			waiting.postMessage({ type: 'SKIP_WAITING' });
-		},
+		onRetry: request_update_reload,
 	});
+}
+
+async function find_waiting_worker(timeoutMs = 3000) {
+	if (!('serviceWorker' in navigator))
+		return null;
+
+	let registration;
+	try {
+		registration = await navigator.serviceWorker.getRegistration();
+	}
+	catch (error) {
+		console.warn('Service Worker konnte nicht abgefragt werden.', error);
+		return null;
+	}
+	if (!registration)
+		return null;
+
+	try {
+		await registration.update();
+	}
+	catch (error) {
+		console.warn('Service Worker konnte nicht aktualisiert werden.', error);
+	}
+
+	const end = Date.now() + timeoutMs;
+	while (Date.now() < end) {
+		if (registration.waiting)
+			return registration.waiting;
+		await new Promise(resolve => setTimeout(resolve, 100));
+	}
+	return registration.waiting || null;
+}
+
+async function request_update_reload() {
+	if (update_reload_pending)
+		return;
+	update_reload_pending = true;
+
+	const waiting = await find_waiting_worker();
+	if (!waiting) {
+		window.location.reload();
+		return;
+	}
+
+	navigator.serviceWorker.addEventListener('controllerchange', () => {
+		window.location.reload();
+	}, { once: true });
+	waiting.postMessage({ type: 'SKIP_WAITING' });
+}
+
+async function check_app_version() {
+	try {
+		const response = await fetch(APP_VERSION_URL, {
+			cache: 'no-store',
+			credentials: 'same-origin',
+		});
+		if (!response.ok)
+			return;
+
+		const remote = parseAppVersion(await response.json());
+		if (!remote || !isNewVersion(APP_VERSION, remote.version))
+			return;
+
+		show_update_message();
+	}
+	catch (error) {
+		console.warn('App-Version konnte nicht geprüft werden.', error);
+	}
 }
 
 async function register_service_worker() {
@@ -236,7 +298,7 @@ async function register_service_worker() {
 	try {
 		const registration = await navigator.serviceWorker.register('/service-worker.js');
 		if (registration.waiting && navigator.serviceWorker.controller)
-			show_update_message(registration);
+			show_update_message();
 
 		registration.addEventListener('updatefound', () => {
 			const worker = registration.installing;
@@ -244,7 +306,7 @@ async function register_service_worker() {
 				return;
 			worker.addEventListener('statechange', () => {
 				if (worker.state === 'installed' && navigator.serviceWorker.controller)
-					show_update_message(registration);
+					show_update_message();
 			});
 		});
 	}
@@ -843,6 +905,7 @@ async function create_map() {
 
 	syncFromServer();
 	register_service_worker();
+	check_app_version();
 
 	// Add the accessKey of the element to its tooltip.
 	Object
