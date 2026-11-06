@@ -151,6 +151,75 @@ Die Ortsangabe stammt aus der Mitgliederliste. Ohne `--refresh-members` kann sie
 python data_grabber.py --refresh-members --refresh-user 12345
 ```
 
+## Lokale Ortsauflösung vergleichen
+
+Die alternative Strategie `precision` ist nur für den lokalen Test gedacht; Default bleibt `classic`. Sie wird im Branch `feature/location-precision` entwickelt. Bei `PLZ + Ortsname` vergleicht sie Siedlung und PLZ-Fläche und nimmt die kleinere Fläche (bei Gleichstand die PLZ), damit sowohl Ebersberg als auch Berlin/Hamburg sinnvoll aufgelöst werden.
+
+```bash
+cd src/data_grabber
+
+# 1. Produktionsnahen Stand inkl. Debug-Rohdaten erzeugen
+python data_grabber.py --debug
+
+# 2. members.json + vmforum_members.json als feste Ausgangsbasis einfrieren
+python utils/freeze_location_baseline.py
+
+# 3. Vergleichslauf auf derselben Mitgliederbasis
+python data_grabber.py --members-from ../../local/baseline/members.json \
+  --location-strategy precision --write-location-details
+
+# 4. Änderungen sortiert ausgeben (.csv, .json oder .md)
+python utils/compare_locations.py --output ../../local/compare/locations.csv
+```
+
+`members.json` enthält die Adressangaben (Rohdaten), `vmforum_members.json` die daraus ermittelten Koordinaten. Der Report verbindet beide über die UID und sortiert nach Auffälligkeit. Mit `--write-location-details` schreibt der Precision-Lauf zusätzlich `location-details.json`; darin steht, welches OSM-Objekt gewählt wurde (`type`, `addresstype`, `display_name`). In Produktion wird diese Datei nicht geschrieben.
+
+Der Report markiert zwei Signale:
+
+- `outside_old_radius`: Der neue Marker liegt außerhalb des alten Radius-Kreises.
+- `areas_disjoint`: Alter und neuer Kreis überschneiden sich nicht.
+- `radius_grew` / `radius_shrank`: Der neue Radius ist größer bzw. kleiner als der alte.
+- `precision_rejected`: Der Precision-Kandidat wurde vom Guard verworfen, der Classic-Standort bleibt erhalten.
+
+`--focus improvements` (Alias `radius-shrank`) zeigt gezielt die Verbesserungen: kleinerer Radius und nicht außerhalb des alten Radius. `--focus rejected` zeigt die vom Guard verworfenen Precision-Kandidaten.
+
+Der Guard ist standardmäßig `disjoint`: Er verwirft nur, wenn sich alter und neuer Bereich gar nicht überschneiden. `--precision-guard old-radius` ist strenger, `none` deaktiviert ihn beim Geocoding-Lauf.
+
+Ortsnamen-Korrekturen liegen in `libs/country_mapping.json` und in `prepare_location()` (`libs/location_mapping_rules_lib.py`), z. B. `Stockholm` → Schweden, `Franken` → Bayern, `South Florida` → Florida.
+
+Für den Radius wird standardmäßig der **klassisch abgeleitete Radius des neuen OSM-Objekts** mit dem alten Radius verglichen (`radius_basis=derived`). Damit erzeugt die geänderte Radiusformel keine Fehlalarme. Ist der klassische Radius nicht ableitbar, wird der Karten-Radius verwendet (`radius_basis=map`); der Report weist die Basis pro Zeile aus.
+
+Wichtige Optionen:
+
+```bash
+# Nur Auffälligkeiten (Default), alle Änderungen oder gezielte Signale
+python utils/compare_locations.py --focus suspicious
+python utils/compare_locations.py --all
+python utils/compare_locations.py --focus outside-old-radius
+python utils/compare_locations.py --focus radius-grew
+python utils/compare_locations.py --focus improvements  # nur Radius-Verbesserungen
+python utils/compare_locations.py --focus rejected      # vom Guard verworfen
+
+# Einzelnen Benutzer detailliert anzeigen (UID oder exakter Name)
+python utils/compare_locations.py --user JohnDoe
+python utils/compare_locations.py --user 11538
+# Zeigt eine bereinigte Objektbezeichnung, OSM-ID und die rohe Nominatim-Adresse.
+# Das irreführende Adressfeld "municipality" (z. B. Ebersberg/Baiern) wird nicht
+# in die Kurzbezeichnung übernommen.
+
+# Schwellen für Radius-Wachstum
+python utils/compare_locations.py --min-radius-growth-m 500 --min-radius-growth-pct 20
+
+# Radius-Basis erzwingen
+python utils/compare_locations.py --radius-basis map
+```
+
+`--output` schreibt immer alle Änderungen inklusive Flags (`--focus` filtert nur die Konsolenausgabe).
+
+Precision-Abfragen nutzen den getrennten Cache-Namespace `precision-v1`; ein alter Classic-Treffer kann sie nicht bedienen. Mit `--refresh-locations` werden alle Nominatim-Abfragen frisch ausgeführt.
+
+`local/baseline/` und `src/data_grabber/location-details.json` enthalten personenbezogene Daten und sind gitignoriert.
+
 ## Release 3.0 (Branch `release/3.0-pwa`)
 
 - [Auth-Service und formularbasierte Anmeldung](docs/upgrade-3.0-auth.md)
