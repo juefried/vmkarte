@@ -30,7 +30,7 @@ if (!CHROME)
 let ORIGIN = '';
 
 const members = [
-	{ id: '1', name: 'Alpha', lat: 50.0, lon: 11.0, vm: 'Flevo', lr: '', tr: '', other: '#berlin', profile_updated_at: '2026-11-01' },
+	{ id: '1', name: 'Alpha', lat: 50.0, lon: 11.0, vm: 'Flevo', lr: '', tr: '', other: '#berlin #übernachtung', profile_updated_at: '2026-11-01' },
 	{ id: '2', name: 'Beta', lat: 50.1, lon: 11.1, vm: '', lr: 'Liegerad', tr: '', other: '', profile_updated_at: '2026-11-01' },
 	{ id: '3', name: 'Gamma', lat: 50.2, lon: 11.2, vm: 'Quest', lr: '', tr: '', other: '#berlin', profile_updated_at: '2026-11-01' },
 ];
@@ -331,15 +331,16 @@ async function main() {
 	await waitForMap();
 	await delay(300);
 	assert.equal(await evaluate(`document.getElementById('data_message').textContent.includes('neue Version')`), false);
-	check.pass('Start mit gleicher App-Version zeigt keinen Update-Hinweis');
+	assert.equal(await evaluate(`Array.from(document.querySelectorAll('#tags option')).some(option => option.value === '#übernachtung')`), true);
+	check.pass('Start mit gleicher App-Version zeigt keinen Update-Hinweis; Unicode-Hashtag erscheint in der Autocomplete-Liste');
 
 	// 2. Service worker installs and does not cache app-version.json.
 	await waitFor(`navigator.serviceWorker.getRegistration().then(registration => Boolean(registration))`, 'service worker registration');
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache');
 	assert.equal(await cacheContains('/app-version.json'), false);
 	const serviceWorkerSource = await (await fetch(ORIGIN + '/service-worker.js')).text();
-	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v7';"));
-	check.pass('Service Worker installiert, Cache ist v7 und app-version.json bleibt network-only');
+	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v8';"));
+	check.pass('Service Worker installiert, Cache ist v8 und app-version.json bleibt network-only');
 
 	// 3. ?dev=1 disables the service worker, removes caches and skips the version check.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };

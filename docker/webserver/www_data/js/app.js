@@ -2,6 +2,7 @@ import { readCache, writeCache, clearCache, readMapState, writeMapState } from '
 import { createStatusUi } from './status-ui.js';
 import { validateMembers, parseDataStatus, deriveStatusFromLastModified } from './data.js';
 import { resolveInitialMapState, filterSearchString, FILTER_PARAMS, shouldPersistMapState } from './map-state.js';
+import { HASHTAG_REGEX, HASHTAG_NAME_REGEX } from './hashtags.js';
 import { describeGeolocationError, GEOLOCATION_OPTIONS } from './location.js';
 import { APP_VERSION } from './version.js';
 import { DEV_MODE_KEY, parseAppVersion, isNewVersion, resolveDevMode } from './version-check.js';
@@ -27,7 +28,6 @@ var last_location = null;
 var location_layer;
 var location_button;
 var location_request_in_progress = false;
-const hashtag_regex = RegExp(/(#[a-zA-Z]\w+)/, 'g');
 
 let members = [];
 let dataStatus = null;
@@ -522,10 +522,10 @@ function add_vmforum_tags() {
 	// Extract hashtags from entries in "other".
 	members
 		// Get all members with text in 'other'
-		.filter(v => v['other'] && v['other'].match(hashtag_regex))
+		.filter(v => v['other'] && v['other'].match(HASHTAG_REGEX))
 		// There: search for all hashtags and add them to associative array.
 		.forEach(v => v['other']
-			.match(hashtag_regex)
+			.match(HASHTAG_REGEX)
 			.forEach(w => { const s = w.toLowerCase(); tags[s] = tags[s] + 1 || 1; }));
 
 	// Iterate over hashtags, sort them according to descending occurence, and add them to the datalist.
@@ -568,7 +568,7 @@ function add_vmforum_members() {
 	const urlparams = new URL(window.location).searchParams;
 
 	// If there is a tag parameter, add it to the search for others (with # prepended).
-	if (urlparams.has('tag') && urlparams.get('tag').match(/[a-zA-Z]\w+/))
+	if (urlparams.has('tag') && urlparams.get('tag').match(HASHTAG_NAME_REGEX))
 		urlparams.set('other', (urlparams.has('other') ? urlparams.get('other') + ' ' : '') + '#' + urlparams.get('tag'));
 
 	// Look if we have a hashtag (take only the first one):
@@ -576,9 +576,9 @@ function add_vmforum_members() {
 	// * If there is an URL parameter 'other', look there.
 	// * Otherwise, no hashtag possible.
 	const found_tag = (form_select.value & (2**4 + 2**5))
-		? form_search.value.match(hashtag_regex)
+		? form_search.value.match(HASHTAG_REGEX)
 		: urlparams.has('other')
-		? urlparams.get('other').match(hashtag_regex)
+		? urlparams.get('other').match(HASHTAG_REGEX)
 		: null;
 
 	// Create a markerClusterGroup.
@@ -657,7 +657,7 @@ function add_vmforum_members() {
 					+ (v.lr ? '<br /><b>Liegerad:</b> ' + html_escape(v.lr) : '')
 					+ (v.tr ? '<br /><b>Trike:</b> ' + html_escape(v.tr) : '')
 					+ (v.other
-						? '<br />' + html_escape(v.other).replace(hashtag_regex, match => '<a href="karte.html?other=' + encodeURIComponent(match) + '" title="alle mit diesem Hashtag anzeigen">' + match + '</a>')
+						? '<br />' + html_escape(v.other).replace(HASHTAG_REGEX, match => '<a href="karte.html?other=' + encodeURIComponent(match) + '" title="alle mit diesem Hashtag anzeigen">' + match + '</a>')
 						: '')
 					+ '<br /><span class="stand" title="Letzter Profilabruf: '
 					+ html_escape(v.profile_updated_at || 'unbekannt')

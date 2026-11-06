@@ -348,7 +348,7 @@ BRouter weiter. `geo-handler.php` ist nur noch eine Legacy-Datei.
 ## Service Worker und Offline (Phase 7)
 
 - `/service-worker.js` wird beim Laden der Karte registriert (Scope `/`).
-- Der Service-Worker-Cache (aktuell `vmkarte-shell-v7`) enthält App-Shell
+- Der Service-Worker-Cache (aktuell `vmkarte-shell-v8`) enthält App-Shell
   (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html` und
   `offline.html`. Seit Phase 8 sind auch `js/map-state.js` und `js/location.js`
   enthalten; seit Phase 9 zusätzlich `js/version.js` und
@@ -396,7 +396,7 @@ curl -sSI https://karte.jfr-service.de/service-worker.js | \
   - `/screenshots/screenshot-wide.png` (1280×720, `form_factor: wide`)
   - `/screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
   - Die Screenshots enthalten nur fiktive Testmarker.
-- Der Service-Worker-Cache (aktuell `vmkarte-shell-v7`) enthält Manifest, Icons
+- Der Service-Worker-Cache (aktuell `vmkarte-shell-v8`) enthält Manifest, Icons
   und Screenshots.
 - Bei künftigen App-Änderungen `CACHE_NAME` in `service-worker.js` erhöhen.
 - Quellen der Icons: `icons/icon-any.svg` und `icons/icon-maskable.svg`.
@@ -445,7 +445,7 @@ Android/iPhone „Zum Home-Bildschirm“ verwenden.
 - Logout und `401` leeren IndexedDB, melden den Service Worker ab und löschen
   die `vmkarte-`-Caches. Der Service Worker registriert sich beim nächsten
   Kartenaufruf neu.
-- `CACHE_NAME` ist `vmkarte-shell-v7`.
+- `CACHE_NAME` ist `vmkarte-shell-v8`.
 
 ## Version und Update (Phase 9)
 
