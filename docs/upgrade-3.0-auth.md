@@ -38,12 +38,15 @@ cp -a config config.bak-phase3
 Die bisherige Datei enthält Apache MD5 (`$apr1$`). Der Auth-Service benötigt bcrypt.
 
 ```bash
-docker run --rm -it httpd:2.4-alpine htpasswd -nbB BENUTZER
+docker run --rm -it httpd:2.4-alpine htpasswd -nB -C 12 BENUTZER
 ```
 
 `BENUTZER` durch den bisherigen gemeinsamen Benutzernamen ersetzen (oder einen
-neuen festlegen und im Forum kommunizieren). Die Ausgabe in `config/.htpasswd`
-eintragen:
+neuen festlegen und im Forum kommunizieren). `-nB` zeigt den Hash an und fragt
+interaktiv nach dem Passwort. Kein `-b` verwenden: Das würde die Passwortabfrage
+unterdrücken und eine Passwortangabe auf der Kommandozeile erwarten.
+
+Die Ausgabe in `config/.htpasswd` eintragen:
 
 ```text
 BENUTZER:$2y$12$...
@@ -155,6 +158,10 @@ secrets:
 
 `auth` bleibt ausschließlich im `default`-Netz. `web` ist in `default` und
 `traefik_proxy`; daher funktioniert `proxy_pass http://auth:8080`.
+
+`auth` wird wie `web` über `build.context` und einen lokalen Image-Namen gebaut.
+`docker compose build` baut beide Images; `docker compose build web auth`
+baut gezielt nur diese beiden.
 
 ## Traefik
 
