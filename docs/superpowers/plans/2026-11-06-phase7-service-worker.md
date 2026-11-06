@@ -1,6 +1,6 @@
 # Phase 7 – Service Worker und Offline-App-Shell
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Die Karte lädt die App-Shell aus dem Service-Worker-Cache, sodass ein Reload offline funktioniert; Daten bleiben network-only und kommen offline aus IndexedDB.
 
@@ -35,9 +35,9 @@
 - `message` mit `{type:'SKIP_WAITING'}` ruft `self.skipWaiting()` auf.
 - `activate` löscht alte `vmkarte-`-Caches und ruft `clients.claim()`.
 
-- [ ] **Step 1: `service-worker.js` anlegen** mit den oben genannten Funktionen. Beim Precachen pro URL `fetch(url, {cache:'reload', credentials:'same-origin'})`; nur `response.ok && !response.redirected` cachen, damit eine Login-Weiterleitung nicht als App-Shell landet.
-- [ ] **Step 2: `offline.html` anlegen** mit verständlicher Meldung und Link auf `/`. Keine Inline-Skripte.
-- [ ] **Step 3: `node --check docker/webserver/www_data/service-worker.js`** ausführen.
+- [x] **Step 1: `service-worker.js` anlegen** mit den oben genannten Funktionen. Beim Precachen pro URL `fetch(url, {cache:'reload', credentials:'same-origin'})`; nur `response.ok && !response.redirected` cachen, damit eine Login-Weiterleitung nicht als App-Shell landet.
+- [x] **Step 2: `offline.html` anlegen** mit verständlicher Meldung und Link auf `/`. Keine Inline-Skripte.
+- [x] **Step 3: `node --check docker/webserver/www_data/service-worker.js`** ausführen.
 
 ## Task 2: Registrierung, Update-Hinweis und Cache-Löschung
 
@@ -51,9 +51,9 @@
 - `clearAppCaches()` löscht alle Cache-Storage-Keys mit Präfix `vmkarte-`.
 - `logout()` und `handleUnauthorized()` rufen `clearCache()` und `clearAppCaches()` auf.
 
-- [ ] **Step 1: `status-ui.js` erweitern** um `actionLabel` und `autoHideMs`.
-- [ ] **Step 2: `app.js` erweitern** um `clearAppCaches`, `register_service_worker`, Aufruf nach `syncFromServer()`, und Cache-Löschung bei Logout/401.
-- [ ] **Step 3: Syntax prüfen** mit `node --check` für `app.js` und `status-ui.js`.
+- [x] **Step 1: `status-ui.js` erweitern** um `actionLabel` und `autoHideMs`.
+- [x] **Step 2: `app.js` erweitern** um `clearAppCaches`, `register_service_worker`, Aufruf nach `syncFromServer()`, und Cache-Löschung bei Logout/401.
+- [x] **Step 3: Syntax prüfen** mit `node --check` für `app.js` und `status-ui.js`.
 
 ## Task 3: Verifikation und Dokumentation
 
@@ -63,11 +63,11 @@
 - Modify: `local/ai/phases.md`
 - Modify: `local/ai/changelog.md`
 
-- [ ] **Step 1: Node- und Python-Tests ausführen.**
-- [ ] **Step 2: Headless-Chrome/CDP mit lokalem Testserver:**
+- [x] **Step 1: Node- und Python-Tests ausführen.**
+- [x] **Step 2: Headless-Chrome/CDP mit lokalem Testserver:**
   - Online laden, warten bis `caches.keys()` `vmkarte-shell-v1` enthält.
   - Prüfen, dass `/shared/vmforum_members.json` nicht im Cache liegt.
   - Offline schalten, `/karte.html` neu laden: App-Shell lädt, Marker aus IndexedDB, Status `lokal (Aktualisierung fehlgeschlagen)`, Offline-Badge sichtbar.
   - Logout: Cache-Storage enthält danach keine `vmkarte-`-Keys.
-- [ ] **Step 3: Dokumentation aktualisieren** (Service-Worker-Verhalten, Cache-Version bumpen, Offline-Reload).
-- [ ] **Step 4: Commit, Merge nach `release/3.0-pwa`, Push.**
+- [x] **Step 3: Dokumentation aktualisieren** (Service-Worker-Verhalten, Cache-Version bumpen, Offline-Reload).
+- [x] **Step 4: Commit, Merge nach `release/3.0-pwa`, Push.**
