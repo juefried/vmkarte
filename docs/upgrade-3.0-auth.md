@@ -191,6 +191,11 @@ im Pfad zusätzlich mit `400` ab; Query-Parameter bleiben davon unberührt.
 HTTPS muss an Traefik terminiert werden. Das Session-Cookie ist im
 Produktivbetrieb `Secure`.
 
+nginx löst `auth:8080` über den Docker-DNS-Server `127.0.0.11` mit
+`valid=10s` dynamisch auf. Dadurch führt ein Neu-Erstellen des
+`auth`-Containers nicht mehr zu einer veralteten Upstream-IP. Ein
+`web`-Restart nach einem Auth-Restart ist dann nicht mehr nötig.
+
 ## Start
 
 ```bash
@@ -257,6 +262,23 @@ Im nginx-Access-Log muss `$remote_addr` die echte Client-IP sein, nicht
 `172.18.x.x`. Andernfalls greift das Rate Limit für alle Nutzer gemeinsam.
 
 Danach im Browser `https://karte.jfr-service.de` öffnen und anmelden.
+
+## Troubleshooting: HTTP 500 nach Auth-Neustart
+
+Im nginx-Log steht:
+
+```text
+connect() failed (111: Connection refused) ... upstream: "http://172.x.x.x:8080/session-check"
+```
+
+Dann hält eine ältere `web`-Version noch die alte Auth-IP. Einmalig:
+
+```bash
+docker compose up -d --force-recreate web
+```
+
+Mit der aktuellen nginx-Konfiguration löst `resolver 127.0.0.11 valid=10s`
+den Namen `auth` dynamisch auf; dieser Web-Restart ist dann nicht mehr nötig.
 
 ## Troubleshooting: `auth` startet mit `permission denied`
 
