@@ -351,9 +351,14 @@ curl -sSI https://karte.jfr-service.de/service-worker.js | \
   - `/icons/icon-maskable-512.png` (512×512, maskable)
   - `/icons/apple-touch-icon.png` (180×180)
 - `karte.html` bindet Manifest, Theme-Farbe, Favicon und Apple-Touch-Icon ein.
-- `/icons/` ist öffentlich mit `expires 7d`; `/favicon.ico` zeigt auf
-  `/icons/icon-192.png`.
-- Der Service-Worker-Cache `vmkarte-shell-v2` enthält Manifest und Icons.
+- `/icons/` und `/screenshots/` sind öffentlich mit `expires 7d`;
+  `/favicon.ico` zeigt auf `/icons/icon-192.png`.
+- Screenshots für die reichere Install-UI:
+  - `/screenshots/screenshot-wide.png` (1280×720, `form_factor: wide`)
+  - `/screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
+  - Die Screenshots enthalten nur fiktive Testmarker.
+- Der Service-Worker-Cache `vmkarte-shell-v3` enthält Manifest, Icons und
+  Screenshots.
 - Bei künftigen App-Änderungen `CACHE_NAME` in `service-worker.js` erhöhen.
 - Quellen der Icons: `icons/icon-any.svg` und `icons/icon-maskable.svg`.
 
@@ -365,6 +370,10 @@ curl -sSI https://karte.jfr-service.de/manifest.webmanifest | \
 # erwartet: 200, application/manifest+json, Cache-Control: no-cache
 
 curl -sSI https://karte.jfr-service.de/icons/icon-192.png | \
+  grep -iE 'HTTP/|content-type'
+# erwartet: 200, image/png
+
+curl -sSI https://karte.jfr-service.de/screenshots/screenshot-wide.png | \
   grep -iE 'HTTP/|content-type'
 # erwartet: 200, image/png
 ```
