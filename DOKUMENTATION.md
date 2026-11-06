@@ -94,6 +94,7 @@ vmkarte/
 │   ├── service-worker.js               # App-Shell-/Offline-Cache
 │   ├── manifest.webmanifest            # PWA-Manifest
 │   ├── icons/                          # PWA-/Apple-Icons und SVG-Quellen
+│   ├── screenshots/                    # Screenshots für die Install-UI
 │   ├── geo-handler.html                # Same-origin-Weiterleitung zu BRouter
 │   ├── geo-handler.php                 # Legacy (nginx führt kein PHP aus)
 │   ├── css/
@@ -368,10 +369,18 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
   - SVG-Quellen: `icon-any.svg`, `icon-maskable.svg`
 - `karte.html` bindet Manifest, Theme-Farbe, Favicon und Apple-Touch-Icon ein.
 - nginx liefert `/manifest.webmanifest` als `application/manifest+json` mit
-  `Cache-Control: no-cache`; `/icons/` ist öffentlich mit `expires 7d`.
+  `Cache-Control: no-cache`; `/icons/` und `/screenshots/` sind öffentlich mit
+  `expires 7d`.
 - `/favicon.ico` wird auf `/icons/icon-192.png` abgebildet.
-- Der Service-Worker-Cache `vmkarte-shell-v2` enthält Manifest und Icons.
-- Chrome-Installability-Check: keine Manifest- und keine Installability-Fehler.
+- Screenshots für die reichere Install-UI:
+  - `screenshots/screenshot-wide.png` (1280×720, `form_factor: wide`)
+  - `screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
+  - Die Screenshots zeigen ausschließlich fiktive Testmarker, keine echten
+    Mitgliederdaten.
+- Der Service-Worker-Cache `vmkarte-shell-v3` enthält Manifest, Icons und
+  Screenshots.
+- Chrome-Installability-Check: keine Manifest-, Installability- oder
+  Screenshot-Warnungen.
 - Phase 8–10 sind noch offen.
 
 ---
