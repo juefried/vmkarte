@@ -6,25 +6,31 @@ body { max-width: initial; margin: 0; padding: 0; }
 .leaflet-div-icon	{ border: none; background: none; }	/* remove DIV of icons */
 
 /* make the search controls more beautiful: white background, rounded corners, shadow, a bit padding */
-#search_controls	{ width: 230px; max-width: calc(100vw - 24px); box-sizing: border-box;
-			  background-color: #fff; border-radius: 5px; box-shadow: 0 1px 7px rgba(0,0,0,0.65); padding: 6px; }
-#form_search, #form_select	{ width: 100%; box-sizing: border-box; }
+#search_controls	{ width: clamp(180px, 50vw, 230px); max-width: calc(100vw - 24px); box-sizing: border-box;
+			  background-color: #fff; border-radius: 5px; box-shadow: 0 1px 7px rgba(0,0,0,0.65);
+			  padding: clamp(4px, 1.5vw, 6px); }
+#form_search, #form_select	{ width: 100%; box-sizing: border-box;
+				  font-size: clamp(14px, 4vw, 16px); padding: clamp(4px, 1.5vw, 6px); }
 
 /* action buttons inside the search controls */
 #search_controls button	{ width: 100%; margin-top: 6px; padding: 6px 8px; border: 0; border-radius: 4px;
 			  background: #2e7d32; color: #fff; font: inherit; cursor: pointer; }
 #search_controls button:hover	{ background: #256428; }
-#search_controls #action_buttons	{ display: flex; gap: 4px; justify-content: flex-end; margin-top: 6px; }
-#search_controls #action_buttons button	{ flex: 0 0 auto; width: 32px; height: 30px; margin-top: 0;
-					  padding: 4px; display: flex; align-items: center; justify-content: center; }
-#search_controls #action_buttons button svg	{ width: 16px; height: 16px; fill: currentColor; }
+#search_controls #action_buttons	{ display: flex; gap: clamp(4px, 1.5vw, 6px); justify-content: flex-end;
+					  margin-top: clamp(4px, 1.5vw, 6px); }
+#search_controls #action_buttons button	{ flex: 0 0 auto; width: clamp(30px, 8vw, 36px); height: clamp(30px, 8vw, 36px);
+					  margin-top: 0; padding: 0; color: #fff;
+					  display: flex; align-items: center; justify-content: center; }
+#search_controls #action_buttons button svg	{ width: clamp(16px, 4.5vw, 20px); height: clamp(16px, 4.5vw, 20px);
+						  fill: none; stroke: currentColor; stroke-width: 2;
+						  stroke-linecap: round; stroke-linejoin: round; }
 #search_controls #reset_button	{ background: #1565c0; }
 #search_controls #reset_button:hover	{ background: #0d47a1; }
 #search_controls #logout_button	{ background: #c62828; }
 #search_controls #logout_button:hover	{ background: #8e0000; }
 #search_controls #refresh_button	{ background: #455a64; }
 #search_controls #refresh_button:hover	{ background: #263238; }
-#search_controls #refresh_button:disabled	{ background: #90a4ae; cursor: default; }
+#search_controls #refresh_button:disabled	{ background: #546e7a; color: #fff; cursor: default; }
 #search_controls #refresh_button.is-loading svg	{ animation: spin 1s linear infinite; }
 
 @keyframes spin {
