@@ -3,9 +3,17 @@
 import argparse
 import json
 
+from libs.data_status_lib import write_data_status
 from libs.forum_api_lib import get_member_data
 from libs.location_nominatim_lib import examine_locations
-from libs.paths_lib import APP_DIR, MEMBERS_JSON_PATH, REPO_ROOT, SHARED_DIR, VMFORUM_MEMBERS_JSON_PATH
+from libs.paths_lib import (
+    APP_DIR,
+    DATA_STATUS_JSON_PATH,
+    MEMBERS_JSON_PATH,
+    REPO_ROOT,
+    SHARED_DIR,
+    VMFORUM_MEMBERS_JSON_PATH,
+)
 
 
 def remove_stale_members_json(include_current=True):
@@ -162,6 +170,14 @@ def main():
     print(f"Writing map data to {VMFORUM_MEMBERS_JSON_PATH}")
     with VMFORUM_MEMBERS_JSON_PATH.open('w', encoding='utf-8') as vmforumfile:
         json.dump(vmforum_members, vmforumfile, ensure_ascii=False, indent=2)
+
+    # Metadata is written after the map data succeeded. A failure here must not
+    # abort the grabber run or invalidate the freshly written member data.
+    try:
+        print(f"Writing data status to {DATA_STATUS_JSON_PATH}")
+        write_data_status(DATA_STATUS_JSON_PATH, len(vmforum_members))
+    except Exception as error:
+        print(f"Warning: Could not write {DATA_STATUS_JSON_PATH}: {error}")
 
 
 if __name__ == "__main__":
