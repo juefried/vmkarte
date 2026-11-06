@@ -27,10 +27,10 @@
 		#search_controls button	{ width: 100%; margin-top: 6px; padding: 6px 8px; border: 0; border-radius: 4px;
 					  background: #2e7d32; color: #fff; font: inherit; cursor: pointer; }
 		#search_controls button:hover	{ background: #256428; }
-		#reset_button	{ background: #1565c0; }
-		#reset_button:hover	{ background: #0d47a1; }
-		#logout_button	{ background: #c62828; }
-		#logout_button:hover	{ background: #8e0000; }
+		#search_controls #reset_button	{ background: #1565c0; }
+		#search_controls #reset_button:hover	{ background: #0d47a1; }
+		#search_controls #logout_button	{ background: #c62828; }
+		#search_controls #logout_button:hover	{ background: #8e0000; }
 		
 		/* red circles for hashtags */
 		.tag_circle	{ stroke: red; fill: red; }
@@ -341,8 +341,16 @@
 		search_control.onAdd = map => document.getElementById('search_controls');
 		search_control.addTo(map);
 
-		// Attach events to the input form: Update the member markers if the dropdown is clicked or changed or Enter is pressed in the search field.
-		L.DomEvent.on(document.getElementById('form_select'), 'click change', add_vmforum_members);
+		// Update the markers immediately when the filter dropdown or a
+		// datalist selection changes; no extra Enter key should be needed.
+		form_select.addEventListener('change', add_vmforum_members);
+		form_search.addEventListener('change', add_vmforum_members);
+		// Selecting an entry from the datalist should apply immediately,
+		// without pressing Enter. Chrome fires insertReplacementText here.
+		form_search.addEventListener('input', e => {
+			if (e.inputType === 'insertReplacementText')
+				add_vmforum_members();
+		});
 
 		// Enter key: perform the search; already at keydown, but also when selecting from autocomplete, value is only available after keyup.
 		L.DomEvent.on(form_search, 'keydown keyup', e => e.key === 'Enter' && add_vmforum_members());
