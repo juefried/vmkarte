@@ -371,8 +371,9 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
   - SVG-Quellen: `icon-any.svg`, `icon-maskable.svg`
 - `karte.html` bindet Manifest, Theme-Farbe, Favicon und Apple-Touch-Icon ein.
 - nginx liefert `/manifest.webmanifest` als `application/manifest+json` mit
-  `Cache-Control: no-cache`; `/icons/` und `/screenshots/` sind öffentlich mit
-  `expires 7d`.
+  `Cache-Control: no-cache`. `/icons/` ist öffentlich mit
+  `Cache-Control: no-cache`, damit korrigierte Icons revalidiert werden;
+  `/screenshots/` ist öffentlich mit `expires 7d`.
 - `/favicon.ico` wird auf `/icons/icon-192.png` abgebildet.
 - Screenshots für die reichere Install-UI:
   - `screenshots/screenshot-wide.png` (1280×720, `form_factor: wide`)

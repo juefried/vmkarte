@@ -360,8 +360,9 @@ curl -sSI https://karte.jfr-service.de/service-worker.js | \
   - `/icons/icon-maskable-512.png` (512×512, maskable)
   - `/icons/apple-touch-icon.png` (180×180)
 - `karte.html` bindet Manifest, Theme-Farbe, Favicon und Apple-Touch-Icon ein.
-- `/icons/` und `/screenshots/` sind öffentlich mit `expires 7d`;
-  `/favicon.ico` zeigt auf `/icons/icon-192.png`.
+- `/icons/` ist öffentlich und liefert `Cache-Control: no-cache`, damit
+  korrigierte Icons zeitnah revalidiert werden. `/screenshots/` ist öffentlich
+  mit `expires 7d`; `/favicon.ico` zeigt auf `/icons/icon-192.png`.
 - Screenshots für die reichere Install-UI:
   - `/screenshots/screenshot-wide.png` (1280×720, `form_factor: wide`)
   - `/screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
