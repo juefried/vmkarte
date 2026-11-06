@@ -16,11 +16,29 @@ Diese Anleitung beschreibt das Upgrade einer bestehenden Docker-Installation. Di
 - `--debug` ist für den Normalbetrieb nicht nötig. Die Kartenausgabe ist ohne `--debug` identisch.
 - Nach dem ersten Lauf prüfen: `docker compose exec cron python3 /app/data_grabber.py` schreibt `/app/shared/vmforum_members.json`; anschließend den Report mit `docker compose exec cron python3 /app/utils/vehicle_label_map_report.py` ausführen. Erwartet: keine unbekannten Fahrzeugwerte.
 
+## Zusätzlich für Precision-Rollout (`feature/location-precision`)
+
+- Die Crontab-Zeile auf die Precision-Strategie umstellen:
+
+  ```cron
+  33 3 * * * sh -c 'cd /app && /usr/local/bin/python3 /app/data_grabber.py --location-strategy precision'
+  ```
+
+- `--fast` entfällt (war ohnehin wirkungslos).
+- `--write-location-details` wird in Produktion nicht gesetzt. Die Datei dient nur der lokalen Auswertung.
+- Der erste Precision-Lauf füllt den neuen Cache-Namespace `precision-v1` und kann mehrere Stunden dauern. Vor dem ersten Cron-Lauf einmal außerhalb der Stoßzeit vorwärmen:
+
+  ```bash
+  docker compose exec cron python3 /app/data_grabber.py --location-strategy precision
+  ```
+
+- Rollback: Crontab wieder ohne `--location-strategy precision` betreiben, danach `docker compose build cron && docker compose up -d cron`. Der Precision-Cache kann bleiben.
+
 ## Was sich ändert
 
 - Die TTL-Bereiche für `user_details` und `nominatim` stehen jetzt in `cache_config.json`.
 - Die TTL wird pro Cacheeintrag zufällig gezogen. Das frühere 1-%-Thinning entfällt.
-- `--fast` wird weiterhin akzeptiert, hat aber keine Wirkung mehr. Die bestehende Crontab muss nicht geändert werden.
+- `--fast` wird weiterhin akzeptiert, hat aber keine Wirkung mehr. Für das API-Upgrade muss die Crontab nicht geändert werden; für den Precision-Rollout siehe oben.
 - Jedes Mitglied erhält `profile_updated_at`. Die Karte zeigt im Popup `Stand: TT.MM.JJJJ`; der exakte Zeitstempel steht im Tooltip.
 - Alte Cacheeinträge bleiben gültig. Bei `user_details`-Einträgen ohne Zeitstempel wird der Abrufzeitpunkt aus dem bisherigen Ablaufdatum rekonstruiert.
 - Die neuen TTLs gelten nur für neu geschriebene Cacheeinträge. Der erste Lauf nach dem Upgrade erzwingt keine vollständige Aktualisierung.
@@ -146,7 +164,7 @@ Der Cronjob läuft regulär um 03:33 Uhr. Für das Upgrade kann der Lauf direkt 
 docker compose exec cron python3 /app/data_grabber.py
 ```
 
-`--fast` kann weiterhin angegeben werden, ist aber wirkungslos. Der Lauf kann bei leerem Cache mehrere Stunden dauern; mit dem vorhandenen Cache geht er schneller.
+`--fast` kann weiterhin angegeben werden, ist aber wirkungslos. Für den Precision-Rollout `--location-strategy precision` verwenden. Der Lauf kann bei leerem Cache mehrere Stunden dauern; mit dem vorhandenen Cache geht er schneller.
 
 Für Debugging kann `--debug` ergänzt werden. Die Rohdaten landen dann unter `/app/members.json`, nicht im Web-Root:
 

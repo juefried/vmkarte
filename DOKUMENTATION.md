@@ -364,7 +364,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
   - `src/data_grabber/cache_config.json` → `/app/cache_config.json` (Default, wird durch den Compose-Mount überschrieben)
 - **Kopiert bewusst nicht** `members.json` oder `vmforum_members.json`. Beide Dateien sind Laufzeitartefakte: `members.json` entsteht durch `get_member_data()`, `vmforum_members.json` durch `examine_locations()`.
 - Voraussetzung dafür ist, dass der Scraper aktiv ist. Das ist seit der Rückkehr zum Masterstand wieder der Fall; siehe Befund C.
-- Cronjob: täglich 03:33 Uhr, `cd /app && python3 /app/data_grabber.py --fast` (`docker/cron/crontab:5`). `--fast` hat inzwischen keine Wirkung mehr.
+- Cronjob: täglich 03:33 Uhr, `cd /app && python3 /app/data_grabber.py --location-strategy precision` (`docker/cron/crontab:5`). `--fast` entfällt; die Kartenauflösung nutzt jetzt die Precision-Strategie mit dem Default-Guard `disjoint`. Die erste Ausführung füllt den Precision-Cache und kann mehrere Stunden dauern.
 
 **Web-Container** (`docker/webserver`)
 
