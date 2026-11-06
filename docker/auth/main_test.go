@@ -257,6 +257,25 @@ func TestLogoutClearsCookie(t *testing.T) {
 	}
 }
 
+func TestLogoutGETClearsCookie(t *testing.T) {
+	srv, _ := testServer(t)
+
+	req := httptest.NewRequest(http.MethodGet, "/logout", nil)
+	rec := httptest.NewRecorder()
+	srv.logout(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if location := rec.Header().Get("Location"); location != "/login" {
+		t.Fatalf("Location = %q", location)
+	}
+	cookies := rec.Result().Cookies()
+	if len(cookies) != 1 || cookies[0].MaxAge >= 0 {
+		t.Fatal("GET logout did not clear the session cookie")
+	}
+}
+
 func TestHealth(t *testing.T) {
 	srv, _ := testServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)

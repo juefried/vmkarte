@@ -314,6 +314,16 @@ Im nginx-Access-Log muss `$remote_addr` die echte Client-IP sein, nicht
 
 Danach im Browser `https://karte.jfr-service.de` öffnen und anmelden.
 
+## Logout
+
+Die Karte hat im Suchfeld-Panel einen Button **Abmelden**. Er sendet
+`POST /logout`, löscht das Session-Cookie und leitet auf `/login` weiter.
+
+Ein direkter Aufruf von `GET /logout` im Browser löscht das Cookie ebenfalls
+und leitet auf `/login` weiter. Für die Oberfläche bleibt `POST /logout` der
+bevorzugte Weg; `GET /logout` ist nur eine Komfortfunktion für direkte
+URL-Aufrufe.
+
 ## Troubleshooting: HTTP 500 nach Auth-Neustart
 
 Im nginx-Log steht:
