@@ -1,9 +1,11 @@
 import { parseDataStatus, validateMembers } from './data.js';
+import { parseMapState } from './map-state.js';
 
 const DB_NAME = 'vmkarte';
 const DB_VERSION = 1;
 const STORE_NAME = 'kv';
 const KEYS = ['members', 'status', 'etag', 'lastModified'];
+const MAP_STATE_KEY = 'mapState';
 
 let databasePromise = null;
 let storageUnavailable = false;
@@ -54,6 +56,26 @@ function readAll(database) {
 		}
 
 		transaction.oncomplete = () => resolve(values);
+		transaction.onerror = () => reject(transaction.error);
+		transaction.onabort = () => reject(transaction.error);
+	});
+}
+
+function readValue(database, key) {
+	return new Promise((resolve, reject) => {
+		const transaction = database.transaction(STORE_NAME, 'readonly');
+		const request = transaction.objectStore(STORE_NAME).get(key);
+		request.onsuccess = () => resolve(request.result);
+		request.onerror = () => reject(request.error);
+		transaction.onabort = () => reject(transaction.error);
+	});
+}
+
+function writeValue(database, key, value) {
+	return new Promise((resolve, reject) => {
+		const transaction = database.transaction(STORE_NAME, 'readwrite');
+		transaction.objectStore(STORE_NAME).put(value, key);
+		transaction.oncomplete = () => resolve();
 		transaction.onerror = () => reject(transaction.error);
 		transaction.onabort = () => reject(transaction.error);
 	});
@@ -117,6 +139,39 @@ export async function writeCache({ members, status, etag, lastModified }) {
 	}
 	catch (error) {
 		console.warn('Lokaler Kartenstand konnte nicht gespeichert werden.', error);
+		return false;
+	}
+}
+
+export async function readMapState() {
+	const database = await openDatabase();
+	if (!database)
+		return null;
+
+	try {
+		return parseMapState(await readValue(database, MAP_STATE_KEY));
+	}
+	catch (error) {
+		console.warn('Lokaler Kartenstatus konnte nicht gelesen werden.', error);
+		return null;
+	}
+}
+
+export async function writeMapState(mapState) {
+	const normalized = parseMapState(mapState);
+	if (!normalized)
+		return false;
+
+	const database = await openDatabase();
+	if (!database)
+		return false;
+
+	try {
+		await writeValue(database, MAP_STATE_KEY, normalized);
+		return true;
+	}
+	catch (error) {
+		console.warn('Lokaler Kartenstatus konnte nicht gespeichert werden.', error);
 		return false;
 	}
 }
