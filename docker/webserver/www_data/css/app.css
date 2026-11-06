@@ -6,15 +6,18 @@ body { max-width: initial; margin: 0; padding: 0; }
 .leaflet-div-icon	{ border: none; background: none; }	/* remove DIV of icons */
 
 /* make the search controls more beautiful: white background, rounded corners, shadow, a bit padding */
-#search_controls	{ background-color: #fff; border-radius: 5px; box-shadow: 0 1px 7px rgba(0,0,0,0.65); padding: 6px; }
+#search_controls	{ width: 230px; max-width: calc(100vw - 24px); box-sizing: border-box;
+			  background-color: #fff; border-radius: 5px; box-shadow: 0 1px 7px rgba(0,0,0,0.65); padding: 6px; }
+#form_search, #form_select	{ width: 100%; box-sizing: border-box; }
 
 /* action buttons inside the search controls */
 #search_controls button	{ width: 100%; margin-top: 6px; padding: 6px 8px; border: 0; border-radius: 4px;
 			  background: #2e7d32; color: #fff; font: inherit; cursor: pointer; }
 #search_controls button:hover	{ background: #256428; }
-#search_controls #action_buttons	{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
-#search_controls #action_buttons button	{ flex: 1 1 0; width: auto; margin-top: 0;
-					  padding: 6px 4px; font-size: 0.85em; white-space: nowrap; }
+#search_controls #action_buttons	{ display: flex; gap: 4px; justify-content: flex-end; margin-top: 6px; }
+#search_controls #action_buttons button	{ flex: 0 0 auto; width: 32px; height: 30px; margin-top: 0;
+					  padding: 4px; display: flex; align-items: center; justify-content: center; }
+#search_controls #action_buttons button svg	{ width: 16px; height: 16px; fill: currentColor; }
 #search_controls #reset_button	{ background: #1565c0; }
 #search_controls #reset_button:hover	{ background: #0d47a1; }
 #search_controls #logout_button	{ background: #c62828; }
@@ -22,6 +25,11 @@ body { max-width: initial; margin: 0; padding: 0; }
 #search_controls #refresh_button	{ background: #455a64; }
 #search_controls #refresh_button:hover	{ background: #263238; }
 #search_controls #refresh_button:disabled	{ background: #90a4ae; cursor: default; }
+#search_controls #refresh_button.is-loading svg	{ animation: spin 1s linear infinite; }
+
+@keyframes spin {
+	to	{ transform: rotate(360deg); }
+}
 
 /* red circles for hashtags */
 .tag_circle	{ stroke: red; fill: red; }
@@ -43,13 +51,24 @@ body { max-width: initial; margin: 0; padding: 0; }
 /* loading, error and success messages at the top center */
 .data-message	{ position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
 		  z-index: 1100; max-width: 90vw;
+		  display: flex; align-items: center; gap: 6px;
 		  padding: 8px 12px; border-radius: 5px;
 		  background: rgba(255, 255, 255, 0.95); color: #333;
-		  box-shadow: 0 1px 7px rgba(0, 0, 0, 0.35); }
+		  box-shadow: 0 1px 7px rgba(0, 0, 0, 0.35);
+		  pointer-events: none; }
 .data-message-error	{ background: rgba(255, 235, 238, 0.97); color: #8e0000; }
 .data-message-success	{ background: rgba(232, 245, 233, 0.97); color: #1b5e20; }
-.data-message button	{ margin-left: 8px; padding: 3px 8px; border: 0; border-radius: 4px;
+.data-message button	{ pointer-events: auto; margin-left: 0; padding: 3px 8px; border: 0; border-radius: 4px;
 			  background: #1565c0; color: #fff; font: inherit; cursor: pointer; }
 .data-message button:hover	{ background: #0d47a1; }
+.data-message .message-close	{ background: transparent; color: inherit; padding: 0 4px;
+				  font-size: 1.2em; line-height: 1; }
+.data-message .message-close:hover	{ background: rgba(0, 0, 0, 0.08); }
+
+/* persistent offline indicator */
+.offline-badge	{ position: fixed; top: 80px; left: 10px; z-index: 1000;
+		  padding: 3px 8px; border-radius: 4px;
+		  background: #c62828; color: #fff; font-size: 0.8em; font-weight: 600;
+		  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); }
 
 [hidden]	{ display: none !important; }

@@ -88,7 +88,25 @@ function setRefreshBusy(busy) {
 	if (!button)
 		return;
 	button.disabled = busy;
-	button.textContent = busy ? 'lädt …' : 'Kartendaten aktualisieren';
+	button.classList.toggle('is-loading', busy);
+	button.title = busy ? 'Kartendaten werden geladen …' : 'Kartendaten vom Server aktualisieren';
+	button.setAttribute('aria-label', busy ? 'Kartendaten werden geladen' : 'Kartendaten aktualisieren');
+}
+
+function show_current_status(updateFailed = false) {
+	if (!statusUi)
+		return;
+	if (members.length === 0) {
+		statusUi.clearStatus();
+		return;
+	}
+	statusUi.setStatus({
+		generatedAt: dataStatus ? dataStatus.generatedAt : null,
+		runStartedAt: dataStatus ? dataStatus.runStartedAt : null,
+		source: dataSource,
+		updateFailed,
+		offline: navigator.onLine === false,
+	});
 }
 
 async function loadDataStatus() {
@@ -184,12 +202,7 @@ async function syncFromServer({ manual = false } = {}) {
 		}
 
 		if (members.length > 0) {
-			statusUi.setStatus({
-				generatedAt: dataStatus ? dataStatus.generatedAt : null,
-				runStartedAt: dataStatus ? dataStatus.runStartedAt : null,
-				source: 'server',
-				updateFailed: false,
-			});
+			show_current_status(false);
 			statusUi.clearMessage();
 			if (manual)
 				statusUi.setMessage({ type: 'success', text: 'Kartendaten aktualisiert.' });
@@ -198,12 +211,7 @@ async function syncFromServer({ manual = false } = {}) {
 	catch (error) {
 		console.warn('Serverabgleich fehlgeschlagen.', error);
 		if (members.length > 0) {
-			statusUi.setStatus({
-				generatedAt: dataStatus ? dataStatus.generatedAt : null,
-				runStartedAt: dataStatus ? dataStatus.runStartedAt : null,
-				source: dataSource,
-				updateFailed: true,
-			});
+			show_current_status(true);
 			if (manual) {
 				statusUi.setMessage({
 					type: 'error',
@@ -433,11 +441,12 @@ async function create_map() {
 	statusUi = createStatusUi({
 		statusElement: document.getElementById('data_status'),
 		messageElement: document.getElementById('data_message'),
+		offlineElement: document.getElementById('offline_badge'),
 	});
 
 	// Install protocol handler for geo: protocol; must be a local script, which reformats the coordinates and redirects to BRouter
 	try {
-		window.navigator.registerProtocolHandler('geo', 'https://christoph-moder.de/vmforum-karte/geo-handler.php?l=%s', 'BRouter-Web');
+		window.navigator.registerProtocolHandler('geo', '/geo-handler?l=%s', 'BRouter-Web');
 	}
 	catch (e) {
 		console.error(e)
@@ -534,18 +543,27 @@ async function create_map() {
 		add_vmforum_members();
 		add_vmforum_tags();
 		log_member_stats();
-		statusUi.setStatus({
-			generatedAt: dataStatus ? dataStatus.generatedAt : null,
-			runStartedAt: dataStatus ? dataStatus.runStartedAt : null,
-			source: dataSource,
-			updateFailed: false,
-		});
+		show_current_status(false);
 		statusUi.clearMessage();
 	}
 	else {
 		statusUi.clearStatus();
 		statusUi.setMessage({ type: 'loading', text: 'Kartendaten werden geladen …' });
 	}
+
+	function update_online_state() {
+		const offline = navigator.onLine === false;
+		statusUi.setOffline(offline);
+		if (offline)
+			show_current_status(false);
+	}
+
+	window.addEventListener('offline', update_online_state);
+	window.addEventListener('online', () => {
+		update_online_state();
+		syncFromServer();
+	});
+	update_online_state();
 
 	syncFromServer();
 

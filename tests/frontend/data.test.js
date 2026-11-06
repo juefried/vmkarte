@@ -119,4 +119,14 @@ test('formatStatusText marks source and stale state', () => {
 		}),
 		'Datenstand: 06.11.2026, 03:33 · Server (Aktualisierung fehlgeschlagen)',
 	);
+	assert.equal(
+		formatStatusText({
+			generatedAt: '2026-11-06T03:33:00+01:00',
+			source: 'local',
+			updateFailed: false,
+			stale: false,
+			offline: true,
+		}),
+		'Datenstand: 06.11.2026, 03:33 · lokal · offline',
+	);
 });
