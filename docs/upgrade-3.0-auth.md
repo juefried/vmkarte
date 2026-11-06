@@ -23,6 +23,9 @@ Enthalten seit Phase 6: PWA-Manifest, Icons und Installierbarkeit.
 Enthalten seit Phase 8: Standortanzeige nach Klick sowie lokale Speicherung und
 Wiederherstellung von Kartenausschnitt, Zoom und Filtern.
 
+Enthalten seit Phase 9: App-Version mit Build-Datum, Update-Erkennung,
+Entwicklungsmodus mit Cache-Bypass sowie Deployment- und Rollback-Dokumentation.
+
 Noch nicht enthalten: Domainumzug.
 
 ## Voraussetzungen
@@ -316,10 +319,11 @@ BRouter weiter. `geo-handler.php` ist nur noch eine Legacy-Datei.
 ## Service Worker und Offline (Phase 7)
 
 - `/service-worker.js` wird beim Laden der Karte registriert (Scope `/`).
-- Der Service-Worker-Cache (aktuell `vmkarte-shell-v5`) enthält App-Shell
+- Der Service-Worker-Cache (aktuell `vmkarte-shell-v6`) enthält App-Shell
   (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html` und
   `offline.html`. Seit Phase 8 sind auch `js/map-state.js` und `js/location.js`
-  enthalten.
+  enthalten; seit Phase 9 zusätzlich `js/version.js` und
+  `js/version-check.js`.
 - Navigationen laufen network-first mit Cache-/`offline.html`-Fallback.
 - Statische Assets laufen stale-while-revalidate.
 - `/shared/`, `/login`, `/logout` und `/_internal/session-check` bleiben
@@ -362,7 +366,7 @@ curl -sSI https://karte.jfr-service.de/service-worker.js | \
   - `/screenshots/screenshot-wide.png` (1280×720, `form_factor: wide`)
   - `/screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
   - Die Screenshots enthalten nur fiktive Testmarker.
-- Der Service-Worker-Cache (aktuell `vmkarte-shell-v5`) enthält Manifest, Icons
+- Der Service-Worker-Cache (aktuell `vmkarte-shell-v6`) enthält Manifest, Icons
   und Screenshots.
 - Bei künftigen App-Änderungen `CACHE_NAME` in `service-worker.js` erhöhen.
 - Quellen der Icons: `icons/icon-any.svg` und `icons/icon-maskable.svg`.
@@ -411,7 +415,175 @@ Android/iPhone „Zum Home-Bildschirm“ verwenden.
 - Logout und `401` leeren IndexedDB, melden den Service Worker ab und löschen
   die `vmkarte-`-Caches. Der Service Worker registriert sich beim nächsten
   Kartenaufruf neu.
-- `CACHE_NAME` ist `vmkarte-shell-v5`.
+- `CACHE_NAME` ist `vmkarte-shell-v6`.
+
+## Version und Update (Phase 9)
+
+Die App-Version wird beim Docker-Build erzeugt. Quelle ist die gepflegte Datei
+`docker/webserver/www_data/VERSION`; sie enthält genau eine Zeile, zum Beispiel
+`3.0.0`. Das Dockerfile schreibt daraus:
+
+- `/app-version.json` für die Laufzeitprüfung:
+
+  ```json
+  {"version":"3.0.0","buildDate":"2026-11-06T10:15:00Z"}
+  ```
+
+- `/js/version.js` als importierbares Modul mit `APP_VERSION` und
+  `BUILD_DATE`.
+
+Ein normaler Build übernimmt die Version aus `VERSION` und erzeugt das
+Build-Datum automatisch:
+
+```bash
+docker compose build web
+```
+
+Optional lassen sich beide Werte überschreiben:
+
+```bash
+APP_VERSION=$(git describe --tags --always --dirty) \
+BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) \
+docker compose build web
+```
+
+Ohne Docker bleiben die eingecheckten Dev-Fallbacks (`dev`, kein Build-Datum)
+aktiv. Sie dienen nur lokalen Tests und werden im Image überschrieben.
+
+Beim Start lädt `js/app.js` `/app-version.json` mit `cache: 'no-store'`. Die
+laufende Version stammt aus `js/version.js`. Der Vergleich ist eine exakte
+String-Ungleichheit; es findet kein SemVer-Parsing statt. Nur bei
+unterschiedlicher Version erscheint der Hinweis „Eine neue Version ist
+verfügbar.“ mit der Aktion „Neu laden“. Es gibt keinen automatischen Reload.
+
+Der bestehende Service-Worker-Hinweis und der App-Version-Hinweis sind
+zusammengeführt:
+
+- Existiert ein wartender Service Worker, wird nach Bestätigung
+  `SKIP_WAITING` gesendet und nach `controllerchange` neu geladen.
+- Andernfalls wird `registration.update()` angestoßen und bis zu 3 Sekunden auf
+  einen wartenden Worker gewartet; ohne Ergebnis lädt die Seite normal neu.
+- Schlägt der Abruf von `/app-version.json` fehl (offline oder HTTP-Fehler),
+  bleibt die Karte ohne Meldung nutzbar.
+
+`/app-version.json` ist im Service Worker network-only und wird nicht gecacht.
+Der nginx-Block liefert bereits `application/json` und
+`Cache-Control: no-store`.
+
+## Entwicklungsmodus und Cache-Löschung
+
+### Entwicklungsmodus
+
+`?dev=1` aktiviert den Entwicklungsmodus für die aktuelle Tab-Session
+(`sessionStorage`), `?dev=0` deaktiviert ihn wieder. Ohne Parameter bleibt der
+zuletzt gesetzte Zustand dieser Tab-Session erhalten.
+
+Im Entwicklungsmodus:
+
+- werden vorhandene Service-Worker-Registrierungen abgemeldet,
+- werden alle Cache-Storage-Einträge mit Präfix `vmkarte-` gelöscht,
+- wird kein neuer Service Worker registriert,
+- wird die App-Version nicht geprüft,
+- erscheint die Meldung „Entwicklungsmodus aktiv: Service Worker und
+  App-Caches sind deaktiviert.“
+
+Der Modus betrifft nur App-Caches. IndexedDB mit den zuletzt geladenen
+Kartendaten bleibt erhalten und wird weiterhin bei Logout und `401` gelöscht.
+`/js/` und `/css/` liefern `Cache-Control: no-cache`; Navigationen laufen
+network-first. Ein normaler Reload im Entwicklungsmodus lädt daher frische
+Dateien.
+
+### Cache-Löschung für Nutzer
+
+- Bei einem Update-Hinweis „Neu laden“ bestätigen. Erst danach wird die neue
+  Version aktiv.
+- Wenn die App trotzdem veraltet wirkt: im Browser die Website-Daten für
+  `karte.jfr-service.de` löschen (Chrome/Edge: Einstellungen → Datenschutz →
+  Website-Daten; Safari: Website-Daten verwalten) und die Seite neu öffnen.
+- Auf installierten PWAs hilft zusätzlich, die App zu schließen und neu zu
+  starten, damit der neue Service Worker übernimmt.
+
+### Cache-Löschung für Entwickler
+
+`?dev=1` ist der einfachste Weg. Alternativ in den DevTools:
+
+1. Application → Service Workers: bestehende Worker abmelden.
+2. Application → Storage → Clear site data.
+3. Oder in der Konsole:
+
+```js
+Promise.all(
+  (await caches.keys())
+    .filter(key => key.startsWith('vmkarte-'))
+    .map(key => caches.delete(key))
+);
+navigator.serviceWorker.getRegistrations()
+  .then(registrations => registrations.forEach(registration => registration.unregister()));
+```
+
+Nach einem Wechsel von `CACHE_NAME` installiert der neue Worker den Cache beim
+nächsten Kartenaufruf neu.
+
+## Deployment und Rollback (Release 3.0)
+
+### Deployment
+
+Nur das `web`-Image ändern; `auth` und `cron` bleiben unberührt.
+
+```bash
+docker compose build web
+docker compose up -d --force-recreate web
+docker compose ps
+```
+
+Prüfen:
+
+```bash
+curl -sS https://karte.jfr-service.de/app-version.json
+curl -sSI https://karte.jfr-service.de/app-version.json | \
+  grep -iE 'HTTP/|content-type|cache-control'
+```
+
+Erwartet: `{"version":"3.0.0","buildDate":"…"}`, `application/json` und
+`Cache-Control: no-store`.
+
+Nach dem Deployment im Browser prüfen:
+
+- Die Karte lädt normal.
+- `?dev=1` zeigt die Dev-Meldung und meldet den Service Worker ab.
+- Eine Testversion mit erhöhter Version zeigt nach dem Deployment den
+  Update-Hinweis; neu geladen wird erst nach Klick.
+
+### Rollback
+
+Vor einem Deployment das bisherige Image sichern:
+
+```bash
+docker tag "${COMPOSE_PROJECT_NAME}_web:latest" \
+  "${COMPOSE_PROJECT_NAME}_web:rollback-$(date -u +%Y%m%d%H%M%S)"
+```
+
+Rollback auf das gesicherte Image:
+
+```bash
+docker compose stop web
+docker tag "${COMPOSE_PROJECT_NAME}_web:rollback-<zeitstempel>" \
+  "${COMPOSE_PROJECT_NAME}_web:latest"
+docker compose up -d --force-recreate web
+docker compose ps
+```
+
+Alternativ den vorherigen Release-Commit auschecken und neu bauen:
+
+```bash
+git switch --detach <vorheriger-release-commit>
+docker compose build web
+docker compose up -d --force-recreate web
+```
+
+Nach dem Rollback im Browser `?dev=1` aufrufen, um alte Caches zu entfernen,
+oder die Website-Daten löschen. Der Service Worker erhöht `CACHE_NAME` nicht
+rückwärts; deshalb ist die zusätzliche Cache-Löschung beim Rollback wichtig.
 
 ## Tests
 

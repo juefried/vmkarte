@@ -346,12 +346,13 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 ### 5.8 Service Worker und Offline
 
 - `js/app.js` registriert `/service-worker.js` mit Scope `/`.
-- Cache `vmkarte-shell-v1` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html` und `offline.html`.
+- Cache `vmkarte-shell-v6` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html`, `offline.html`, `js/version.js` und `js/version-check.js`.
 - Navigationen laufen network-first mit Fallback auf den angeforderten Cache-Eintrag, `/karte.html`, `/` und schließlich `/offline.html`.
 - Statische Assets laufen stale-while-revalidate.
-- `/shared/`, `/login`, `/logout`, `/session-check` und `/_internal/session-check` bleiben network-only. `data-status.json` liegt unter `/shared/` und wird daher nie gecacht.
+- `/shared/`, `/login`, `/logout`, `/session-check`, `/_internal/session-check` und `/app-version.json` bleiben network-only. `data-status.json` liegt unter `/shared/` und wird daher nie gecacht.
 - Login-Weiterleitungen werden nicht als App-Shell gecacht (`response.redirected`).
 - Ein neuer Service Worker wartet zunächst. Die Seite zeigt „Eine neue Version ist verfügbar.“ mit „Neu laden“; erst nach Bestätigung wird `SKIP_WAITING` gesendet und die Seite neu geladen.
+- Zusätzlich prüft die Seite beim Start `/app-version.json` gegen `APP_VERSION` aus `js/version.js`. Bei exakter Ungleichheit erscheint derselbe Hinweis; ohne wartenden Worker wird `registration.update()` angestoßen und nach kurzer Wartezeit normal neu geladen. Auch hier erfolgt das Neuladen nur nach Bestätigung.
 - Logout und `401` löschen IndexedDB und alle Cache-Storage-Einträge mit Präfix `vmkarte-`.
 - Bei Änderungen an App-Dateien muss `CACHE_NAME` in `service-worker.js` erhöht werden, damit Clients den neuen Worker installieren.
 - Der Offline-Reload der App-Shell funktioniert; ohne lokale Daten zeigt die Karte ihre verständliche Fehlermeldung.
@@ -377,11 +378,30 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
   - `screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
   - Die Screenshots zeigen ausschließlich fiktive Testmarker, keine echten
     Mitgliederdaten.
-- Der Service-Worker-Cache `vmkarte-shell-v3` enthält Manifest, Icons und
+- Der Service-Worker-Cache `vmkarte-shell-v6` enthält Manifest, Icons und
   Screenshots.
 - Chrome-Installability-Check: keine Manifest-, Installability- oder
   Screenshot-Warnungen.
-- Phase 8–10 sind noch offen.
+- Phase 10 (Domainumzug) ist noch offen.
+
+### 5.10 App-Version und Entwicklungsmodus
+
+- `docker/webserver/www_data/VERSION` ist die gepflegte Versionsquelle
+  (aktuell `3.0.0`).
+- Das Dockerfile erzeugt beim Build daraus `app-version.json` und
+  `js/version.js`; `APP_VERSION` und `BUILD_DATE` können als Build-Args
+  überschrieben werden. Ohne Docker gelten die lokalen Dev-Fallbacks `dev`
+  und `null`.
+- `js/app.js` vergleicht `APP_VERSION` exakt mit der Version aus
+  `/app-version.json`. Bei Ungleichheit erscheint der Update-Hinweis; ein
+  Neuladen erfolgt nur nach Bestätigung.
+- `?dev=1` aktiviert für die Tab-Session den Entwicklungsmodus, `?dev=0`
+  deaktiviert ihn. Der Modus meldet Service Worker ab, löscht `vmkarte-`-Caches
+  und überspringt Registrierung und Versionsprüfung. IndexedDB bleibt erhalten.
+- nginx liefert `/app-version.json` als `application/json` mit
+  `Cache-Control: no-store`.
+- Details zu Deployment, Rollback und Cache-Löschung stehen in
+  `docs/upgrade-3.0-auth.md`.
 
 ---
 
