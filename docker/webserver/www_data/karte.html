@@ -23,10 +23,14 @@
 		/* make the search controls more beautiful: white background, rounded corners, shadow, a bit padding */
 		#search_controls	{ background-color: #fff; border-radius: 5px; box-shadow: 0 1px 7px rgba(0,0,0,0.65); padding: 6px; }
 
-		/* logout button inside the search controls */
+		/* action buttons inside the search controls */
 		#search_controls button	{ width: 100%; margin-top: 6px; padding: 6px 8px; border: 0; border-radius: 4px;
 					  background: #2e7d32; color: #fff; font: inherit; cursor: pointer; }
 		#search_controls button:hover	{ background: #256428; }
+		#reset_button	{ background: #1565c0; }
+		#reset_button:hover	{ background: #0d47a1; }
+		#logout_button	{ background: #c62828; }
+		#logout_button:hover	{ background: #8e0000; }
 		
 		/* red circles for hashtags */
 		.tag_circle	{ stroke: red; fill: red; }
@@ -62,6 +66,19 @@
 		document.getElementById("map").style.width = window.innerWidth + "px";
 		document.getElementById("map").style.height = window.innerHeight + "px";
 		document.getElementById("map").style.marginBottom = "0px";
+	}
+
+	function reset_search() {
+		form_search.value = '';
+		form_select.selectedIndex = 0;
+
+		const url = new URL(window.location);
+		if (url.search) {
+			url.search = '';
+			window.history.replaceState({}, '', url.href);
+		}
+
+		add_vmforum_members();
 	}
 
 	async function logout() {
@@ -294,6 +311,7 @@
 		form_select = document.getElementById('form_select');
 		form_search = document.getElementById('form_search');
 
+		L.DomEvent.on(document.getElementById('reset_button'), 'click', reset_search);
 		L.DomEvent.on(document.getElementById('logout_button'), 'click', logout);
 
 		// Make the map container cover the whole browser window.
@@ -379,6 +397,7 @@
 		</select>
 		<datalist id="tags">
 		</datalist>
+		<button type="button" id="reset_button" title="Suchfelder und Filter zurücksetzen">Zurücksetzen</button>
 		<button type="button" id="logout_button" title="Abmelden">Abmelden</button>
 	</div>
 </body>
