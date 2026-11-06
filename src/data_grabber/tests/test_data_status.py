@@ -29,6 +29,20 @@ class BuildDataStatusTests(unittest.TestCase):
             r'^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}[+-]\d{2}:\d{2}$',
         )
 
+    def test_includes_run_started_at_when_given(self):
+        generated_at = datetime(2026, 11, 6, 3, 41, 12, tzinfo=timezone.utc)
+        run_started_at = datetime(2026, 11, 6, 3, 33, 0, tzinfo=timezone.utc)
+
+        status = build_data_status(3167, generated_at, run_started_at)
+
+        self.assertEqual(status['runStartedAt'], '2026-11-06T03:33:00+00:00')
+        self.assertEqual(status['generatedAt'], '2026-11-06T03:41:12+00:00')
+
+    def test_omits_run_started_at_when_not_given(self):
+        status = build_data_status(1)
+
+        self.assertNotIn('runStartedAt', status)
+
 
 class WriteDataStatusTests(unittest.TestCase):
     def test_writes_json_to_given_path(self):
@@ -42,6 +56,18 @@ class WriteDataStatusTests(unittest.TestCase):
                 status = json.load(status_file)
             self.assertEqual(status['memberCount'], 42)
             self.assertEqual(status['generatedAt'], '2026-11-06T03:33:00+00:00')
+
+    def test_writes_run_started_at(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / 'data-status.json'
+            generated_at = datetime(2026, 11, 6, 3, 41, 12, tzinfo=timezone.utc)
+            run_started_at = datetime(2026, 11, 6, 3, 33, 0, tzinfo=timezone.utc)
+
+            write_data_status(path, 2, generated_at, run_started_at)
+
+            with path.open(encoding='utf-8') as status_file:
+                status = json.load(status_file)
+            self.assertEqual(status['runStartedAt'], '2026-11-06T03:33:00+00:00')
 
     def test_replaces_existing_file_without_leaving_temp_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:

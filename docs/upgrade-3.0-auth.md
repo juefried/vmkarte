@@ -12,8 +12,11 @@ Diese Anleitung beschreibt das Deployment der ersten Ausbaustufe:
 - Schutz von Karte und Mitgliederdaten
 - Entfernung von HTTP Basic Authentication
 
-Noch nicht enthalten: PWA, Service Worker, Offline-Cache, `data-status.json`,
-manueller Refresh, Standortfunktion und Domainumzug.
+Enthalten seit Phase 5: Frontend-Datenloader mit IndexedDB, dauerhafte
+Datenstatusanzeige, ETag-Abgleich und manueller Refresh.
+
+Noch nicht enthalten: PWA-Manifest, Icons, Service Worker, Offline-App-Shell,
+Standortfunktion und Domainumzug.
 
 ## Voraussetzungen
 
@@ -251,6 +254,36 @@ docker compose up -d
 docker compose ps
 docker compose logs --tail=100 auth web
 ```
+
+## Frontend-Dateien (Phase 5)
+
+Die Karte lädt zusätzlich:
+
+- `/js/app.js`, `/js/data.js`, `/js/storage.js`, `/js/status-ui.js`
+- `/css/app.css`
+- weiterhin `/leaflet/` und `/markercluster/`
+
+Diese statischen Dateien sind öffentlich erreichbar. Geschützt bleiben `/`,
+`/karte.html` und `/shared/`. Der Datenstand wird aus
+`/shared/data-status.json` gelesen, die Mitgliederdaten aus
+`/shared/vmforum_members.json`; beide Routen laufen über `auth_request`.
+
+`data-status.json` enthält:
+
+```json
+{
+  "runStartedAt": "2026-11-06T03:33:00+01:00",
+  "generatedAt": "2026-11-06T03:41:12+01:00",
+  "memberCount": 3275
+}
+```
+
+Das Frontend nutzt `generatedAt` für die Anzeige und die 48-h-Warnung,
+`runStartedAt` nur als Zusatzinformation im Tooltip. Der zuletzt geladene Stand
+wird in IndexedDB gespeichert und bei Logout und `401` gelöscht.
+
+Die CSP enthält für Skripte nur noch `script-src 'self'`. `style-src` behält
+`'unsafe-inline'`, weil Leaflet Inline-Stile setzt.
 
 ## Tests
 
