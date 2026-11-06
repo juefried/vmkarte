@@ -319,7 +319,7 @@ BRouter weiter. `geo-handler.php` ist nur noch eine Legacy-Datei.
 ## Service Worker und Offline (Phase 7)
 
 - `/service-worker.js` wird beim Laden der Karte registriert (Scope `/`).
-- Der Service-Worker-Cache (aktuell `vmkarte-shell-v6`) enthält App-Shell
+- Der Service-Worker-Cache (aktuell `vmkarte-shell-v7`) enthält App-Shell
   (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html` und
   `offline.html`. Seit Phase 8 sind auch `js/map-state.js` und `js/location.js`
   enthalten; seit Phase 9 zusätzlich `js/version.js` und
@@ -366,7 +366,7 @@ curl -sSI https://karte.jfr-service.de/service-worker.js | \
   - `/screenshots/screenshot-wide.png` (1280×720, `form_factor: wide`)
   - `/screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
   - Die Screenshots enthalten nur fiktive Testmarker.
-- Der Service-Worker-Cache (aktuell `vmkarte-shell-v6`) enthält Manifest, Icons
+- Der Service-Worker-Cache (aktuell `vmkarte-shell-v7`) enthält Manifest, Icons
   und Screenshots.
 - Bei künftigen App-Änderungen `CACHE_NAME` in `service-worker.js` erhöhen.
 - Quellen der Icons: `icons/icon-any.svg` und `icons/icon-maskable.svg`.
@@ -415,18 +415,18 @@ Android/iPhone „Zum Home-Bildschirm“ verwenden.
 - Logout und `401` leeren IndexedDB, melden den Service Worker ab und löschen
   die `vmkarte-`-Caches. Der Service Worker registriert sich beim nächsten
   Kartenaufruf neu.
-- `CACHE_NAME` ist `vmkarte-shell-v6`.
+- `CACHE_NAME` ist `vmkarte-shell-v7`.
 
 ## Version und Update (Phase 9)
 
 Die App-Version wird beim Docker-Build erzeugt. Quelle ist die gepflegte Datei
 `docker/webserver/www_data/VERSION`; sie enthält genau eine Zeile, zum Beispiel
-`3.0.0`. Das Dockerfile schreibt daraus:
+`3.0.1`. Das Dockerfile schreibt daraus:
 
 - `/app-version.json` für die Laufzeitprüfung:
 
   ```json
-  {"version":"3.0.0","buildDate":"2026-11-06T10:15:00Z"}
+  {"version":"3.0.1","buildDate":"2026-11-06T10:15:00Z"}
   ```
 
 - `/js/version.js` als importierbares Modul mit `APP_VERSION` und
@@ -558,7 +558,7 @@ curl -sSI https://karte.jfr-service.de/app-version.json | \
   grep -iE 'HTTP/|content-type|cache-control'
 ```
 
-Erwartet: `{"version":"3.0.0","buildDate":"…"}`, `application/json` und
+Erwartet: `{"version":"3.0.1","buildDate":"…"}`, `application/json` und
 `Cache-Control: no-store`.
 
 Nach dem Deployment im Browser prüfen:
