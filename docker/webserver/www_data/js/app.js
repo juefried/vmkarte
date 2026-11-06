@@ -17,6 +17,7 @@ var form_select;
 var form_search;
 var member_update_timer;
 var map_state_save_timer;
+var suppress_map_state_save_until = 0;
 var location_layer;
 var location_button;
 var location_request_in_progress = false;
@@ -55,6 +56,11 @@ function apply_filter_search_to_url(search) {
 }
 
 function schedule_map_state_save() {
+	// Centering on the geolocation result must not persist the position via
+	// the map center. Ignore the move/zoom events caused by that setView.
+	if (Date.now() < suppress_map_state_save_until)
+		return;
+
 	clearTimeout(map_state_save_timer);
 	map_state_save_timer = setTimeout(save_map_state, 300);
 }
@@ -575,6 +581,7 @@ function show_position(position) {
 		}).addTo(location_layer);
 	}
 
+	suppress_map_state_save_until = Date.now() + 1000;
 	map.setView([latitude, longitude], Math.max(map.getZoom(), 14));
 }
 
