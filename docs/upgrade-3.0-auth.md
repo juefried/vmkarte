@@ -504,6 +504,9 @@ beendet einen bereits aktiven Controller nicht sofort. Bis zum Reload kann die
 aktuelle Seite noch vom bisherigen Service Worker bedient werden. Die
 App-Caches werden bei jedem Aufruf mit `?dev=1` erneut gelöscht.
 
+Logout und `401` ändern den Entwicklungsmodus nicht. Wer nach dem Abmelden
+wieder im normalen Modus arbeiten möchte, ruft `?dev=0` auf.
+
 ### Cache-Löschung für Nutzer
 
 - Bei einem Update-Hinweis „Neu laden“ bestätigen. Erst danach wird die neue
