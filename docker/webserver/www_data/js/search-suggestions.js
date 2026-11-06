@@ -42,3 +42,16 @@ export function collectSearchSuggestions(members) {
 			|| a.value.localeCompare(b.value, 'de', { sensitivity: 'base' }))
 		.map(entry => entry.value);
 }
+
+export function filterSearchSuggestions(suggestions, query) {
+	const values = (Array.isArray(suggestions) ? suggestions : [])
+		.filter(value => typeof value === 'string');
+	const normalizedQuery = typeof query === 'string'
+		? query.trim().toLocaleLowerCase('de')
+		: '';
+
+	if (!normalizedQuery)
+		return values.filter(value => value.startsWith('#'));
+
+	return values.filter(value => value.toLocaleLowerCase('de').includes(normalizedQuery));
+}
