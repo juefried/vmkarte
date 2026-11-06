@@ -337,17 +337,29 @@ async function main() {
 	await waitFor(`navigator.serviceWorker.getRegistration().then(registration => Boolean(registration))`, 'service worker registration');
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache');
 	assert.equal(await cacheContains('/app-version.json'), false);
-	check.pass('Service Worker installiert und app-version.json bleibt network-only');
+	const serviceWorkerSource = await (await fetch(ORIGIN + '/service-worker.js')).text();
+	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v6';"));
+	check.pass('Service Worker installiert, Cache ist v6 und app-version.json bleibt network-only');
 
-	// 3. ?dev=1 disables the service worker and removes vmkarte caches.
+	// 3. ?dev=1 disables the service worker, removes caches and skips the version check.
+	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };
 	await navigate('/karte.html?dev=1');
 	await waitForMap();
 	await waitFor(`document.getElementById('data_message').textContent.includes('Entwicklungsmodus aktiv')`, 'dev mode message');
+	assert.equal(await evaluate(`document.getElementById('data_message').textContent.includes('Eine neue Version ist verfügbar.')`), false);
 	await waitFor(`navigator.serviceWorker.getRegistrations().then(registrations => registrations.length === 0)`, 'service workers unregistered');
 	await waitFor(`caches.keys().then(keys => keys.filter(key => key.startsWith('vmkarte-')).length === 0)`, 'vmkarte caches deleted');
-	check.pass('?dev=1 meldet Service Worker ab und löscht vmkarte-Caches');
+	check.pass('?dev=1 meldet Service Worker ab, löscht Caches und überspringt die Versionsprüfung');
+
+	// 3b. The dev mode persists across a navigation without the query parameter.
+	await navigate('/karte.html');
+	await waitForMap();
+	await waitFor(`document.getElementById('data_message').textContent.includes('Entwicklungsmodus aktiv')`, 'persisted dev mode message');
+	assert.equal(await evaluate(`navigator.serviceWorker.getRegistrations().then(registrations => registrations.length)`), 0);
+	check.pass('Entwicklungsmodus bleibt in der Tab-Session ohne Parameter aktiv');
 
 	// 4. ?dev=0 disables dev mode and registers the worker again.
+	appVersion = { version: 'dev', buildDate: '2026-11-06T10:00:00Z' };
 	await navigate('/karte.html?dev=0');
 	await waitForMap();
 	await delay(300);
@@ -356,7 +368,7 @@ async function main() {
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache after dev=0');
 	check.pass('?dev=0 deaktiviert den Entwicklungsmodus und registriert den Worker erneut');
 
-	// 5. A different app version shows one confirmed update hint.
+	// 5. A different app version shows a hint that reloads only after confirmation.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };
 	await navigate('/karte.html');
 	await waitForMap();
@@ -367,6 +379,17 @@ async function main() {
 	assert.equal(await evaluate(`window.__phase9Sentinel`), true);
 	assert.equal(await evaluate(`location.pathname`), '/karte.html');
 	check.pass('Neue App-Version zeigt Hinweis und lädt nicht automatisch neu');
+
+	await evaluate(`(() => {
+		const button = Array.from(document.querySelectorAll('#data_message button'))
+			.find(candidate => candidate.textContent === 'Neu laden');
+		button.click();
+		return true;
+	})()`);
+	await waitFor(`typeof window.__phase9Sentinel === 'undefined'`, 'confirmed reload', 20000);
+	await waitForMap();
+	await waitFor(`document.getElementById('data_message').textContent.includes('Eine neue Version ist verfügbar.')`, 'update message after reload');
+	check.pass('Neu laden wird erst nach Bestätigung ausgeführt');
 
 	// 6. A failed version request stays silent.
 	appVersionStatus = 500;
