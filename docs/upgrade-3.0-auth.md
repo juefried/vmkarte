@@ -20,7 +20,10 @@ kontrollierter Update-Hinweis.
 
 Enthalten seit Phase 6: PWA-Manifest, Icons und Installierbarkeit.
 
-Noch nicht enthalten: Standortfunktion und Domainumzug.
+Enthalten seit Phase 8: Standortanzeige nach Klick sowie lokale Speicherung und
+Wiederherstellung von Kartenausschnitt, Zoom und Filtern.
+
+Noch nicht enthalten: Domainumzug.
 
 ## Voraussetzungen
 
@@ -264,7 +267,7 @@ docker compose logs --tail=100 auth web
 Die Karte lädt zusätzlich:
 
 - `/js/app.js`, `/js/data.js`, `/js/storage.js`, `/js/status-ui.js`,
-  `/js/geo-handler.js`
+  `/js/map-state.js`, `/js/location.js`, `/js/geo-handler.js`
 - `/css/app.css`
 - `/geo-handler.html` bzw. `/geo-handler` für `geo:`-Links
 - weiterhin `/leaflet/` und `/markercluster/`
@@ -313,8 +316,10 @@ BRouter weiter. `geo-handler.php` ist nur noch eine Legacy-Datei.
 ## Service Worker und Offline (Phase 7)
 
 - `/service-worker.js` wird beim Laden der Karte registriert (Scope `/`).
-- Cache `vmkarte-shell-v1` enthält App-Shell (`/`, `/karte.html`), CSS/JS,
-  Leaflet, MarkerCluster, `geo-handler.html` und `offline.html`.
+- Der Service-Worker-Cache (aktuell `vmkarte-shell-v4`) enthält App-Shell
+  (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html` und
+  `offline.html`. Seit Phase 8 sind auch `js/map-state.js` und `js/location.js`
+  enthalten.
 - Navigationen laufen network-first mit Cache-/`offline.html`-Fallback.
 - Statische Assets laufen stale-while-revalidate.
 - `/shared/`, `/login`, `/logout` und `/_internal/session-check` bleiben
@@ -357,8 +362,8 @@ curl -sSI https://karte.jfr-service.de/service-worker.js | \
   - `/screenshots/screenshot-wide.png` (1280×720, `form_factor: wide`)
   - `/screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
   - Die Screenshots enthalten nur fiktive Testmarker.
-- Der Service-Worker-Cache `vmkarte-shell-v3` enthält Manifest, Icons und
-  Screenshots.
+- Der Service-Worker-Cache (aktuell `vmkarte-shell-v4`) enthält Manifest, Icons
+  und Screenshots.
 - Bei künftigen App-Änderungen `CACHE_NAME` in `service-worker.js` erhöhen.
 - Quellen der Icons: `icons/icon-any.svg` und `icons/icon-maskable.svg`.
 
@@ -380,6 +385,31 @@ curl -sSI https://karte.jfr-service.de/screenshots/screenshot-wide.png | \
 
 Danach im Browser (Chrome/Edge) die Installationsaufforderung prüfen; auf
 Android/iPhone „Zum Home-Bildschirm“ verwenden.
+
+## Standort und Kartenstatus (Phase 8)
+
+- Der Standortbutton ist ein Leaflet-Control unten rechts über der Karte.
+- `navigator.geolocation.getCurrentPosition()` wird ausschließlich im
+  Click-Handler aufgerufen; es gibt kein `watchPosition` und keine dauerhafte
+  Verfolgung.
+- Marker und Genauigkeitskreis erscheinen nur nach erfolgreicher Abfrage. Die
+  Karte wird einmalig auf die Position zentriert.
+- Berechtigung verweigert, nicht verfügbar und Timeout werden als
+  verständliche deutsche Meldungen angezeigt.
+- Standortdaten werden nicht an den App-Server übertragen, nicht in
+  IndexedDB/`localStorage` gespeichert und nicht in die URL geschrieben. Die
+  durch das Zentrieren ausgelösten Kartenereignisse werden für 1 s vom
+  Kartenstatus-Speichern ausgenommen.
+- Kartenmitte, Zoom und der aktuelle URL-Filterstand werden unter dem
+  IndexedDB-Schlüssel `mapState` im Store `kv` gespeichert.
+- Beim Start werden Karte und Zoom wiederhergestellt. URL-Filter haben Vorrang;
+  ohne URL-Filter wird der gespeicherte Filterstand per URL angewendet.
+- Dropdown und Suchfeld starten immer im Default-Zustand; der Freitext wird
+  nicht gespeichert.
+- Logout und `401` leeren IndexedDB, melden den Service Worker ab und löschen
+  die `vmkarte-`-Caches. Der Service Worker registriert sich beim nächsten
+  Kartenaufruf neu.
+- `CACHE_NAME` ist `vmkarte-shell-v4`.
 
 ## Tests
 
