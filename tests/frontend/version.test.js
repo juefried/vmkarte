@@ -28,6 +28,7 @@ test('parseAppVersion treats missing build date as null', () => {
 
 test('isNewVersion uses exact inequality', () => {
 	assert.equal(isNewVersion('3.0.0', '3.0.0'), false);
+	assert.equal(isNewVersion('3.0.0 ', ' 3.0.0'), false);
 	assert.equal(isNewVersion('3.0.0', '3.0.1'), true);
 	assert.equal(isNewVersion('3.0.0', ''), false);
 	assert.equal(isNewVersion(undefined, '3.0.1'), false);

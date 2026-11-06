@@ -18,9 +18,12 @@ export function parseAppVersion(value) {
 export function isNewVersion(currentVersion, remoteVersion) {
 	if (typeof currentVersion !== 'string' || typeof remoteVersion !== 'string')
 		return false;
-	if (!currentVersion || !remoteVersion)
+
+	const current = currentVersion.trim();
+	const remote = remoteVersion.trim();
+	if (!current || !remote)
 		return false;
-	return currentVersion !== remoteVersion;
+	return current !== remote;
 }
 
 export function resolveDevMode(search, stored) {

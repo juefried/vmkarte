@@ -261,15 +261,22 @@ async function request_update_reload() {
 		return;
 	update_reload_pending = true;
 
+	const supports_service_worker = 'serviceWorker' in navigator;
+	const reload_once = () => window.location.reload();
+	if (supports_service_worker)
+		navigator.serviceWorker.addEventListener('controllerchange', reload_once, { once: true });
+
 	const waiting = await find_waiting_worker();
 	if (!waiting) {
+		if (supports_service_worker)
+			navigator.serviceWorker.removeEventListener('controllerchange', reload_once);
+		// Without a waiting worker, a plain reload could be served from the old
+		// service worker cache. Clear it first so the reload really is fresh.
+		await clearAppCaches();
 		window.location.reload();
 		return;
 	}
 
-	navigator.serviceWorker.addEventListener('controllerchange', () => {
-		window.location.reload();
-	}, { once: true });
 	waiting.postMessage({ type: 'SKIP_WAITING' });
 }
 
@@ -461,7 +468,7 @@ async function syncFromServer({ manual = false } = {}) {
 			show_current_status(false);
 			if (!keep_message_on_sync)
 				statusUi.clearMessage();
-			if (manual)
+			if (manual && !keep_message_on_sync)
 				statusUi.setMessage({ type: 'success', text: 'Kartendaten aktualisiert.' });
 		}
 	}
@@ -469,7 +476,7 @@ async function syncFromServer({ manual = false } = {}) {
 		console.warn('Serverabgleich fehlgeschlagen.', error);
 		if (members.length > 0) {
 			show_current_status(true);
-			if (manual) {
+			if (manual && !keep_message_on_sync) {
 				statusUi.setMessage({
 					type: 'error',
 					text: 'Die Kartendaten konnten nicht aktualisiert werden. Der zuletzt geladene Stand bleibt sichtbar.',
@@ -928,10 +935,10 @@ async function create_map() {
 	window.addEventListener('online', () => {
 		update_online_state();
 		syncFromServer();
+		if (!devMode.enabled)
+			check_app_version();
 	});
 	update_online_state();
-
-	syncFromServer();
 
 	if (devMode.enabled) {
 		await clearAppCaches();
@@ -942,7 +949,10 @@ async function create_map() {
 			autoHideMs: 6000,
 		});
 	}
-	else {
+
+	syncFromServer();
+
+	if (!devMode.enabled) {
 		register_service_worker();
 		check_app_version();
 	}

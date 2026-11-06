@@ -17,6 +17,7 @@ ARG BUILD_DATE=
 
 RUN set -e; \
     if [ -z "$APP_VERSION" ]; then APP_VERSION=$(cat /www_data/VERSION); fi; \
+    if [ -z "$APP_VERSION" ]; then echo "APP_VERSION is empty" >&2; exit 1; fi; \
     BUILD_DATE="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"; \
     printf '{"version":"%s","buildDate":"%s"}\n' "$APP_VERSION" "$BUILD_DATE" > /www_data/app-version.json; \
     printf 'export const APP_VERSION = "%s";\nexport const BUILD_DATE = "%s";\n' "$APP_VERSION" "$BUILD_DATE" > /www_data/js/version.js
