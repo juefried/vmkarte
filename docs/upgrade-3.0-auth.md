@@ -397,9 +397,10 @@ Android/iPhone „Zum Home-Bildschirm“ verwenden.
 - Berechtigung verweigert, nicht verfügbar und Timeout werden als
   verständliche deutsche Meldungen angezeigt.
 - Standortdaten werden nicht an den App-Server übertragen, nicht in
-  IndexedDB/`localStorage` gespeichert und nicht in die URL geschrieben. Die
-  durch das Zentrieren ausgelösten Kartenereignisse werden für 1 s vom
-  Kartenstatus-Speichern ausgenommen.
+  IndexedDB/`localStorage` gespeichert und nicht in die URL geschrieben.
+  Solange der Kartenmittelpunkt der zuletzt ermittelten Position entspricht,
+  wird er nicht als `mapState.center` gespeichert; das gilt auch nach Zoom,
+  Resize und für verspätete Save-Timer.
 - Kartenmitte, Zoom und der aktuelle URL-Filterstand werden unter dem
   IndexedDB-Schlüssel `mapState` im Store `kv` gespeichert.
 - Beim Start werden Karte und Zoom wiederhergestellt. URL-Filter haben Vorrang;
