@@ -1,4 +1,6 @@
 import json
+import os
+import stat
 import sys
 import tempfile
 import unittest
@@ -68,6 +70,15 @@ class WriteDataStatusTests(unittest.TestCase):
             with path.open(encoding='utf-8') as status_file:
                 status = json.load(status_file)
             self.assertEqual(status['runStartedAt'], '2026-11-06T03:33:00+00:00')
+
+    @unittest.skipIf(os.name == 'nt', 'POSIX permissions are not available on Windows')
+    def test_written_file_is_readable_by_web_server(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = Path(temp_dir) / 'data-status.json'
+
+            write_data_status(path, 1)
+
+            self.assertEqual(stat.S_IMODE(path.stat().st_mode), 0o644)
 
     def test_replaces_existing_file_without_leaving_temp_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:
