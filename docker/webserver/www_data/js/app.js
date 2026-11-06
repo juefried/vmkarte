@@ -1,6 +1,8 @@
-import { readCache, writeCache, clearCache } from './storage.js';
+import { readCache, writeCache, clearCache, readMapState, writeMapState } from './storage.js';
 import { createStatusUi } from './status-ui.js';
 import { validateMembers, parseDataStatus, deriveStatusFromLastModified } from './data.js';
+import { resolveInitialMapState, filterSearchString, FILTER_PARAMS } from './map-state.js';
+import { describeGeolocationError, GEOLOCATION_OPTIONS } from './location.js';
 
 const DATA_STATUS_URL = 'shared/data-status.json';
 const MEMBERS_URL = 'shared/vmforum_members.json';
@@ -14,6 +16,10 @@ var layer_circles;
 var form_select;
 var form_search;
 var member_update_timer;
+var map_state_save_timer;
+var location_layer;
+var location_button;
+var location_request_in_progress = false;
 const hashtag_regex = RegExp(/(#[a-zA-Z]\w+)/, 'g');
 
 let members = [];
@@ -39,6 +45,34 @@ function schedule_member_update() {
 	member_update_timer = setTimeout(add_vmforum_members, 0);
 }
 
+function apply_filter_search_to_url(search) {
+	const url = new URL(window.location);
+	for (const key of FILTER_PARAMS)
+		url.searchParams.delete(key);
+	for (const [key, value] of new URLSearchParams(search))
+		url.searchParams.append(key, value);
+	window.history.replaceState({}, '', url.href);
+}
+
+function schedule_map_state_save() {
+	clearTimeout(map_state_save_timer);
+	map_state_save_timer = setTimeout(save_map_state, 300);
+}
+
+async function save_map_state() {
+	clearTimeout(map_state_save_timer);
+	map_state_save_timer = null;
+	if (!map)
+		return;
+
+	const center = map.getCenter();
+	await writeMapState({
+		center: [center.lat, center.lng],
+		zoom: map.getZoom(),
+		search: filterSearchString(window.location.search),
+	});
+}
+
 function reset_search() {
 	form_search.value = '';
 	form_select.selectedIndex = 0;
@@ -50,6 +84,7 @@ function reset_search() {
 	}
 
 	add_vmforum_members();
+	save_map_state();
 }
 
 async function clearAppCaches() {
@@ -500,6 +535,112 @@ function add_vmforum_members() {
 	remove_tabindex();
 }
 
+function set_location_busy(busy) {
+	if (!location_button)
+		return;
+
+	location_button.disabled = busy;
+	location_button.classList.toggle('is-loading', busy);
+	location_button.setAttribute('aria-busy', busy ? 'true' : 'false');
+
+	const label = busy ? 'Standort wird ermittelt …' : 'Standort anzeigen';
+	location_button.title = label;
+	location_button.setAttribute('aria-label', label);
+}
+
+function show_position(position) {
+	const { latitude, longitude, accuracy } = position.coords;
+
+	if (!location_layer)
+		location_layer = L.layerGroup().addTo(map);
+	location_layer.clearLayers();
+
+	L.circleMarker([latitude, longitude], {
+		radius: 7,
+		color: '#fff',
+		weight: 2,
+		fillColor: '#1565c0',
+		fillOpacity: 1,
+		className: 'location-marker',
+	}).addTo(location_layer);
+
+	if (Number.isFinite(accuracy) && accuracy > 0) {
+		L.circle([latitude, longitude], {
+			radius: accuracy,
+			color: '#1565c0',
+			weight: 1,
+			fillColor: '#1565c0',
+			fillOpacity: 0.12,
+			className: 'location-accuracy',
+		}).addTo(location_layer);
+	}
+
+	map.setView([latitude, longitude], Math.max(map.getZoom(), 14));
+}
+
+function request_location() {
+	if (location_request_in_progress)
+		return;
+
+	if (!navigator.geolocation) {
+		statusUi.setMessage({ type: 'error', text: 'Dieser Browser unterstützt keine Standortbestimmung.' });
+		return;
+	}
+
+	location_request_in_progress = true;
+	set_location_busy(true);
+
+	const handle_error = error => {
+		location_request_in_progress = false;
+		set_location_busy(false);
+		statusUi.setMessage({ type: 'error', text: describeGeolocationError(error) });
+	};
+
+	try {
+		navigator.geolocation.getCurrentPosition(
+			position => {
+				location_request_in_progress = false;
+				set_location_busy(false);
+				show_position(position);
+			},
+			handle_error,
+			GEOLOCATION_OPTIONS,
+		);
+	}
+	catch (error) {
+		handle_error(error);
+	}
+}
+
+function create_location_control() {
+	const control = new L.Control({ position: 'bottomright' });
+
+	control.onAdd = () => {
+		const container = L.DomUtil.create('div', 'leaflet-bar location-control');
+		const button = L.DomUtil.create('button', 'icon-button', container);
+		button.type = 'button';
+		button.id = 'location_button';
+		button.title = 'Standort anzeigen';
+		button.setAttribute('aria-label', 'Standort anzeigen');
+		button.setAttribute('aria-busy', 'false');
+		button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">'
+			+ '<line x1="2" x2="5" y1="12" y2="12"/>'
+			+ '<line x1="19" x2="22" y1="12" y2="12"/>'
+			+ '<line x1="12" x2="12" y1="2" y2="5"/>'
+			+ '<line x1="12" x2="12" y1="19" y2="22"/>'
+			+ '<circle cx="12" cy="12" r="7"/>'
+			+ '<circle cx="12" cy="12" r="3"/>'
+			+ '</svg>';
+
+		location_button = button;
+		L.DomEvent.disableClickPropagation(container);
+		L.DomEvent.on(button, 'click', request_location);
+		return container;
+	};
+
+	return control;
+}
+
 async function create_map() {
 	statusUi = createStatusUi({
 		statusElement: document.getElementById('data_status'),
@@ -524,6 +665,28 @@ async function create_map() {
 	// Make the map container cover the whole browser window.
 	resize_map_to_full_window();
 
+	const [cache, storedMapState] = await Promise.all([
+		readCache().catch(error => {
+			console.warn('Lokaler Kartenstand konnte nicht gelesen werden.', error);
+			return null;
+		}),
+		readMapState().catch(error => {
+			console.warn('Lokaler Kartenstatus konnte nicht gelesen werden.', error);
+			return null;
+		}),
+	]);
+
+	const initialMapState = resolveInitialMapState({
+		urlSearch: window.location.search,
+		stored: storedMapState,
+	});
+	if (initialMapState.applyStoredSearch)
+		apply_filter_search_to_url(initialMapState.search);
+
+	// Form inputs always start at their defaults; filters come from the URL.
+	form_search.value = '';
+	form_select.selectedIndex = 0;
+
 	// Create map, without animations but with OSM/Nominatim attribution.
 	map = L.map('map', {
 		'zoomAnimation': false,
@@ -536,8 +699,8 @@ async function create_map() {
 				'useCache': true
 			})
 
-		// Set initial view to Germany.
-		).setView([50, 11], 7);
+		// Restore the last map view, or fall back to Germany.
+		).setView(initialMapState.center, initialMapState.zoom);
 
 	map.attributionControl.addAttribution(
 		'Geocoding: <a href="https://nominatim.org/" target="_blank" rel="noopener">Nominatim</a>'
@@ -591,10 +754,8 @@ async function create_map() {
 
 	document.getElementById('refresh_button').addEventListener('click', () => syncFromServer({ manual: true }));
 
-	const cache = await readCache().catch(error => {
-		console.warn('Lokaler Kartenstand konnte nicht gelesen werden.', error);
-		return null;
-	});
+	create_location_control().addTo(map);
+	map.on('moveend zoomend', schedule_map_state_save);
 
 	if (cache && cache.members.length > 0) {
 		members = cache.members;
