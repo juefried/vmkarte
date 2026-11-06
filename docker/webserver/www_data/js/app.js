@@ -691,35 +691,6 @@ function request_location() {
 	}
 }
 
-function create_location_control() {
-	const control = new L.Control({ position: 'bottomright' });
-
-	control.onAdd = () => {
-		const container = L.DomUtil.create('div', 'leaflet-bar location-control');
-		const button = L.DomUtil.create('button', 'icon-button', container);
-		button.type = 'button';
-		button.id = 'location_button';
-		button.title = 'Standort anzeigen';
-		button.setAttribute('aria-label', 'Standort anzeigen');
-		button.setAttribute('aria-busy', 'false');
-		button.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">'
-			+ '<line x1="2" x2="5" y1="12" y2="12"/>'
-			+ '<line x1="19" x2="22" y1="12" y2="12"/>'
-			+ '<line x1="12" x2="12" y1="2" y2="5"/>'
-			+ '<line x1="12" x2="12" y1="19" y2="22"/>'
-			+ '<circle cx="12" cy="12" r="7"/>'
-			+ '<circle cx="12" cy="12" r="3"/>'
-			+ '</svg>';
-
-		location_button = button;
-		L.DomEvent.disableClickPropagation(container);
-		L.DomEvent.on(button, 'click', request_location);
-		return container;
-	};
-
-	return control;
-}
-
 async function create_map() {
 	statusUi = createStatusUi({
 		statusElement: document.getElementById('data_status'),
@@ -737,6 +708,7 @@ async function create_map() {
 
 	form_select = document.getElementById('form_select');
 	form_search = document.getElementById('form_search');
+	location_button = document.getElementById('location_button');
 
 	L.DomEvent.on(document.getElementById('reset_button'), 'click', reset_search);
 	L.DomEvent.on(document.getElementById('logout_button'), 'click', logout);
@@ -833,7 +805,8 @@ async function create_map() {
 
 	document.getElementById('refresh_button').addEventListener('click', () => syncFromServer({ manual: true }));
 
-	create_location_control().addTo(map);
+	if (location_button)
+		L.DomEvent.on(location_button, 'click', request_location);
 	map.on('moveend zoomend', schedule_map_state_save);
 
 	if (cache && cache.members.length > 0) {

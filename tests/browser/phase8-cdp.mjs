@@ -374,7 +374,16 @@ async function main() {
 	assert.equal(await evaluate(`document.querySelector('#form_search').value`), '');
 	assert.equal(await evaluate(`document.querySelector('#form_select').selectedIndex`), 0);
 	assert.equal(await evaluate(`document.querySelectorAll('.location-marker').length`), 0);
-	check.pass('Start mit leeren Formularen und ohne Standortmarker');
+	assert.deepEqual(
+		await evaluate(`Array.from(document.querySelectorAll('#action_buttons button')).map(button => button.id)`),
+		['reset_button', 'refresh_button', 'location_button', 'logout_button'],
+	);
+	assert.equal(await evaluate(`(() => {
+		const button = document.getElementById('location_button');
+		const rect = button.getBoundingClientRect();
+		return rect.width > 0 && rect.height > 0 && getComputedStyle(button).display !== 'none';
+	})()`), true);
+	check.pass('Start mit leeren Formularen, sichtbarem Standortbutton und ohne Standortmarker');
 
 	// 2. Save map state after zoom.
 	await evaluate(`document.querySelector('.leaflet-control-zoom-in').click()`);

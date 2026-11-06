@@ -33,19 +33,11 @@ body { max-width: initial; margin: 0; padding: 0; }
 #search_controls #refresh_button:disabled	{ background: #546e7a; color: #fff; cursor: default; }
 #search_controls #refresh_button.is-loading svg	{ animation: spin 1s linear infinite; }
 
-/* location control over the map, bottom right */
-.location-control	{ border: none; border-radius: 5px; overflow: hidden;
-			  box-shadow: 0 1px 7px rgba(0, 0, 0, 0.65); }
-#location_button	{ width: clamp(34px, 9vw, 40px); height: clamp(34px, 9vw, 40px);
-			  display: flex; align-items: center; justify-content: center;
-			  padding: 0; border: 0; background: #1565c0; color: #fff;
-			  cursor: pointer; line-height: 1; }
-#location_button:hover	{ background: #0d47a1; }
-#location_button:disabled	{ background: #546e7a; cursor: default; }
-#location_button svg	{ width: clamp(18px, 5vw, 22px); height: clamp(18px, 5vw, 22px);
-			  fill: none; stroke: currentColor; stroke-width: 2;
-			  stroke-linecap: round; stroke-linejoin: round; }
-#location_button.is-loading svg	{ animation: spin 1s linear infinite; }
+/* location button inside the action row */
+#search_controls #location_button	{ background: #2e7d32; }
+#search_controls #location_button:hover	{ background: #256428; }
+#search_controls #location_button:disabled	{ background: #546e7a; cursor: default; }
+#search_controls #location_button.is-loading svg	{ animation: spin 1s linear infinite; }
 
 @keyframes spin {
 	to	{ transform: rotate(360deg); }
