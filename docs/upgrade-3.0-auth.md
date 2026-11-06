@@ -331,8 +331,8 @@ BRouter weiter. `geo-handler.php` ist nur noch eine Legacy-Datei.
 - Ein Update wird erst nach Klick auf „Neu laden“ aktiv (`SKIP_WAITING`).
 - Bei Änderungen an App-Dateien `CACHE_NAME` in `service-worker.js` erhöhen,
   damit Clients den neuen Worker installieren.
-- Phase 6 (Manifest und Icons) ist noch offen; die Karte ist daher noch nicht
-  als PWA installierbar.
+- Phase 6 (Manifest und Icons) ist umgesetzt; die Karte ist als PWA
+  installierbar.
 
 Prüfen:
 
