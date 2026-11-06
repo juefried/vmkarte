@@ -352,7 +352,8 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 - `/shared/`, `/login`, `/logout`, `/session-check`, `/_internal/session-check` und `/app-version.json` bleiben network-only. `data-status.json` liegt unter `/shared/` und wird daher nie gecacht.
 - Login-Weiterleitungen werden nicht als App-Shell gecacht (`response.redirected`).
 - Ein neuer Service Worker wartet zunächst. Die Seite zeigt „Eine neue Version ist verfügbar.“ mit „Neu laden“; erst nach Bestätigung wird `SKIP_WAITING` gesendet und die Seite neu geladen.
-- Zusätzlich prüft die Seite beim Start `/app-version.json` gegen `APP_VERSION` aus `js/version.js`. Bei exakter Ungleichheit erscheint derselbe Hinweis; ohne wartenden Worker wird `registration.update()` angestoßen und nach kurzer Wartezeit normal neu geladen. Auch hier erfolgt das Neuladen nur nach Bestätigung.
+- Zusätzlich prüft die Seite beim Start `/app-version.json` gegen `APP_VERSION` aus `js/version.js`. Bei exakter Ungleichheit erscheint derselbe Hinweis. Ohne wartenden Worker wird `registration.update()` angestoßen; bleibt ein wartender Worker aus, werden vor dem Neuladen die `vmkarte-`-Caches gelöscht und der Service Worker abgemeldet. Auch hier erfolgt das Neuladen nur nach Bestätigung.
+- `VERSION` und `CACHE_NAME` werden bei einer Release-Änderung gemeinsam erhöht.
 - Logout und `401` löschen IndexedDB und alle Cache-Storage-Einträge mit Präfix `vmkarte-`.
 - Bei Änderungen an App-Dateien muss `CACHE_NAME` in `service-worker.js` erhöht werden, damit Clients den neuen Worker installieren.
 - Der Offline-Reload der App-Shell funktioniert; ohne lokale Daten zeigt die Karte ihre verständliche Fehlermeldung.

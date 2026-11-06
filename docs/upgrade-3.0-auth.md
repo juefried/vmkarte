@@ -462,13 +462,19 @@ zusammengeführt:
 - Existiert ein wartender Service Worker, wird nach Bestätigung
   `SKIP_WAITING` gesendet und nach `controllerchange` neu geladen.
 - Andernfalls wird `registration.update()` angestoßen und bis zu 3 Sekunden auf
-  einen wartenden Worker gewartet; ohne Ergebnis lädt die Seite normal neu.
+  einen wartenden Worker gewartet. Gibt es danach keinen wartenden Worker,
+  werden vor dem Neuladen die `vmkarte-`-Caches gelöscht und der Service Worker
+  abgemeldet, damit der Reload garantiert frische Dateien lädt.
 - Schlägt der Abruf von `/app-version.json` fehl (offline oder HTTP-Fehler),
   bleibt die Karte ohne Meldung nutzbar.
 
 `/app-version.json` ist im Service Worker network-only und wird nicht gecacht.
 Der nginx-Block liefert bereits `application/json` und
 `Cache-Control: no-store`.
+
+`VERSION` und `CACHE_NAME` müssen bei einer Release-Änderung gemeinsam erhöht
+werden. `VERSION` steuert den Update-Hinweis; `CACHE_NAME` sorgt dafür, dass der
+Service Worker die geänderten App-Dateien neu lädt.
 
 ## Entwicklungsmodus und Cache-Löschung
 
@@ -492,6 +498,11 @@ Kartendaten bleibt erhalten und wird weiterhin bei Logout und `401` gelöscht.
 `/js/` und `/css/` liefern `Cache-Control: no-cache`; Navigationen laufen
 network-first. Ein normaler Reload im Entwicklungsmodus lädt daher frische
 Dateien.
+
+Die vollständige Wirkung tritt nach dem nächsten Reload ein: `unregister()`
+beendet einen bereits aktiven Controller nicht sofort. Bis zum Reload kann die
+aktuelle Seite noch vom bisherigen Service Worker bedient werden. Die
+App-Caches werden bei jedem Aufruf mit `?dev=1` erneut gelöscht.
 
 ### Cache-Löschung für Nutzer
 
@@ -693,7 +704,11 @@ docker compose up -d --force-recreate auth
 docker compose logs --tail=20 auth
 ```
 
-## Rollback
+## Rollback der Auth-Umstellung (Phase 3)
+
+Der Release-weite Rollback für Version 3.0 steht im Abschnitt „Deployment und
+Rollback (Release 3.0)“. Die folgenden Schritte stellen nur die
+Auth-/nginx-Umstellung aus Phase 3 zurück.
 
 ```bash
 docker compose down
