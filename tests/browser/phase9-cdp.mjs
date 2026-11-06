@@ -373,6 +373,57 @@ async function main() {
 		await evaluate(`Array.from(document.querySelectorAll('#search_suggestions [role="option"]')).map(option => option.textContent)`),
 		['Flevo'],
 	);
+
+	await page.send('Page.bringToFront');
+	await delay(100);
+	const listRect = await evaluate(`(() => {
+		const list = document.getElementById('search_suggestions');
+		list.dataset.originalHtml = list.innerHTML;
+		for (let index = 0; index < 20; index += 1) {
+			const option = document.createElement('li');
+			option.setAttribute('role', 'option');
+			option.textContent = 'Scrolltest ' + index;
+			list.appendChild(option);
+		}
+		list.style.maxHeight = '60px';
+		const rect = list.getBoundingClientRect();
+		return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+	})()`);
+	const listInteraction = await evaluate(`(() => {
+		const list = document.getElementById('search_suggestions');
+		const mapContainer = document.querySelector('.leaflet-container');
+		let reached = 0;
+		const onEvent = () => { reached += 1; };
+		for (const type of ['wheel', 'mousedown', 'touchstart'])
+			mapContainer.addEventListener(type, onEvent);
+		list.dispatchEvent(new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 120 }));
+		list.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 0, buttons: 1 }));
+		list.dispatchEvent(new Event('touchstart', { bubbles: true, cancelable: true }));
+		for (const type of ['wheel', 'mousedown', 'touchstart'])
+			mapContainer.removeEventListener(type, onEvent);
+		return { reached, touchAction: getComputedStyle(list).touchAction };
+	})()`);
+	assert.equal(listInteraction.reached, 0);
+	assert.equal(listInteraction.touchAction, 'pan-y');
+	await page.send('Input.dispatchMouseEvent', {
+		type: 'mouseWheel',
+		x: listRect.x,
+		y: listRect.y,
+		button: 'none',
+		clickCount: 0,
+		deltaX: 0,
+		deltaY: 120,
+	});
+	await delay(150);
+	assert.ok(await evaluate(`document.getElementById('search_suggestions').scrollTop > 0`));
+	await evaluate(`(() => {
+		const list = document.getElementById('search_suggestions');
+		list.innerHTML = list.dataset.originalHtml;
+		delete list.dataset.originalHtml;
+		list.style.maxHeight = '';
+	})()`);
+	check.pass('Suchvorschläge scrollen unabhängig von der Karte');
+
 	await evaluate(`document.querySelector('#search_suggestions [role="option"]').click()`);
 	assert.equal(await evaluate(`document.getElementById('form_search').value`), 'Flevo');
 	assert.equal(await evaluate(`document.getElementById('search_suggestions').hidden`), true);
@@ -399,8 +450,8 @@ async function main() {
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache');
 	assert.equal(await cacheContains('/app-version.json'), false);
 	const serviceWorkerSource = await (await fetch(ORIGIN + '/service-worker.js')).text();
-	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v12';"));
-	check.pass('Service Worker installiert, Cache ist v12 und app-version.json bleibt network-only');
+	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v13';"));
+	check.pass('Service Worker installiert, Cache ist v13 und app-version.json bleibt network-only');
 
 	// 3. ?dev=1 disables the service worker, removes caches and skips the version check.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };

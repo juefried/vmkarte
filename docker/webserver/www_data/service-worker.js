@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vmkarte-shell-v12';
+const CACHE_NAME = 'vmkarte-shell-v13';
 
 const SHELL_URLS = [
 	'/',
