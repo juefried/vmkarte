@@ -347,6 +347,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - Filtert nach URL-Parametern und Formularfeldern.
 - Das Suchfeld zeigt bei Fokus und leerem Inhalt nur Hashtags; beim Tippen werden Namen, Fahrzeuglabels und Hashtags case-insensitiv gefiltert, häufige Werte zuerst. Die Vorschlagsliste ist auf etwa sechs Zeilen begrenzt, bleibt scrollbar und liegt direkt unter dem Eingabefeld.
 - Zeigt Name, Velomobil, Liegerad, Trike, Freitext/Hashtags und den Stand der Profildaten im Popup.
+- Links zu Forenprofilen öffnen in einem neuen Tab; Hashtag-Links filtern die Karte weiterhin im selben Tab.
 - Hashtags werden aus dem Freitextfeld `other` erkannt: `#`, danach ein Unicode-Buchstabe und mindestens ein weiteres Unicode-Buchstaben-, Ziffern- oder Unterstrichzeichen. Umlaute, Akzente und nicht-lateinische Buchstaben sind erlaubt.
 - Der Stand wird als Datum (`TT.MM.JJJJ`) aus `profile_updated_at` angezeigt; der exakte Zeitstempel steht im Tooltip. Fehlt der Wert, erscheint `Stand: unbekannt`.
 - Nutzt `radius` beim Hover, um die Unsicherheit der Ortsauflösung als Kreis darzustellen.
@@ -389,7 +390,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 ### 5.8 Service Worker und Offline
 
 - `js/app.js` registriert `/service-worker.js` mit Scope `/`.
-- Cache `vmkarte-shell-v10` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html`, `offline.html`, `js/version.js` und `js/version-check.js`.
+- Cache `vmkarte-shell-v11` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html`, `offline.html`, `js/version.js` und `js/version-check.js`.
 - Navigationen laufen network-first mit Fallback auf den angeforderten Cache-Eintrag, `/karte.html`, `/` und schließlich `/offline.html`.
 - Statische Assets laufen stale-while-revalidate.
 - `/shared/`, `/login`, `/logout`, `/session-check`, `/_internal/session-check` und `/app-version.json` bleiben network-only. `data-status.json` liegt unter `/shared/` und wird daher nie gecacht.
@@ -423,7 +424,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
   - `screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
   - Die Screenshots zeigen ausschließlich fiktive Testmarker, keine echten
     Mitgliederdaten.
-- Der Service-Worker-Cache `vmkarte-shell-v10` enthält Manifest, Icons und
+- Der Service-Worker-Cache `vmkarte-shell-v11` enthält Manifest, Icons und
   Screenshots.
 - Chrome-Installability-Check: keine Manifest-, Installability- oder
   Screenshot-Warnungen.
