@@ -275,7 +275,12 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 
 ### 5.6 Frontend `karte.html`
 
-- Lädt `shared/vmforum_members.json` (`karte.html:47`).
+- `karte.html` ist die App-Shell. Styles liegen in `css/app.css`, das JavaScript in `js/app.js` und den Modulen `js/data.js`, `js/storage.js` und `js/status-ui.js`.
+- Lädt `shared/vmforum_members.json` und `shared/data-status.json`.
+- Speichert den zuletzt geladenen Stand in IndexedDB (`vmkarte`, Store `kv`) und zeigt ihn beim Start sofort an. Ohne lokalen Stand erscheint `Kartendaten werden geladen …`.
+- Gleicht im Hintergrund mit dem Server ab und nutzt ETag/`304`, wenn ein lokaler Stand vorhanden ist. Der manuelle Button `Kartendaten aktualisieren` lädt ohne HTTP-Cache.
+- Zeigt dauerhaft und dezent unten links den Datenstand inklusive Quelle `Server`/`lokal`, Warnung bei mehr als 48 Stunden und `runStartedAt` im Tooltip.
+- `401` und Logout löschen die lokalen Kartendaten aus IndexedDB.
 - Erstellt eine Leaflet-Karte mit MarkerCluster.
 - Zeigt die vorgeschriebene Attribution im Leaflet-Attribution-Control unten rechts: „© OpenStreetMap-Mitwirkende, ODbL“ sowie „Geocoding: Nominatim“.
 - Filtert nach URL-Parametern und Formularfeldern.
@@ -283,7 +288,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - Der Stand wird als Datum (`TT.MM.JJJJ`) aus `profile_updated_at` angezeigt; der exakte Zeitstempel steht im Tooltip. Fehlt der Wert, erscheint `Stand: unbekannt`.
 - Nutzt `radius` beim Hover, um die Unsicherheit der Ortsauflösung als Kreis darzustellen.
 - Registriert einen `geo:`-Protokollhandler, der auf `christoph-moder.de/vmforum-karte/geo-handler.php` verweist.
-- Es gibt keine Fehlerbehandlung, falls `fetch()` fehlschlägt; die Karte initialisiert dann nicht.
+- Fehler beim Datenabruf werden verständlich angezeigt. Mit lokalem Stand bleibt die Karte bedienbar; ohne lokalen Stand erscheint eine Meldung mit „Erneut versuchen“.
 
 ### 5.7 Docker-Setup
 
@@ -679,9 +684,13 @@ docker compose exec cron python3 /app/utils/vehicle_label_map_report.py
 
 ### Karte in der IDE anzeigen
 
-Der Scraper schreibt die Kartendaten direkt nach `docker/webserver/www_data/shared/vmforum_members.json`. Damit entfällt das bisherige Kopieren nach jedem Lauf. `docker/webserver/www_data/karte.html` über den IDE-Webserver öffnen und mit `Strg+F5` neu laden.
+Der Scraper schreibt die Kartendaten direkt nach `docker/webserver/www_data/shared/vmforum_members.json`. Damit entfällt das bisherige Kopieren nach jedem Lauf. Wegen der nativen ES-Module muss `docker/webserver/www_data` über einen HTTP-Server bereitgestellt werden (nicht über `file://`), zum Beispiel:
 
-Fehlt die Datei, bricht `create_map()` beim `await members` ab und es bleibt eine leere Seite. Der Ordner ist in `.gitignore` eingetragen und über `docker/webserver/.dockerignore` vom Web-Image ausgeschlossen.
+```powershell
+python -m http.server 8000 --bind 127.0.0.1
+```
+
+Dann `http://127.0.0.1:8000/karte.html` öffnen und mit `Strg+F5` neu laden. Fehlt die Datei, zeigt die Karte eine Lade- bzw. Fehlermeldung mit „Erneut versuchen“; sie bleibt nicht mehr leer. Der Ordner ist in `.gitignore` eingetragen und über `docker/webserver/.dockerignore` vom Web-Image ausgeschlossen.
 
 ### Docker
 
