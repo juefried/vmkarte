@@ -259,14 +259,20 @@ docker compose logs --tail=100 auth web
 
 Die Karte lädt zusätzlich:
 
-- `/js/app.js`, `/js/data.js`, `/js/storage.js`, `/js/status-ui.js`
+- `/js/app.js`, `/js/data.js`, `/js/storage.js`, `/js/status-ui.js`,
+  `/js/geo-handler.js`
 - `/css/app.css`
+- `/geo-handler.html` bzw. `/geo-handler` für `geo:`-Links
 - weiterhin `/leaflet/` und `/markercluster/`
 
 Diese statischen Dateien sind öffentlich erreichbar. Geschützt bleiben `/`,
 `/karte.html` und `/shared/`. Der Datenstand wird aus
 `/shared/data-status.json` gelesen, die Mitgliederdaten aus
 `/shared/vmforum_members.json`; beide Routen laufen über `auth_request`.
+
+`/js/` und `/css/` liefern `Cache-Control: no-cache`. Dadurch werden Updates
+sofort revalidiert (ETag/`304`), statt bis zu einer Stunde aus dem
+Browser-Cache zu kommen.
 
 `data-status.json` enthält:
 
@@ -280,10 +286,25 @@ Diese statischen Dateien sind öffentlich erreichbar. Geschützt bleiben `/`,
 
 Das Frontend nutzt `generatedAt` für die Anzeige und die 48-h-Warnung,
 `runStartedAt` nur als Zusatzinformation im Tooltip. Der zuletzt geladene Stand
-wird in IndexedDB gespeichert und bei Logout und `401` gelöscht.
+wird in IndexedDB gespeichert und bei Logout und `401` gelöscht. Die
+Statusanzeige blendet nach einigen Sekunden aus und erscheint bei Änderungen
+erneut; bei fehlender Verbindung bleibt ein Offline-Badge sichtbar.
 
 Die CSP enthält für Skripte nur noch `script-src 'self'`. `style-src` behält
 `'unsafe-inline'`, weil Leaflet Inline-Stile setzt.
+
+`data-status.json` muss für den nginx-User lesbar sein. Der Grabber schreibt die
+Datei mit `0644`. Bei bestehenden Installationen prüfen:
+
+```bash
+ls -l docker/webserver/www_data/shared/data-status.json
+# erwartet: -rw-r--r-- (0644)
+chmod 644 docker/webserver/www_data/shared/data-status.json
+```
+
+Der `geo:`-Protokollhandler zeigt auf `/geo-handler?l=%s` (same-origin).
+`geo-handler.html` und `js/geo-handler.js` leiten gültige Koordinaten zu
+BRouter weiter. `geo-handler.php` ist nur noch eine Legacy-Datei.
 
 ## Tests
 

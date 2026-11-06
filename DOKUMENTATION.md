@@ -75,10 +75,12 @@ vmkarte/
 │   │   ├── location_mapping_rules_lib.py # Orts-/Länder-/PLZ-Normalisierung
 │   │   ├── cache_config_lib.py         # Laden/Validieren der Cache-TTLs
 │   │   ├── paths_lib.py                # Einheitliche Laufzeitpfade
+│   │   ├── data_status_lib.py          # data-status.json atomar schreiben
 │   │   ├── country_mapping.json        # Ländernamen/-kürzel → Ländercode
 │   │   └── kuerzel_mapping.json        # Deutsche Kfz-/Ortskürzel → Ortsname
 │   ├── tests/
-│   │   └── test_vehicle_labels.py      # Tests für Label-Resolver
+│   │   ├── test_vehicle_labels.py      # Tests für Label-Resolver
+│   │   └── test_data_status.py         # Tests für data-status.json
 │   └── utils/
 │       ├── clear_nominatim_cache.py    # Löscht den Nominatim-Cache
 │       ├── delete_user_cash_entry.py   # Löscht einen user_details-Cacheeintrag
@@ -87,12 +89,23 @@ vmkarte/
 │   ├── cron/                           # Cron-Container für den Datengrabber
 │   └── webserver/                      # nginx + statische Karte
 ├── docker/webserver/www_data/
-│   ├── karte.html                      # Leaflet-Frontend
-│   ├── geo-handler.php                 # geo:-Weiterleitung zu BRouter
+│   ├── karte.html                      # App-Shell
+│   ├── geo-handler.html                # Same-origin-Weiterleitung zu BRouter
+│   ├── geo-handler.php                 # Legacy (nginx führt kein PHP aus)
+│   ├── css/
+│   │   └── app.css                     # Styles der Karte
+│   ├── js/
+│   │   ├── app.js                      # Karte, Filter, Datenabruf
+│   │   ├── data.js                     # Validierung/Formatierung
+│   │   ├── storage.js                  # IndexedDB
+│   │   ├── status-ui.js                # Status- und Meldungsleiste
+│   │   └── geo-handler.js              # BRouter-Weiterleitung
 │   ├── leaflet/                        # Leaflet-Bibliothek
 │   ├── markercluster/                  # Marker-Cluster-Plugin
 │   └── shared/                         # Kartendaten (Laufzeit, ignoriert)
+├── tests/frontend/                     # Node-Tests für reine JS-Funktionen
 ├── docs/
+│   ├── upgrade-3.0-auth.md             # Auth- und Phase-5-Deployment
 │   ├── upgrade-docker.md               # Upgrade-Anleitung Docker
 │   └── upgrade-native.md               # Upgrade-Anleitung native Installation
 ├── config/                             # Laufzeitkonfiguration (ignoriert)
@@ -279,7 +292,9 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - Lädt `shared/vmforum_members.json` und `shared/data-status.json`.
 - Speichert den zuletzt geladenen Stand in IndexedDB (`vmkarte`, Store `kv`) und zeigt ihn beim Start sofort an. Ohne lokalen Stand erscheint `Kartendaten werden geladen …`.
 - Gleicht im Hintergrund mit dem Server ab und nutzt ETag/`304`, wenn ein lokaler Stand vorhanden ist. Der manuelle Button `Kartendaten aktualisieren` lädt ohne HTTP-Cache.
-- Zeigt dauerhaft und dezent unten links den Datenstand inklusive Quelle `Server`/`lokal`, Warnung bei mehr als 48 Stunden und `runStartedAt` im Tooltip.
+- Zeigt unten links den Datenstand inklusive Quelle `Server`/`lokal`, Warnung bei mehr als 48 Stunden und `runStartedAt` im Tooltip. Die Anzeige blendet nach einigen Sekunden aus und erscheint bei Änderungen erneut.
+- Zeigt bei fehlender Verbindung ein dauerhaftes Offline-Badge; der Status ergänzt `· offline`.
+- Die Buttons sind kompakte Lucide-Icons (`filter-x`, `refresh-cw`, `log-out`) mit weißen Symbolen auf farbigem Hintergrund; die Größen skalieren responsiv.
 - `401` und Logout löschen die lokalen Kartendaten aus IndexedDB.
 - Erstellt eine Leaflet-Karte mit MarkerCluster.
 - Zeigt die vorgeschriebene Attribution im Leaflet-Attribution-Control unten rechts: „© OpenStreetMap-Mitwirkende, ODbL“ sowie „Geocoding: Nominatim“.
@@ -287,8 +302,8 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - Zeigt Name, Velomobil, Liegerad, Trike, Freitext/Hashtags und den Stand der Profildaten im Popup.
 - Der Stand wird als Datum (`TT.MM.JJJJ`) aus `profile_updated_at` angezeigt; der exakte Zeitstempel steht im Tooltip. Fehlt der Wert, erscheint `Stand: unbekannt`.
 - Nutzt `radius` beim Hover, um die Unsicherheit der Ortsauflösung als Kreis darzustellen.
-- Registriert einen `geo:`-Protokollhandler, der auf `christoph-moder.de/vmforum-karte/geo-handler.php` verweist.
-- Fehler beim Datenabruf werden verständlich angezeigt. Mit lokalem Stand bleibt die Karte bedienbar; ohne lokalen Stand erscheint eine Meldung mit „Erneut versuchen“.
+- Registriert einen same-origin `geo:`-Protokollhandler auf `/geo-handler?l=%s`. `geo-handler.html` und `js/geo-handler.js` leiten gültige `geo:lat,lon`-Werte zu BRouter weiter; `geo-handler.php` bleibt als Legacy-Datei liegen.
+- Fehler beim Datenabruf werden verständlich angezeigt. Mit lokalem Stand bleibt die Karte bedienbar; ohne lokalen Stand erscheint eine Meldung mit „Erneut versuchen“. Meldungen blenden automatisch aus und lassen sich schließen.
 
 ### 5.7 Docker-Setup
 
@@ -373,7 +388,27 @@ Hinweise:
 - Nur Mitglieder mit nicht-leerer Ortsangabe und erfolgreichem Nominatim-Treffer werden aufgenommen.
 - Bei ca. 6.948 Mitgliedern enthielten die vorhandenen Ausgabedateien ca. 3.167 Einträge mit Koordinaten.
 
-### 6.3 Algorithmus: Vom Profileintrag zu Koordinaten
+### 6.3 Ausgabe `data-status.json`
+
+Der Datengrabber schreibt nach erfolgreichem Schreiben von
+`vmforum_members.json` zusätzlich `data-status.json` ins selbe `shared/`-Verzeichnis:
+
+```json
+{
+  "runStartedAt": "2026-11-06T03:33:00+01:00",
+  "generatedAt": "2026-11-06T03:41:12+01:00",
+  "memberCount": 3275
+}
+```
+
+- `runStartedAt`: Beginn des Grabber-Laufs (optional, bei älteren Dateien nicht vorhanden).
+- `generatedAt`: Abschlusszeitpunkt; Referenz für Datenstand und 48-h-Warnung.
+- `memberCount`: Anzahl der Einträge in `vmforum_members.json`.
+- Die Datei wird atomar über eine temporäre Datei und `os.replace` geschrieben.
+- Sie wird mit Modus `0644` geschrieben, damit der nginx-User sie lesen kann.
+- Fehler beim Schreiben werden nur gewarnt und brechen den Grabber-Lauf nicht ab.
+
+### 6.4 Algorithmus: Vom Profileintrag zu Koordinaten
 
 #### Kurz erklärt
 

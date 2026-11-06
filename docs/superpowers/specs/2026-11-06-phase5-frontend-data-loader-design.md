@@ -217,3 +217,26 @@ letztlich aus dem Abrufzeitpunkt abgeleitet.
   - Filter, URL-Parameter, Popups und Reset funktionieren weiterhin
 - `nginx -t`.
 - CSP enthält kein `script-src 'unsafe-inline'` mehr.
+
+## Nachtrag 2026-11-06 – Umsetzungsabweichungen
+
+Nach dem Deployment wurden folgende Punkte bewusst nachgeschärft:
+
+- Die Statusanzeige ist nicht dauerhaft sichtbar, sondern blendet nach 6 s
+  (bei Warnungen/Fehlern nach 8 s) aus und erscheint bei Änderungen erneut.
+- Ein dauerhaftes Offline-Badge zeigt fehlende Verbindung an; der Status
+  ergänzt `· offline`.
+- Meldungen blenden automatisch aus (Erfolg 3 s, Fehler 8 s) und haben einen
+  Schließen-Button. Sie blockieren die Karte nicht.
+- Die Buttons sind kompakte Lucide-Icons (`filter-x`, `refresh-cw`,
+  `log-out`) mit weißem Stroke; der Logout-Button sitzt ganz rechts.
+- Panel, Buttons und Eingabefelder skalieren responsiv per `clamp()` und
+  bleiben immer sichtbar.
+- Der `geo:`-Handler ist same-origin (`/geo-handler?l=%s`); hinzugekommen sind
+  `geo-handler.html` und `js/geo-handler.js`.
+- `data-status.json` wird mit `0644` geschrieben, damit nginx die Datei lesen
+  kann.
+- `/js/` und `/css/` liefern `Cache-Control: no-cache`, damit Updates sofort
+  revalidiert werden.
+
+Der Offline-Reload der App-Shell bleibt bewusst Phase 7 (Service Worker).

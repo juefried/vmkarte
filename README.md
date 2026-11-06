@@ -154,10 +154,13 @@ python data_grabber.py --refresh-members --refresh-user 12345
 ## Release 3.0 (Branch `release/3.0-pwa`)
 
 - [Auth-Service und formularbasierte Anmeldung](docs/upgrade-3.0-auth.md)
+- Datenstatus aus dem Datengrabber (`shared/data-status.json`)
+- Frontend-Datenloader mit IndexedDB, lokalem Start, ETag-Abgleich und manuellem Refresh
+- Dauerhafte, dezente Statusanzeige mit Quelle `Server`/`lokal` und Offline-Badge
 
 Dieser Stand ersetzt HTTP Basic Authentication durch einen Go-Auth-Service und
-nginx `auth_request`. PWA, Offline-Cache und Domainumzug folgen in weiteren
-Ausbaustufen.
+nginx `auth_request`. PWA-Manifest, Service Worker/Offline-Reload,
+Standortfunktion und Domainumzug folgen in Phase 6–10.
 
 ## Upgrade von der Version 20261022
 
