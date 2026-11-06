@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vmkarte-shell-v5';
+const CACHE_NAME = 'vmkarte-shell-v6';
 
 const SHELL_URLS = [
 	'/',
@@ -19,6 +19,8 @@ const SHELL_URLS = [
 	'/js/status-ui.js',
 	'/js/map-state.js',
 	'/js/location.js',
+	'/js/version.js',
+	'/js/version-check.js',
 	'/js/geo-handler.js',
 	'/leaflet/leaflet.css',
 	'/leaflet/leaflet.js',
@@ -32,6 +34,7 @@ const NETWORK_ONLY_PATHS = new Set([
 	'/logout',
 	'/session-check',
 	'/_internal/session-check',
+	'/app-version.json',
 ]);
 
 function isCacheableResponse(response) {

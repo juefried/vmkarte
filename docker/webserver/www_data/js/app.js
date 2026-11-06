@@ -4,7 +4,7 @@ import { validateMembers, parseDataStatus, deriveStatusFromLastModified } from '
 import { resolveInitialMapState, filterSearchString, FILTER_PARAMS, shouldPersistMapState } from './map-state.js';
 import { describeGeolocationError, GEOLOCATION_OPTIONS } from './location.js';
 import { APP_VERSION } from './version.js';
-import { parseAppVersion, isNewVersion } from './version-check.js';
+import { DEV_MODE_KEY, parseAppVersion, isNewVersion, resolveDevMode } from './version-check.js';
 
 const DATA_STATUS_URL = 'shared/data-status.json';
 const MEMBERS_URL = 'shared/vmforum_members.json';
@@ -288,6 +288,28 @@ async function check_app_version() {
 	}
 	catch (error) {
 		console.warn('App-Version konnte nicht geprüft werden.', error);
+	}
+}
+
+function read_dev_mode() {
+	try {
+		return sessionStorage.getItem(DEV_MODE_KEY);
+	}
+	catch (error) {
+		console.warn('Entwicklungsmodus konnte nicht gelesen werden.', error);
+		return null;
+	}
+}
+
+function apply_dev_mode(devMode) {
+	try {
+		if (devMode.persist)
+			sessionStorage.setItem(DEV_MODE_KEY, '1');
+		else if (devMode.clear)
+			sessionStorage.removeItem(DEV_MODE_KEY);
+	}
+	catch (error) {
+		console.warn('Entwicklungsmodus konnte nicht gespeichert werden.', error);
 	}
 }
 
@@ -760,6 +782,9 @@ async function create_map() {
 		offlineElement: document.getElementById('offline_badge'),
 	});
 
+	const devMode = resolveDevMode(window.location.search, read_dev_mode());
+	apply_dev_mode(devMode);
+
 	// Install protocol handler for geo: protocol; must be a local script, which reformats the coordinates and redirects to BRouter
 	try {
 		window.navigator.registerProtocolHandler('geo', '/geo-handler?l=%s', 'BRouter-Web');
@@ -904,8 +929,19 @@ async function create_map() {
 	update_online_state();
 
 	syncFromServer();
-	register_service_worker();
-	check_app_version();
+
+	if (devMode.enabled) {
+		await clearAppCaches();
+		statusUi.setMessage({
+			type: 'info',
+			text: 'Entwicklungsmodus aktiv: Service Worker und App-Caches sind deaktiviert.',
+			autoHideMs: 6000,
+		});
+	}
+	else {
+		register_service_worker();
+		check_app_version();
+	}
 
 	// Add the accessKey of the element to its tooltip.
 	Object
