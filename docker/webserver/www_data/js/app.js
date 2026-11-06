@@ -1000,7 +1000,11 @@ async function create_map() {
 	// Create only one circle and move it to the current marker.
 	error_circle = L.circle([0, 0], { stroke: false, fill: false }).addTo(map);
 
-	document.getElementById('refresh_button').addEventListener('click', () => syncFromServer({ manual: true }));
+	document.getElementById('refresh_button').addEventListener('click', () => {
+		syncFromServer({ manual: true });
+		if (!devMode.enabled)
+			check_app_version();
+	});
 
 	if (location_button)
 		L.DomEvent.on(location_button, 'click', request_location);

@@ -388,13 +388,19 @@ async function main() {
 	assert.equal(await evaluate(`document.getElementById('search_suggestions').hidden`), true);
 	check.pass('Leeres Suchfeld zeigt nur Unicode-Hashtags; Eingaben filtern Namen und Fahrzeuge; Auswahl per Klick und Tastatur funktioniert');
 
+	// 1b. The manual refresh button also checks the app version.
+	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };
+	await evaluate(`document.getElementById('refresh_button').click()`);
+	await waitFor(`document.getElementById('data_message').textContent.includes('Eine neue Version ist verfügbar.')`, 'update message after manual refresh');
+	check.pass('Der manuelle Reload prüft zusätzlich die App-Version');
+
 	// 2. Service worker installs and does not cache app-version.json.
 	await waitFor(`navigator.serviceWorker.getRegistration().then(registration => Boolean(registration))`, 'service worker registration');
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache');
 	assert.equal(await cacheContains('/app-version.json'), false);
 	const serviceWorkerSource = await (await fetch(ORIGIN + '/service-worker.js')).text();
-	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v11';"));
-	check.pass('Service Worker installiert, Cache ist v11 und app-version.json bleibt network-only');
+	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v12';"));
+	check.pass('Service Worker installiert, Cache ist v12 und app-version.json bleibt network-only');
 
 	// 3. ?dev=1 disables the service worker, removes caches and skips the version check.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };
