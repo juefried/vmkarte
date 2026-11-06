@@ -10,6 +10,17 @@ RUN chown -R nginx:nginx /var/cache/nginx /var/log/nginx /etc/nginx /tmp /var/ru
 # Copy static files to the appropriate directory
 COPY www_data /www_data
 
+# Generate the public version metadata from the maintained VERSION file.
+# APP_VERSION and BUILD_DATE can be overridden at build time.
+ARG APP_VERSION=
+ARG BUILD_DATE=
+
+RUN set -e; \
+    if [ -z "$APP_VERSION" ]; then APP_VERSION=$(cat /www_data/VERSION); fi; \
+    BUILD_DATE="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"; \
+    printf '{"version":"%s","buildDate":"%s"}\n' "$APP_VERSION" "$BUILD_DATE" > /www_data/app-version.json; \
+    printf 'export const APP_VERSION = "%s";\nexport const BUILD_DATE = "%s";\n' "$APP_VERSION" "$BUILD_DATE" > /www_data/js/version.js
+
 # Copy nginx server block configuration
 COPY default.conf /etc/nginx/conf.d/default.conf
 
