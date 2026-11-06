@@ -60,7 +60,7 @@ export function createStatusUi({ statusElement, messageElement, offlineElement }
 			offlineElement.hidden = !offline;
 	}
 
-	function setMessage({ type = 'info', text = '', onRetry = null } = {}) {
+	function setMessage({ type = 'info', text = '', onRetry = null, actionLabel = 'Erneut versuchen', autoHideMs = null } = {}) {
 		if (!messageElement)
 			return;
 
@@ -74,7 +74,7 @@ export function createStatusUi({ statusElement, messageElement, offlineElement }
 		if (onRetry) {
 			retryButton = document.createElement('button');
 			retryButton.type = 'button';
-			retryButton.textContent = 'Erneut versuchen';
+			retryButton.textContent = actionLabel;
 			retryButton.addEventListener('click', onRetry);
 			messageElement.appendChild(retryButton);
 		}
@@ -88,7 +88,7 @@ export function createStatusUi({ statusElement, messageElement, offlineElement }
 		closeButton.addEventListener('click', clearMessage);
 		messageElement.appendChild(closeButton);
 
-		const hideAfter = type === 'success' ? 3000 : (type === 'loading' ? 0 : 8000);
+		const hideAfter = autoHideMs ?? (type === 'success' ? 3000 : (type === 'loading' ? 0 : 8000));
 		if (hideAfter)
 			messageTimer = setTimeout(clearMessage, hideAfter);
 	}
