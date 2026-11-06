@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vmkarte-shell-v8';
+const CACHE_NAME = 'vmkarte-shell-v9';
 
 const SHELL_URLS = [
 	'/',
@@ -19,6 +19,7 @@ const SHELL_URLS = [
 	'/js/storage.js',
 	'/js/status-ui.js',
 	'/js/map-state.js',
+	'/js/search-suggestions.js',
 	'/js/location.js',
 	'/js/version.js',
 	'/js/version-check.js',

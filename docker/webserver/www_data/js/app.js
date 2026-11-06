@@ -3,6 +3,7 @@ import { createStatusUi } from './status-ui.js';
 import { validateMembers, parseDataStatus, deriveStatusFromLastModified } from './data.js';
 import { resolveInitialMapState, filterSearchString, FILTER_PARAMS, shouldPersistMapState } from './map-state.js';
 import { HASHTAG_REGEX, HASHTAG_NAME_REGEX } from './hashtags.js';
+import { collectSearchSuggestions } from './search-suggestions.js';
 import { describeGeolocationError, GEOLOCATION_OPTIONS } from './location.js';
 import { APP_VERSION } from './version.js';
 import { DEV_MODE_KEY, parseAppVersion, isNewVersion, resolveDevMode } from './version-check.js';
@@ -14,7 +15,6 @@ const APP_VERSION_URL = 'app-version.json';
 // Global variables
 var map;
 var markers;
-var tags = Array();
 var error_circle;
 var layer_circles;
 var form_select;
@@ -460,7 +460,7 @@ async function syncFromServer({ manual = false } = {}) {
 
 		if (membersChanged) {
 			add_vmforum_members();
-			add_vmforum_tags();
+			add_search_suggestions();
 			log_member_stats();
 		}
 
@@ -510,34 +510,20 @@ function format_profile_date(value) {
 	return value.slice(0, 10).split('-').reverse().join('.');
 }
 
-// Search for all tags in the "other" field of member pages, sort them by occurrence, and add them to autocompletion.
-function add_vmforum_tags() {
+// Fill the datalist with search terms from names, vehicles and hashtags.
+function add_search_suggestions() {
 
-	const tagList = document.getElementById("tags");
-	tagList.replaceChildren();
-	tags = {};
+	const suggestionList = document.getElementById('tags');
+	suggestionList.replaceChildren();
 
-	let frag = document.createDocumentFragment();
+	const frag = document.createDocumentFragment();
+	for (const value of collectSearchSuggestions(members)) {
+		const option = document.createElement('option');
+		option.value = value;
+		frag.appendChild(option);
+	}
 
-	// Extract hashtags from entries in "other".
-	members
-		// Get all members with text in 'other'
-		.filter(v => v['other'] && v['other'].match(HASHTAG_REGEX))
-		// There: search for all hashtags and add them to associative array.
-		.forEach(v => v['other']
-			.match(HASHTAG_REGEX)
-			.forEach(w => { const s = w.toLowerCase(); tags[s] = tags[s] + 1 || 1; }));
-
-	// Iterate over hashtags, sort them according to descending occurence, and add them to the datalist.
-	Object
-		.keys(tags)
-		.sort((a, b) => tags[b] - tags[a])
-		.forEach(v => frag
-			.appendChild(document.createElement('option'))
-			.appendChild(document.createTextNode(html_escape(v)))
-		);
-
-	tagList.appendChild(frag);
+	suggestionList.appendChild(frag);
 }
 
 function log_member_stats() {
@@ -872,7 +858,7 @@ async function create_map() {
 			return;
 		}
 		// Fallback for browsers that do not expose inputType reliably:
-		// apply immediately if the value exactly matches a known tag.
+		// apply immediately if the value exactly matches a known suggestion.
 		const tags = document.getElementById('tags');
 		if (tags && Array.from(tags.options).some(o => o.value === form_search.value))
 			schedule_member_update();
@@ -914,7 +900,7 @@ async function create_map() {
 		cachedLastModified = cache.lastModified;
 
 		add_vmforum_members();
-		add_vmforum_tags();
+		add_search_suggestions();
 		log_member_stats();
 		show_current_status(false);
 		statusUi.clearMessage();

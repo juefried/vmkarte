@@ -334,7 +334,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 
 ### 5.6 Frontend `karte.html`
 
-- `karte.html` ist die App-Shell. Styles liegen in `css/app.css`, das JavaScript in `js/app.js` und den Modulen `js/data.js`, `js/storage.js`, `js/status-ui.js` und `js/hashtags.js`.
+- `karte.html` ist die App-Shell. Styles liegen in `css/app.css`, das JavaScript in `js/app.js` und den Modulen `js/data.js`, `js/storage.js`, `js/status-ui.js`, `js/hashtags.js` und `js/search-suggestions.js`.
 - Lädt `shared/vmforum_members.json` und `shared/data-status.json`.
 - Speichert den zuletzt geladenen Stand in IndexedDB (`vmkarte`, Store `kv`) und zeigt ihn beim Start sofort an. Ohne lokalen Stand erscheint `Kartendaten werden geladen …`.
 - Gleicht im Hintergrund mit dem Server ab und nutzt ETag/`304`, wenn ein lokaler Stand vorhanden ist. Der manuelle Button `Kartendaten aktualisieren` lädt ohne HTTP-Cache.
@@ -345,6 +345,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - Erstellt eine Leaflet-Karte mit MarkerCluster.
 - Zeigt die vorgeschriebene Attribution im Leaflet-Attribution-Control unten rechts: „© OpenStreetMap-Mitwirkende, ODbL“ sowie „Geocoding: Nominatim“.
 - Filtert nach URL-Parametern und Formularfeldern.
+- Das Suchfeld schlägt beim Tippen Namen, Fahrzeuglabels und Hashtags vor; häufige Werte stehen zuerst.
 - Zeigt Name, Velomobil, Liegerad, Trike, Freitext/Hashtags und den Stand der Profildaten im Popup.
 - Hashtags werden aus dem Freitextfeld `other` erkannt: `#`, danach ein Unicode-Buchstabe und mindestens ein weiteres Unicode-Buchstaben-, Ziffern- oder Unterstrichzeichen. Umlaute, Akzente und nicht-lateinische Buchstaben sind erlaubt.
 - Der Stand wird als Datum (`TT.MM.JJJJ`) aus `profile_updated_at` angezeigt; der exakte Zeitstempel steht im Tooltip. Fehlt der Wert, erscheint `Stand: unbekannt`.
@@ -388,7 +389,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 ### 5.8 Service Worker und Offline
 
 - `js/app.js` registriert `/service-worker.js` mit Scope `/`.
-- Cache `vmkarte-shell-v8` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html`, `offline.html`, `js/version.js` und `js/version-check.js`.
+- Cache `vmkarte-shell-v9` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html`, `offline.html`, `js/version.js` und `js/version-check.js`.
 - Navigationen laufen network-first mit Fallback auf den angeforderten Cache-Eintrag, `/karte.html`, `/` und schließlich `/offline.html`.
 - Statische Assets laufen stale-while-revalidate.
 - `/shared/`, `/login`, `/logout`, `/session-check`, `/_internal/session-check` und `/app-version.json` bleiben network-only. `data-status.json` liegt unter `/shared/` und wird daher nie gecacht.
@@ -422,7 +423,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
   - `screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
   - Die Screenshots zeigen ausschließlich fiktive Testmarker, keine echten
     Mitgliederdaten.
-- Der Service-Worker-Cache `vmkarte-shell-v8` enthält Manifest, Icons und
+- Der Service-Worker-Cache `vmkarte-shell-v9` enthält Manifest, Icons und
   Screenshots.
 - Chrome-Installability-Check: keine Manifest-, Installability- oder
   Screenshot-Warnungen.
