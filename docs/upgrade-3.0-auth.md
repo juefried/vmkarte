@@ -66,8 +66,13 @@ grep -c ':\$2[aby]\$' config/.htpasswd
 
 ```bash
 openssl rand -base64 48 > config/session_signing_key
-chmod 600 config/session_signing_key
+sudo chown 10001:10001 config/.htpasswd config/session_signing_key
+sudo chmod 600 config/.htpasswd config/session_signing_key
 ```
+
+Der Auth-Container läuft als UID/GID `10001`. Da Compose-Secrets als
+Bind-Mounts umgesetzt werden, müssen die Dateien für diese UID lesbar sein.
+`chown 10001:10001` plus `chmod 600` ist restriktiver als `chmod 644`.
 
 Der Schlüssel bleibt außerhalb von Git. Rotation macht alle Sitzungen ungültig.
 
@@ -252,6 +257,25 @@ Im nginx-Access-Log muss `$remote_addr` die echte Client-IP sein, nicht
 `172.18.x.x`. Andernfalls greift das Rate Limit für alle Nutzer gemeinsam.
 
 Danach im Browser `https://karte.jfr-service.de` öffnen und anmelden.
+
+## Troubleshooting: `auth` startet mit `permission denied`
+
+Im Log steht beispielsweise:
+
+```text
+ERROR cannot load session signing key error="open /run/secrets/session_signing_key: permission denied"
+```
+
+Dann kann der Container-Benutzer `10001` die Secret-Datei nicht lesen.
+Compose-Secrets werden als Bind-Mounts umgesetzt und behalten die
+Dateirechte des Hosts.
+
+```bash
+sudo chown 10001:10001 config/.htpasswd config/session_signing_key
+sudo chmod 600 config/.htpasswd config/session_signing_key
+docker compose up -d --force-recreate auth
+docker compose logs --tail=20 auth
+```
 
 ## Rollback
 
