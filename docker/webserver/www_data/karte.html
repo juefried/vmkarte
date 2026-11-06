@@ -37,8 +37,11 @@
 		<div id="action_buttons">
 			<button type="button" id="reset_button" title="Suchfelder und Filter zurücksetzen">Zurücksetzen</button>
 			<button type="button" id="logout_button" title="Abmelden">Abmelden</button>
+			<button type="button" id="refresh_button" title="Kartendaten vom Server aktualisieren">Kartendaten aktualisieren</button>
 		</div>
 	</div>
+	<div id="data_status" class="data-status" aria-live="polite" hidden></div>
+	<div id="data_message" class="data-message" role="status" hidden></div>
 	<script type="module" src="js/app.js"></script>
 </body>
 </html>

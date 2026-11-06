@@ -1,3 +1,6 @@
+import { readCache, clearCache } from './storage.js';
+import { createStatusUi } from './status-ui.js';
+
 // Global variables
 var map;
 var markers;
@@ -9,7 +12,10 @@ var form_search;
 var member_update_timer;
 const hashtag_regex = RegExp(/(#[a-zA-Z]\w+)/, 'g');
 
-let members = fetch('shared/vmforum_members.json', { cache: 'no-store' }).then(r => r.json());
+let members = [];
+let dataStatus = null;
+let dataSource = 'local';
+let statusUi;
 
 // Make the div element #map cover the whole window.
 function resize_map_to_full_window()
@@ -41,6 +47,12 @@ function reset_search() {
 
 async function logout() {
 	try {
+		await clearCache();
+	}
+	catch (e) {
+		console.error(e);
+	}
+	try {
 		await fetch('/logout', {
 			method: 'POST',
 			credentials: 'same-origin',
@@ -68,6 +80,10 @@ function format_profile_date(value) {
 // Search for all tags in the "other" field of member pages, sort them by occurrence, and add them to autocompletion.
 function add_vmforum_tags() {
 
+	const tagList = document.getElementById("tags");
+	tagList.replaceChildren();
+	tags = {};
+
 	let frag = document.createDocumentFragment();
 
 	// Extract hashtags from entries in "other".
@@ -88,7 +104,15 @@ function add_vmforum_tags() {
 			.appendChild(document.createTextNode(html_escape(v)))
 		);
 
-	document.getElementById("tags").appendChild(frag);
+	tagList.appendChild(frag);
+}
+
+function log_member_stats() {
+	const timestamped_members = members.filter(v => v.profile_updated_at);
+	console.log(`vmforum_members: ${timestamped_members.length}/${members.length} Einträge mit profile_updated_at`);
+	if (timestamped_members.length === 0) {
+		console.warn('Keine profile_updated_at-Werte geladen. Vermutlich wird eine alte vmforum_members.json ausgeliefert.');
+	}
 }
 
 // Make markers not selectable by tab, since there are too many. The tooltip content can still be selected via tab.
@@ -249,13 +273,10 @@ function add_vmforum_members() {
 }
 
 async function create_map() {
-	members = await members;
-
-	const timestamped_members = members.filter(v => v.profile_updated_at);
-	console.log(`vmforum_members: ${timestamped_members.length}/${members.length} Einträge mit profile_updated_at`);
-	if (timestamped_members.length === 0) {
-		console.warn('Keine profile_updated_at-Werte geladen. Vermutlich wird eine alte vmforum_members.json ausgeliefert.');
-	}
+	statusUi = createStatusUi({
+		statusElement: document.getElementById('data_status'),
+		messageElement: document.getElementById('data_message'),
+	});
 
 	// Install protocol handler for geo: protocol; must be a local script, which reformats the coordinates and redirects to BRouter
 	try {
@@ -335,11 +356,31 @@ async function create_map() {
 	layer_circles = L.layerGroup();
 	map.addLayer(layer_circles);
 
-	// Add all markers at the beginning.
-	add_vmforum_members();
+	const cache = await readCache().catch(error => {
+		console.warn('Lokaler Kartenstand konnte nicht gelesen werden.', error);
+		return null;
+	});
 
-	// Add the tags to the search field.
-	add_vmforum_tags();
+	if (cache && cache.members.length > 0) {
+		members = cache.members;
+		dataStatus = cache.status;
+		dataSource = 'local';
+
+		add_vmforum_members();
+		add_vmforum_tags();
+		log_member_stats();
+		statusUi.setStatus({
+			generatedAt: dataStatus ? dataStatus.generatedAt : null,
+			runStartedAt: dataStatus ? dataStatus.runStartedAt : null,
+			source: dataSource,
+			updateFailed: false,
+		});
+		statusUi.clearMessage();
+	}
+	else {
+		statusUi.clearStatus();
+		statusUi.setMessage({ type: 'loading', text: 'Kartendaten werden geladen …' });
+	}
 
 	// Add the accessKey of the element to its tooltip.
 	Object
