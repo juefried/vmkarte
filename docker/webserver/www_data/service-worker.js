@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vmkarte-shell-v2';
+const CACHE_NAME = 'vmkarte-shell-v3';
 
 const SHELL_URLS = [
 	'/',
@@ -10,6 +10,8 @@ const SHELL_URLS = [
 	'/icons/icon-512.png',
 	'/icons/icon-maskable-512.png',
 	'/icons/apple-touch-icon.png',
+	'/screenshots/screenshot-wide.png',
+	'/screenshots/screenshot-narrow.png',
 	'/css/app.css',
 	'/js/app.js',
 	'/js/data.js',
@@ -77,6 +79,7 @@ function isStaticAsset(pathname) {
 		|| pathname.startsWith('/leaflet/')
 		|| pathname.startsWith('/markercluster/')
 		|| pathname.startsWith('/icons/')
+		|| pathname.startsWith('/screenshots/')
 		|| pathname === '/favicon.ico';
 }
 
