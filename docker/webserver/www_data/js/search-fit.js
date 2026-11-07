@@ -4,9 +4,14 @@ export const SEARCH_FIT_MAX_ZOOM_PORTRAIT = 13;
 export const SEARCH_FIT_MAX_ZOOM_LANDSCAPE = 15;
 export const SEARCH_FIT_ZOOM_TOLERANCE = 2;
 export const SEARCH_FIT_PADDING = 40;
+export const SEARCH_FIT_RADIUS_PERCENTILE = 0.75;
+export const SEARCH_FIT_RADIUS_MAX_VISIBLE_PINS = 5;
 
 const GRID_DIVISIONS = 20;
 const EPSILON = 1e-9;
+const EARTH_CIRCUMFERENCE_METERS = 40075016.686;
+const TILE_SIZE = 256;
+const METERS_PER_PIXEL_AT_ZOOM_0 = EARTH_CIRCUMFERENCE_METERS / TILE_SIZE;
 
 function normalizePoints(points) {
 	if (!Array.isArray(points))
@@ -65,18 +70,85 @@ export function hasAnyPointInBounds(points, bounds) {
 		&& lon <= edges.east);
 }
 
-export function clampSearchZoom(fitZoom, { portrait = false } = {}) {
+export function clampSearchZoom(fitZoom, { portrait = false, maxZoom = null } = {}) {
 	const minZoom = portrait
 		? SEARCH_FIT_MIN_ZOOM_PORTRAIT
 		: SEARCH_FIT_MIN_ZOOM_LANDSCAPE;
-	const maxZoom = portrait
+	const orientationMaxZoom = portrait
 		? SEARCH_FIT_MAX_ZOOM_PORTRAIT
 		: SEARCH_FIT_MAX_ZOOM_LANDSCAPE;
+	const effectiveMaxZoom = Math.max(
+		minZoom,
+		Number.isFinite(maxZoom) ? Math.min(orientationMaxZoom, maxZoom) : orientationMaxZoom,
+	);
 
 	if (!Number.isFinite(fitZoom))
-		return maxZoom;
+		return effectiveMaxZoom;
 
-	return Math.min(maxZoom, Math.max(minZoom, fitZoom));
+	return Math.min(effectiveMaxZoom, Math.max(minZoom, fitZoom));
+}
+
+export function zoomForRadius(radiusMeters, latitude, viewportMinDimension, padding = SEARCH_FIT_PADDING) {
+	if (!Number.isFinite(radiusMeters) || radiusMeters <= 0
+		|| !Number.isFinite(latitude)
+		|| !Number.isFinite(viewportMinDimension)
+		|| !Number.isFinite(padding))
+		return null;
+
+	const availablePixelRadius = (viewportMinDimension - padding * 2) / 2;
+	if (availablePixelRadius <= 0)
+		return null;
+
+	const latitudeScale = Math.max(0.01, Math.abs(Math.cos(latitude * Math.PI / 180)));
+	const metersPerPixelAtZoom0 = METERS_PER_PIXEL_AT_ZOOM_0 * latitudeScale;
+	const exactZoom = Math.log2(metersPerPixelAtZoom0 * availablePixelRadius / radiusMeters);
+
+	return Math.floor(exactZoom);
+}
+
+export function radiusZoomLimit(results, {
+	percentile = SEARCH_FIT_RADIUS_PERCENTILE,
+	viewportMinDimension,
+	padding = SEARCH_FIT_PADDING,
+} = {}) {
+	if (!Array.isArray(results) || !Number.isFinite(viewportMinDimension))
+		return null;
+
+	const limits = results
+		.map(result => result && zoomForRadius(result.radius, result.lat, viewportMinDimension, padding))
+		.filter(limit => limit !== null)
+		.sort((a, b) => a - b);
+
+	if (limits.length === 0)
+		return null;
+
+	const normalizedPercentile = Number.isFinite(percentile)
+		? Math.min(1, Math.max(0, percentile))
+		: SEARCH_FIT_RADIUS_PERCENTILE;
+	const index = Math.min(
+		limits.length - 1,
+		Math.floor((1 - normalizedPercentile) * limits.length),
+	);
+
+	return limits[index];
+}
+
+export function isPointInView(point, center, availableWidth, availableHeight) {
+	if (!point || !center
+		|| !Number.isFinite(point.x) || !Number.isFinite(point.y)
+		|| !Number.isFinite(center.x) || !Number.isFinite(center.y)
+		|| !Number.isFinite(availableWidth) || !Number.isFinite(availableHeight))
+		return false;
+
+	return Math.abs(point.x - center.x) <= availableWidth / 2
+		&& Math.abs(point.y - center.y) <= availableHeight / 2;
+}
+
+export function countPointsInView(points, center, availableWidth, availableHeight) {
+	if (!Array.isArray(points))
+		return 0;
+
+	return points.filter(point => isPointInView(point, center, availableWidth, availableHeight)).length;
 }
 
 export function findClosestFittingCenter(points, preferred, availableWidth, availableHeight) {

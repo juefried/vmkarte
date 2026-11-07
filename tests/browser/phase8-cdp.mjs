@@ -38,7 +38,13 @@ const members = [
 	{ id: '6', name: 'Zeta', lat: 50.07, lon: 11.07, vm: '', lr: '', tr: '', other: '#global', profile_updated_at: '2026-11-01' },
 	{ id: '7', name: 'Outlier', lat: 60.0, lon: -100.0, vm: '', lr: '', tr: '', other: '#global', profile_updated_at: '2026-11-01' },
 	{ id: '8', name: 'Far', lat: -25.0, lon: 135.0, vm: '', lr: '', tr: '', other: '#global', profile_updated_at: '2026-11-01' },
-	{ id: '9', name: 'Solo', lat: 0.0, lon: 0.0, vm: 'Solo', lr: '', tr: '', other: '', profile_updated_at: '2026-11-01' },
+	{ id: '9', name: 'Solo', lat: 0.0, lon: 0.0, vm: 'Solo', lr: '', tr: '', radius: 8300, other: '', profile_updated_at: '2026-11-01' },
+	{ id: '10', name: 'Dense 1', lat: 50.0, lon: 11.0, vm: '', lr: '', tr: '', radius: 8300, other: '#dense', profile_updated_at: '2026-11-01' },
+	{ id: '11', name: 'Dense 2', lat: 50.005, lon: 11.005, vm: '', lr: '', tr: '', radius: 8300, other: '#dense', profile_updated_at: '2026-11-01' },
+	{ id: '12', name: 'Dense 3', lat: 50.01, lon: 11.01, vm: '', lr: '', tr: '', radius: 8300, other: '#dense', profile_updated_at: '2026-11-01' },
+	{ id: '13', name: 'Dense 4', lat: 50.0, lon: 11.01, vm: '', lr: '', tr: '', radius: 8300, other: '#dense', profile_updated_at: '2026-11-01' },
+	{ id: '14', name: 'Dense 5', lat: 50.005, lon: 11.0, vm: '', lr: '', tr: '', radius: 8300, other: '#dense', profile_updated_at: '2026-11-01' },
+	{ id: '15', name: 'Dense 6', lat: 50.01, lon: 11.005, vm: '', lr: '', tr: '', radius: 8300, other: '#dense', profile_updated_at: '2026-11-01' },
 ];
 const dataStatus = {
 	runStartedAt: '2026-11-06T03:33:00+01:00',
@@ -425,14 +431,16 @@ async function main() {
 	await waitFor(`Array.from(document.querySelectorAll('img.leaflet-tile')).some(image => new URL(image.src).pathname.startsWith('/16/'))`, 'restored zoom tiles');
 	check.pass('Kartenstatus und gespeicherter Filter werden beim Start wiederhergestellt');
 
-	// 5. Global results center on the densest cluster, not the bounding-box center.
+	// 5. Sparse results zoom out to keep the surrounding circle visible.
 	await navigate('/karte.html?vm=Solo');
 	await waitForMap();
-	await waitFor(`Array.from(document.querySelectorAll('img.leaflet-tile')).some(image => new URL(image.src).pathname.startsWith('/15/'))`, 'solo auto-fit zoom tiles');
+	await waitFor(`Array.from(document.querySelectorAll('img.leaflet-tile')).some(image => new URL(image.src).pathname.startsWith('/12/'))`, 'solo radius-limited zoom tiles');
 	await delay(1000);
 	const soloState = await readMapState();
+	assert.equal(soloState.zoom, 12);
 	assert.ok(Math.abs(soloState.center[0]) < 0.5);
 	assert.ok(Math.abs(soloState.center[1]) < 0.5);
+	check.pass('Radius begrenzt den Auto-Fit bei wenigen sichtbaren Pins');
 
 	await navigate('/karte.html?other=%23global');
 	await waitForMap();
@@ -442,7 +450,15 @@ async function main() {
 	assert.ok(globalState.center[1] > 8 && globalState.center[1] < 15, `expected densest cluster in Germany, got ${globalState.center[1]}`);
 	check.pass('Globale Treffer zentrieren auf das dichteste Cluster statt auf die Bounding-Box');
 
-	// 6. 401 clears IndexedDB and app caches.
+	// 6. Dense result areas are not limited by the surrounding circles.
+	await navigate('/karte.html?other=%23dense');
+	await waitForMap();
+	await delay(1000);
+	const denseState = await readMapState();
+	assert.ok(denseState.zoom > 12, `expected no radius cap, got zoom ${denseState.zoom}`);
+	check.pass('Dichte Trefferbereiche werden nicht durch die Radiusbegrenzung herausgezoomt');
+
+	// 7. 401 clears IndexedDB and app caches.
 	await fetch(ORIGIN + '/__test/401');
 	await navigate('/karte.html');
 	await waitFor(`location.pathname === '/login'`, '401 login redirect');
@@ -452,7 +468,7 @@ async function main() {
 	check.pass('401 löscht IndexedDB und vmkarte-Caches');
 	await fetch(ORIGIN + '/__test/401?off=1');
 
-	// 7. Reload for geolocation; the 401 left no map state behind.
+	// 8. Reload for geolocation; the 401 left no map state behind.
 	await navigate('/karte.html');
 	await waitForMap();
 	assert.equal(await readMapState(), undefined);
@@ -523,7 +539,7 @@ async function main() {
 	await delay(100);
 	check.pass('Karte lässt sich nach der Standortanzeige normal verschieben');
 
-	// 8. Logout clears IndexedDB, caches and leaves no location data.
+	// 9. Logout clears IndexedDB, caches and leaves no location data.
 	await evaluate(`document.getElementById('logout_button').click()`);
 	await waitFor(`location.pathname === '/login'`, 'logout redirect');
 	await delay(300);

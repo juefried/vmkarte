@@ -8,11 +8,15 @@ import {
 	SEARCH_FIT_MIN_ZOOM_PORTRAIT,
 	SEARCH_FIT_ZOOM_TOLERANCE,
 	clampSearchZoom,
+	countPointsInView,
 	findClosestFittingCenter,
 	findDensestCenter,
 	hasAnyPointInBounds,
+	isPointInView,
 	isPortraitSize,
+	radiusZoomLimit,
 	shouldAdjustSearchView,
+	zoomForRadius,
 } from '../../docker/webserver/www_data/js/search-fit.js';
 
 test('findDensestCenter returns the center of the largest cluster', () => {
@@ -85,6 +89,54 @@ test('clampSearchZoom applies orientation-dependent minimum and maximum', () => 
 		clampSearchZoom(Number.POSITIVE_INFINITY, { portrait: true }),
 		SEARCH_FIT_MAX_ZOOM_PORTRAIT,
 	);
+});
+
+test('clampSearchZoom respects an optional radius-based maximum', () => {
+	assert.equal(clampSearchZoom(18, { maxZoom: 10 }), 10);
+	assert.equal(clampSearchZoom(2, { maxZoom: 10 }), SEARCH_FIT_MIN_ZOOM_LANDSCAPE);
+	assert.equal(
+		clampSearchZoom(18, { portrait: true, maxZoom: 20 }),
+		SEARCH_FIT_MAX_ZOOM_PORTRAIT,
+	);
+	assert.equal(clampSearchZoom(18, { maxZoom: 2 }), SEARCH_FIT_MIN_ZOOM_LANDSCAPE);
+});
+
+test('zoomForRadius fits a radius into the viewport', () => {
+	assert.equal(zoomForRadius(8300, 0, 900), 12);
+	assert.equal(zoomForRadius(8300, 50, 390), 10);
+	assert.equal(zoomForRadius(2500, 50, 390), 12);
+	assert.equal(zoomForRadius(Number.NaN, 50, 390), null);
+	assert.equal(zoomForRadius(0, 50, 390), null);
+	assert.equal(zoomForRadius(8300, 50, 80), null);
+});
+
+test('radiusZoomLimit fits roughly three quarters of the circles', () => {
+	const results = [
+		{ lat: 0, radius: 2000 },
+		{ lat: 0, radius: 4000 },
+		{ lat: 0, radius: 6000 },
+		{ lat: 0, radius: 8000 },
+	];
+
+	assert.equal(radiusZoomLimit(results, { viewportMinDimension: 900 }), 13);
+	assert.equal(radiusZoomLimit([...results, { lat: 0, radius: 200000 }], {
+		viewportMinDimension: 900,
+	}), 12);
+	assert.equal(radiusZoomLimit([], { viewportMinDimension: 900 }), null);
+	assert.equal(radiusZoomLimit(results, { viewportMinDimension: Number.NaN }), null);
+});
+
+test('isPointInView and countPointsInView use the available viewport', () => {
+	const center = { x: 0, y: 0 };
+
+	assert.equal(isPointInView({ x: 100, y: 50 }, center, 200, 100), true);
+	assert.equal(isPointInView({ x: 101, y: 0 }, center, 200, 100), false);
+	assert.equal(isPointInView(null, center, 200, 100), false);
+	assert.equal(countPointsInView([
+		{ x: 0, y: 0 },
+		{ x: 100, y: 50 },
+		{ x: 300, y: 0 },
+	], center, 200, 100), 2);
 });
 
 test('findClosestFittingCenter keeps the preferred center when all points fit', () => {
