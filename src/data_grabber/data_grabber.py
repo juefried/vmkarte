@@ -7,6 +7,7 @@ from pathlib import Path
 
 from libs.data_status_lib import write_data_status
 from libs.forum_api_lib import get_member_data
+from libs.json_io_lib import write_json_atomic
 from libs.location_nominatim_lib import (
     LOCATION_STRATEGIES,
     PRECISION_GUARDS,
@@ -233,8 +234,7 @@ def main():
         print(f"Total members parsed: {len(members)}")  # Print the total number of members parsed
 
     if args.debug:
-        with MEMBERS_JSON_PATH.open('w', encoding='utf-8') as file:
-            json.dump(remove_internal_fields(members), file, ensure_ascii=False, indent=4)
+        write_json_atomic(MEMBERS_JSON_PATH, remove_internal_fields(members), indent=4)
         print(f"Debug member data written to {MEMBERS_JSON_PATH}")
 
     # Examine locations
@@ -253,8 +253,7 @@ def main():
             if member.get('_location_match')
         }
         if location_details:
-            with LOCATION_DETAILS_JSON_PATH.open('w', encoding='utf-8') as details_file:
-                json.dump(location_details, details_file, ensure_ascii=False, indent=2)
+            write_json_atomic(LOCATION_DETAILS_JSON_PATH, location_details)
             print(f"Location details written to {LOCATION_DETAILS_JSON_PATH}")
 
     # Prepare data for the JSON file
@@ -263,8 +262,7 @@ def main():
     # Write the data to the JSON file served by the map
     SHARED_DIR.mkdir(parents=True, exist_ok=True)
     print(f"Writing map data to {VMFORUM_MEMBERS_JSON_PATH}")
-    with VMFORUM_MEMBERS_JSON_PATH.open('w', encoding='utf-8') as vmforumfile:
-        json.dump(vmforum_members, vmforumfile, ensure_ascii=False, indent=2)
+    write_json_atomic(VMFORUM_MEMBERS_JSON_PATH, vmforum_members)
 
     # Metadata is written after the map data succeeded. A failure here must not
     # abort the grabber run or invalidate the freshly written member data.

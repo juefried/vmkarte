@@ -510,6 +510,8 @@ Hinweise:
 - `profile_updated_at` ist der Zeitpunkt des letzten erfolgreichen Profilabrufs als ISO-8601-String mit lokaler Zeitzone. Das Feld fehlt, wenn das Profil noch nie erfolgreich geladen wurde; die Karte zeigt dann `Stand: unbekannt`.
 - Nur Mitglieder mit nicht-leerer Ortsangabe und erfolgreichem Nominatim-Treffer werden aufgenommen.
 - Bei ca. 6.948 Mitgliedern enthielten die vorhandenen Ausgabedateien ca. 3.167 Einträge mit Koordinaten.
+- Die Datei wird atomar über eine temporäre Datei im Zielverzeichnis und `os.replace` geschrieben. Leser sehen dadurch entweder den alten oder den neuen vollständigen Stand, nie eine halb geschriebene Datei.
+- Sie wird mit Modus `0644` geschrieben, damit der nginx-User sie lesen kann.
 
 ### 6.3 Ausgabe `data-status.json`
 
