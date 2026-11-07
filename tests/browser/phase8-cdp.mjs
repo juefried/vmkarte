@@ -402,12 +402,13 @@ async function main() {
 	await waitForMap();
 	assert.equal(await evaluate(`document.querySelector('#form_search').value`), '');
 	assert.equal(await evaluate(`document.querySelector('#form_select').selectedIndex`), 0);
+	await waitFor(`Array.from(document.querySelectorAll('img.leaflet-tile')).some(image => new URL(image.src).pathname.startsWith('/15/'))`, 'auto-fit zoom tiles');
 	await evaluate(`document.querySelector('.leaflet-control-zoom-in').click()`);
 	await delay(1000);
 	const filterState = await readMapState();
-	assert.equal(filterState.zoom, 10);
+	assert.equal(filterState.zoom, 16);
 	assert.equal(filterState.search, 'vm=Flevo');
-	check.pass('URL-Filter wird verwendet und als Filterstand gespeichert');
+	check.pass('URL-Filter wird verwendet, automatisch eingepasst und als Filterstand gespeichert');
 
 	// 4. Restore map state and stored filter without filling the form.
 	await navigate('/karte.html');
@@ -415,7 +416,7 @@ async function main() {
 	await waitFor(`window.location.search.includes('vm=Flevo')`, 'restored filter URL');
 	assert.equal(await evaluate(`document.querySelector('#form_search').value`), '');
 	assert.equal(await evaluate(`document.querySelector('#form_select').selectedIndex`), 0);
-	await waitFor(`Array.from(document.querySelectorAll('img.leaflet-tile')).some(image => new URL(image.src).pathname.startsWith('/10/'))`, 'restored zoom tiles');
+	await waitFor(`Array.from(document.querySelectorAll('img.leaflet-tile')).some(image => new URL(image.src).pathname.startsWith('/16/'))`, 'restored zoom tiles');
 	check.pass('Kartenstatus und gespeicherter Filter werden beim Start wiederhergestellt');
 
 	// 5. 401 clears IndexedDB and app caches.
