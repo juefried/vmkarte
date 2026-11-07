@@ -218,3 +218,48 @@ def analyze_location_for_postal_code(location: str) -> str:
 
     # Return None if no valid postal code is found
     return None
+
+
+def country_code_candidates(postal_code, country_code):
+    """
+    Returns the country code candidates to try, most likely first.
+
+    Four-digit postal codes are not unique to the German-speaking countries:
+    Belgium also uses them (for example 2490 Balen). Austria and Switzerland
+    still come first for the mostly German forum community, followed by
+    Belgium and then the other four-digit countries.
+
+    Args:
+        postal_code (str): Postal code extracted from the location, or None.
+        country_code (str): Detected country code, or None.
+
+    Returns:
+        list: Country code filters in the order they should be tried.
+    """
+    if country_code is not None:
+        return [country_code]
+    if postal_code is not None:
+        if len(postal_code) == 5:
+            return ['de', 'fr,fi,it', None]
+        return ['at,ch', 'be', 'dk,nl', None]
+    return ['de,at,ch', None]
+
+
+def order_country_codes(candidates, preferred=None):
+    """
+    Puts a preferred country filter first while keeping the fallback order.
+
+    Args:
+        candidates (iterable): Country code filters in fallback order.
+        preferred (str): Country filter that already produced the settlement.
+
+    Returns:
+        list: Country code filters without duplicates.
+    """
+    ordered = []
+    if preferred:
+        ordered.append(preferred)
+    for country_code in candidates:
+        if country_code not in ordered:
+            ordered.append(country_code)
+    return ordered

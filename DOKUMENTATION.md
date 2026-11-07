@@ -289,7 +289,8 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - `extract_place_name()` entfernt PLZ, Länderpräfix und Ländernamen aus der normalisierten Ortsangabe.
 - `build_precision_queries()` erzeugt die Query-Varianten.
 - `rank_nominatim_candidates()` ordnet Städte/Gemeinden, Regionen/Landkreise und Dörfer; PLZ-Flächen stehen zuletzt. Innerhalb einer Prioritätsstufe entscheidet die Nominatim-`importance` (absteigend); Namensgleichheit wird diakritiknormalisiert und ohne Klammer-/Verwaltungspräfixe verglichen (`Brügge` = `Brugge`, `Landkreis Ammerland` = `Ammerland`).
-- `candidate_is_good_enough()` steuert den frühen Abbruch der Varianten.
+- `candidate_is_good_enough()` steuert den frühen Abbruch der Varianten. Kandidaten, die sowohl Ortsname als auch PLZ widersprechen, gelten nicht als ausreichend.
+- `candidate_matches_location()` erkennt diesen Widerspruch: Eine abweichende PLZ allein reicht nicht, solange der Name passt oder im Kandidaten keine PLZ hinterlegt ist.
 - `choose_smaller_area()` vergleicht Siedlung und PLZ-Fläche über den klassischen Radius; die kleinere Fläche gewinnt, bei Gleichstand die PLZ-Fläche.
 - `postcode_matches()` prüft, ob ein Kandidat zur angegebenen PLZ gehört.
 - `calculate_radius_from_point()` berechnet den Radius als maximale Distanz vom gesetzten Marker zu den vier Bounding-Box-Ecken.
@@ -570,10 +571,10 @@ Die Karte verwendet nicht die Wohnadresse, sondern die freiwillige Ortsangabe au
    Ist ein Land bekannt, wird direkt mit diesem Ländercode gesucht. Sonst probiert der Code mehrere plausible Länderkombinationen durch und nimmt den ersten Treffer:
 
    - fünfstellige Postleitzahl: `de`, dann `fr,fi,it`, dann ohne Länderfilter
-   - sonstige Postleitzahl: `at,ch`, dann `dk,nl`, dann ohne Länderfilter
+   - sonstige Postleitzahl: `at,ch`, dann `be`, dann `dk,nl`, dann ohne Länderfilter
    - keine Postleitzahl: `de,at,ch`, dann ohne Länderfilter
 
-   Diese Reihenfolge ist auf die überwiegend deutschsprachige Forengemeinde zugeschnitten.
+   Diese Reihenfolge ist auf die überwiegend deutschsprachige Forengemeinde zugeschnitten. Vierstellige Postleitzahlen sind nicht eindeutig: `2490` existiert beispielsweise in Österreich und in Belgien. Deshalb werden Kandidaten verworfen, wenn sie sowohl vom bekannten Ortsnamen als auch von der angegebenen Postleitzahl abweichen. So wird `2490 Balen` nicht als `Saas-Balen` (PLZ 3908) akzeptiert. Dieselbe Prüfung gilt für Classic-Treffer, die als Guard-Referenz dienen. Die PLZ-Fläche wird anschließend bevorzugt mit dem Länderfilter der bereits gewählten Siedlung gesucht, damit kein Treffer aus einem anderen Land gewinnt.
 
 5. **Nominatim abfragen**
 
@@ -1437,6 +1438,14 @@ Die früheren Nominatim-Korrekturen (User-Agent, Timeout, Negativ-Cache) bleiben
 ---
 
 ## 16. Geänderte Dateien
+
+### 07.11.2026 (Branch `fix/location-postcode-mismatch`)
+
+- `src/data_grabber/libs/location_mapping_rules_lib.py`: `country_code_candidates()` ergänzt; vierstellige PLZ probiert nach `at,ch` auch `be`, bevor `dk,nl` und der globale Fallback folgen.
+- `src/data_grabber/libs/location_precision_lib.py`: `candidate_matches_location()` ergänzt; `candidate_is_good_enough()` verwirft Kandidaten, die Name und PLZ widersprechen.
+- `src/data_grabber/libs/location_nominatim_lib.py`: PLZ-Prüfung für Precision-Kandidaten sowie für Classic-Treffer und Guard-Referenzen; die PLZ-Fläche übernimmt den Länderfilter der gewählten Siedlung. Behebt `2490 Balen` → Saas-Balen (CH).
+- `src/data_grabber/tests/test_location_precision.py`: Regressionstests für belgische 4-stellige PLZ und widersprüchliche Kandidaten.
+- `DOKUMENTATION.md`: Länderkandidaten und PLZ-Prüfung dokumentiert.
 
 ### 06.11.2026 (Branch `fix/version-3.0.2`)
 

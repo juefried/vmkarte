@@ -215,6 +215,25 @@ def postcode_matches(entry, postal_code):
     return str(entry.get('name', '')) == str(postal_code)
 
 
+def candidate_matches_location(entry, place_name=None, postal_code=None):
+    """
+    Returns False when an entry contradicts both the name and the postal code.
+
+    A missing postal code in the entry is not treated as a contradiction, so
+    valid results without address details are still accepted. This rejects
+    lookups such as "2490 Balen" returning "Saas-Balen" (postcode 3908).
+    """
+    if not isinstance(entry, dict):
+        return False
+    if not place_name or not postal_code:
+        return True
+    if _entry_name_matches(entry, place_name):
+        return True
+    if not _entry_postcode(entry):
+        return True
+    return postcode_matches(entry, postal_code)
+
+
 def candidate_sort_key(entry, place_name, postal_code):
     """
     Returns a sort key where lower is better.
@@ -293,8 +312,10 @@ def rank_nominatim_candidates(candidates, place_name, postal_code):
     return best
 
 
-def candidate_is_good_enough(entry, place_name):
+def candidate_is_good_enough(entry, place_name, postal_code=None):
     """Returns True when a query variant already produced a preferred result."""
+    if not candidate_matches_location(entry, place_name, postal_code):
+        return False
     if place_name:
         return is_settlement(entry)
     return is_postcode(entry) or is_settlement(entry)

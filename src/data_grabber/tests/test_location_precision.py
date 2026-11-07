@@ -8,6 +8,8 @@ if str(APP_DIR) not in sys.path:
 
 from libs.location_mapping_rules_lib import (
     analyze_location_for_country,
+    country_code_candidates,
+    order_country_codes,
     prepare_location,
 )
 from libs.location_precision_lib import (
@@ -15,6 +17,7 @@ from libs.location_precision_lib import (
     calculate_radius_from_bbox_center,
     calculate_radius_from_point,
     candidate_is_good_enough,
+    candidate_matches_location,
     choose_smaller_area,
     extract_place_name,
     postcode_matches,
@@ -87,6 +90,44 @@ class BuildPrecisionQueriesTests(unittest.TestCase):
         self.assertEqual(queries, [('postcode', {'postalcode': '85560'})])
 
 
+class CountryCodeCandidatesTests(unittest.TestCase):
+    def test_four_digit_postcode_tries_belgium(self):
+        self.assertEqual(
+            country_code_candidates('2490', None),
+            ['at,ch', 'be', 'dk,nl', None],
+        )
+
+    def test_known_country_is_the_only_candidate(self):
+        self.assertEqual(country_code_candidates('2490', 'be'), ['be'])
+
+    def test_five_digit_postcode_keeps_german_priority(self):
+        self.assertEqual(
+            country_code_candidates('90469', None),
+            ['de', 'fr,fi,it', None],
+        )
+
+    def test_without_postcode_tries_dach_first(self):
+        self.assertEqual(
+            country_code_candidates(None, None),
+            ['de,at,ch', None],
+        )
+
+    def test_preferred_country_code_keeps_fallbacks(self):
+        self.assertEqual(
+            order_country_codes(
+                ['at,ch', 'be', 'dk,nl', None],
+                'be',
+            ),
+            ['be', 'at,ch', 'dk,nl', None],
+        )
+
+    def test_unknown_preferred_country_code_keeps_order(self):
+        self.assertEqual(
+            order_country_codes(['at,ch', 'be', None]),
+            ['at,ch', 'be', None],
+        )
+
+
 class RankCandidatesTests(unittest.TestCase):
     def test_prefers_settlement_over_postal_code_area(self):
         result = rank_nominatim_candidates(
@@ -108,6 +149,31 @@ class RankCandidatesTests(unittest.TestCase):
         self.assertTrue(candidate_is_good_enough(_town(), place_name='ebersberg'))
         self.assertFalse(candidate_is_good_enough(_postcode(), place_name='ebersberg'))
         self.assertTrue(candidate_is_good_enough(_postcode(), place_name=''))
+
+    def test_rejects_settlement_with_conflicting_postcode_and_name(self):
+        saas_balen = _town('Saas-Balen')
+        saas_balen['address'] = {'postcode': '3908', 'country_code': 'ch'}
+
+        self.assertFalse(
+            candidate_matches_location(saas_balen, 'balen', '2490')
+        )
+        self.assertFalse(
+            candidate_is_good_enough(saas_balen, 'balen', '2490')
+        )
+
+    def test_accepts_matching_settlement_without_postcode(self):
+        balen = _town('Balen')
+        balen['address'] = {'country_code': 'be'}
+
+        self.assertTrue(candidate_matches_location(balen, 'balen', '2490'))
+        self.assertTrue(candidate_is_good_enough(balen, 'balen', '2490'))
+
+    def test_name_match_survives_different_postcode(self):
+        dahlem = _town('Dahlem')
+        dahlem['address'] = {'postcode': '14195', 'country_code': 'de'}
+
+        self.assertTrue(candidate_matches_location(dahlem, 'dahlem', '21368'))
+        self.assertTrue(candidate_is_good_enough(dahlem, 'dahlem', '21368'))
 
     def test_importance_wins_over_lower_place_rank(self):
         country_county = {
