@@ -335,7 +335,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 
 ### 5.6 Frontend `karte.html`
 
-- `karte.html` ist die App-Shell. Styles liegen in `css/app.css`, das JavaScript in `js/app.js` und den Modulen `js/data.js`, `js/storage.js`, `js/status-ui.js`, `js/hashtags.js` und `js/search-suggestions.js`.
+- `karte.html` ist die App-Shell. Styles liegen in `css/app.css`, das JavaScript in `js/app.js` und den Modulen `js/data.js`, `js/storage.js`, `js/status-ui.js`, `js/hashtags.js`, `js/search-suggestions.js` und `js/search-filter.js`.
 - Lädt `shared/vmforum_members.json` und `shared/data-status.json`.
 - Speichert den zuletzt geladenen Stand in IndexedDB (`vmkarte`, Store `kv`) und zeigt ihn beim Start sofort an. Ohne lokalen Stand erscheint `Kartendaten werden geladen …`.
 - Gleicht im Hintergrund mit dem Server ab und nutzt ETag/`304`, wenn ein lokaler Stand vorhanden ist. Der manuelle Button `Kartendaten aktualisieren` lädt ohne HTTP-Cache und prüft zusätzlich die App-Version.
@@ -347,6 +347,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - Zeigt die vorgeschriebene Attribution im Leaflet-Attribution-Control unten rechts: „© OpenStreetMap-Mitwirkende, ODbL“ sowie „Geocoding: Nominatim“.
 - Filtert nach URL-Parametern und Formularfeldern.
 - Das Suchfeld zeigt bei Fokus und leerem Inhalt nur Hashtags; beim Tippen werden Namen, Fahrzeuglabels und Hashtags case-insensitiv gefiltert, häufige Werte zuerst. Die Vorschlagsliste ist auf etwa sechs Zeilen begrenzt, bleibt scrollbar und liegt direkt unter dem Eingabefeld. Scrollen und Wischen auf der Liste bewegen die Karte nicht.
+- Die Suche wird bei Enter oder Fokusverlust angewandt. Jeder nicht-leere Freitext aktiviert dabei zuverlässig den passenden Suchmodus, auch bei Einfügen, Autovervollständigung oder Vorschlag-Auswahl. Ergibt die Suche keine Treffer, werden alle Pins entfernt.
 - Zeigt Name, Velomobil, Liegerad, Trike, Freitext/Hashtags und den Stand der Profildaten im Popup.
 - Links zu Forenprofilen öffnen in einem neuen Tab; Hashtag-Links filtern die Karte weiterhin im selben Tab.
 - Hashtags werden aus dem Freitextfeld `other` erkannt: `#`, danach ein Unicode-Buchstabe und mindestens ein weiteres Unicode-Buchstaben-, Ziffern- oder Unterstrichzeichen. Umlaute, Akzente und nicht-lateinische Buchstaben sind erlaubt.
@@ -1438,6 +1439,15 @@ Die früheren Nominatim-Korrekturen (User-Agent, Timeout, Negativ-Cache) bleiben
 ---
 
 ## 16. Geänderte Dateien
+
+### 07.11.2026 (Branch `fix/search-empty-result-clears-pins`)
+
+- `docker/webserver/www_data/js/search-filter.js`: neue pure Helfer `resolveSearchMode()` und `filterMembers()`; die zweistufige Filterlogik (URL-Parameter und Formularfelder) ist aus `app.js` ausgelagert.
+- `docker/webserver/www_data/js/app.js`: Suchmodus wird bei Enter, Fokusverlust, Tastatur und Vorschlag-Auswahl zuverlässig aktiviert. Damit wird ein eingefügter oder mehrzeichiger Begriff auch bei „alle“ gesucht; ohne Treffer bleiben keine Pins stehen.
+- `tests/frontend/search-filter.test.js`: Unit-Tests für Modus-Auflösung und Filterkombinationen.
+- `tests/browser/phase9-cdp.mjs`: Regressionstest für eine erfolglose Suche ohne Pins.
+- `docker/webserver/www_data/service-worker.js`: Cache auf `vmkarte-shell-v17` erhöht, `js/search-filter.js` in die App-Shell aufgenommen.
+- `DOKUMENTATION.md`: Suchverhalten und Dateiliste aktualisiert.
 
 ### 07.11.2026 (Branch `feature/location-precision-default`)
 
