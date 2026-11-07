@@ -1,4 +1,5 @@
-export const SEARCH_FIT_MIN_ZOOM = 4;
+export const SEARCH_FIT_MIN_ZOOM_PORTRAIT = 5;
+export const SEARCH_FIT_MIN_ZOOM_LANDSCAPE = 5;
 export const SEARCH_FIT_MAX_ZOOM_PORTRAIT = 13;
 export const SEARCH_FIT_MAX_ZOOM_LANDSCAPE = 15;
 export const SEARCH_FIT_ZOOM_TOLERANCE = 2;
@@ -65,6 +66,9 @@ export function hasAnyPointInBounds(points, bounds) {
 }
 
 export function clampSearchZoom(fitZoom, { portrait = false } = {}) {
+	const minZoom = portrait
+		? SEARCH_FIT_MIN_ZOOM_PORTRAIT
+		: SEARCH_FIT_MIN_ZOOM_LANDSCAPE;
 	const maxZoom = portrait
 		? SEARCH_FIT_MAX_ZOOM_PORTRAIT
 		: SEARCH_FIT_MAX_ZOOM_LANDSCAPE;
@@ -72,7 +76,47 @@ export function clampSearchZoom(fitZoom, { portrait = false } = {}) {
 	if (!Number.isFinite(fitZoom))
 		return maxZoom;
 
-	return Math.min(maxZoom, Math.max(SEARCH_FIT_MIN_ZOOM, fitZoom));
+	return Math.min(maxZoom, Math.max(minZoom, fitZoom));
+}
+
+export function findClosestFittingCenter(points, preferred, availableWidth, availableHeight) {
+	if (!Array.isArray(points) || points.length === 0
+		|| !preferred
+		|| !Number.isFinite(preferred.x)
+		|| !Number.isFinite(preferred.y)
+		|| !Number.isFinite(availableWidth)
+		|| !Number.isFinite(availableHeight)
+		|| availableWidth <= 0
+		|| availableHeight <= 0)
+		return null;
+
+	let minX = Infinity;
+	let maxX = -Infinity;
+	let minY = Infinity;
+	let maxY = -Infinity;
+
+	for (const point of points) {
+		if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y))
+			return null;
+		minX = Math.min(minX, point.x);
+		maxX = Math.max(maxX, point.x);
+		minY = Math.min(minY, point.y);
+		maxY = Math.max(maxY, point.y);
+	}
+
+	if (maxX - minX > availableWidth || maxY - minY > availableHeight)
+		return null;
+
+	const x = Math.min(
+		minX + availableWidth / 2,
+		Math.max(maxX - availableWidth / 2, preferred.x),
+	);
+	const y = Math.min(
+		minY + availableHeight / 2,
+		Math.max(maxY - availableHeight / 2, preferred.y),
+	);
+
+	return { x, y };
 }
 
 export function findDensestCenter(points) {

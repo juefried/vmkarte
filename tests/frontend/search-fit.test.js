@@ -4,9 +4,11 @@ import assert from 'node:assert/strict';
 import {
 	SEARCH_FIT_MAX_ZOOM_LANDSCAPE,
 	SEARCH_FIT_MAX_ZOOM_PORTRAIT,
-	SEARCH_FIT_MIN_ZOOM,
+	SEARCH_FIT_MIN_ZOOM_LANDSCAPE,
+	SEARCH_FIT_MIN_ZOOM_PORTRAIT,
 	SEARCH_FIT_ZOOM_TOLERANCE,
 	clampSearchZoom,
+	findClosestFittingCenter,
 	findDensestCenter,
 	hasAnyPointInBounds,
 	isPortraitSize,
@@ -64,9 +66,13 @@ test('hasAnyPointInBounds supports plain edge objects inclusively', () => {
 	assert.equal(hasAnyPointInBounds([[50, 15.01]], bounds), false);
 });
 
-test('clampSearchZoom applies the minimum and orientation-dependent maximum', () => {
+test('clampSearchZoom applies orientation-dependent minimum and maximum', () => {
 	assert.equal(clampSearchZoom(10), 10);
-	assert.equal(clampSearchZoom(2), SEARCH_FIT_MIN_ZOOM);
+	assert.equal(clampSearchZoom(2), SEARCH_FIT_MIN_ZOOM_LANDSCAPE);
+	assert.equal(
+		clampSearchZoom(2, { portrait: true }),
+		SEARCH_FIT_MIN_ZOOM_PORTRAIT,
+	);
 	assert.equal(
 		clampSearchZoom(18, { portrait: true }),
 		SEARCH_FIT_MAX_ZOOM_PORTRAIT,
@@ -78,6 +84,42 @@ test('clampSearchZoom applies the minimum and orientation-dependent maximum', ()
 	assert.equal(
 		clampSearchZoom(Number.POSITIVE_INFINITY, { portrait: true }),
 		SEARCH_FIT_MAX_ZOOM_PORTRAIT,
+	);
+});
+
+test('findClosestFittingCenter keeps the preferred center when all points fit', () => {
+	assert.deepEqual(
+		findClosestFittingCenter(
+			[{ x: 0, y: 0 }, { x: 100, y: 50 }],
+			{ x: 50, y: 25 },
+			200,
+			100,
+		),
+		{ x: 50, y: 25 },
+	);
+});
+
+test('findClosestFittingCenter moves the center only as far as needed', () => {
+	assert.deepEqual(
+		findClosestFittingCenter(
+			[{ x: 0, y: 0 }, { x: 100, y: 50 }],
+			{ x: 200, y: 200 },
+			200,
+			100,
+		),
+		{ x: 100, y: 50 },
+	);
+});
+
+test('findClosestFittingCenter returns null when the points cannot fit', () => {
+	assert.equal(
+		findClosestFittingCenter(
+			[{ x: 0, y: 0 }, { x: 300, y: 50 }],
+			{ x: 150, y: 25 },
+			200,
+			100,
+		),
+		null,
 	);
 });
 
