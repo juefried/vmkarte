@@ -1,0 +1,7 @@
+# Vorlage fuer den eigenen Session-Signaturschluessel der Testinstanz.
+# Echten Schluessel erzeugen mit:
+#   openssl rand -base64 48 > config/session_signing_key
+#
+# Der Auth-Service benoetigt mindestens 32 Byte. Dieser Platzhalter ist
+# absichtlich zu kurz, damit eine versehentliche Verwendung fehlschlaegt.
+REPLACE_ME

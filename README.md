@@ -223,6 +223,7 @@ Precision-Abfragen nutzen den getrennten Cache-Namespace `precision-v1`; ein alt
 ## Release 3.0 (Branch `release/3.0-pwa`)
 
 - [Auth-Service und formularbasierte Anmeldung](docs/upgrade-3.0-auth.md)
+- [OAuth2-Testumgebung auf `karte-test.jfr-service.de`](docs/deploy-oauth-test.md) (`release/oauth2-test`)
 - Datenstatus aus dem Datengrabber (`shared/data-status.json`)
 - Frontend-Datenloader mit IndexedDB, lokalem Start, ETag-Abgleich und manuellem Refresh
 - Dauerhafte, dezente Statusanzeige mit Quelle `Server`/`lokal` und Offline-Badge

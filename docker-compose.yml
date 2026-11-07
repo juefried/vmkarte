@@ -1,0 +1,83 @@
+services:
+
+  web:
+    build:
+      context: docker/webserver
+      args:
+        APP_VERSION: ${APP_VERSION:-}
+        BUILD_DATE: ${BUILD_DATE:-}
+        APP_TITLE: ${TEST_APP_TITLE:-Velomobilkarte Test}
+        APP_SHORT_NAME: ${TEST_APP_SHORT_NAME:-VMKarte Test}
+    image: localhost/${COMPOSE_PROJECT_NAME}_web:latest
+    environment:
+      SERVER_NAME: karte-test.jfr-service.de
+    volumes:
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+      - ${VMKARTE_SHARED_DATA_DIR:?VMKARTE_SHARED_DATA_DIR muss gesetzt sein}:/www_data/shared:ro
+    depends_on:
+      auth:
+        condition: service_healthy
+    networks:
+      - traefik_proxy
+      - default
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-secure.entrypoints=websecure"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-secure.rule=Host(`karte-test.jfr-service.de`)"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-secure.tls=true"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-secure.tls.certresolver=leresolver"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-secure.service=${COMPOSE_PROJECT_NAME}"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME}.loadbalancer.server.port=8080"
+      - "traefik.http.services.${COMPOSE_PROJECT_NAME}.loadbalancer.server.scheme=http"
+      - "traefik.http.routers.${COMPOSE_PROJECT_NAME}-secure.middlewares=${COMPOSE_PROJECT_NAME}"
+      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME}.headers.STSPreload=true"
+      - "traefik.http.middlewares.${COMPOSE_PROJECT_NAME}.headers.STSSeconds=31536000"
+      - "traefik.docker.network=traefik_proxy"
+    restart: unless-stopped
+
+  auth:
+    build:
+      context: docker/auth
+    image: localhost/${COMPOSE_PROJECT_NAME}_auth:latest
+    expose:
+      - "8080"
+    environment:
+      PASSWORD_FILE: /run/secrets/htpasswd
+      SESSION_KEY_FILE: /run/secrets/session_signing_key
+      COOKIE_NAME: vmkarte_test_session
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:-}
+      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-}
+      OAUTH_AUTHORIZE_URL: ${OAUTH_AUTHORIZE_URL:-}
+      OAUTH_TOKEN_URL: ${OAUTH_TOKEN_URL:-}
+      OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-}
+    secrets:
+      - htpasswd
+      - session_signing_key
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - default
+    restart: unless-stopped
+
+networks:
+  traefik_proxy:
+    external: true
+
+secrets:
+  htpasswd:
+    file: ./config/.htpasswd
+  session_signing_key:
+    file: ./config/session_signing_key

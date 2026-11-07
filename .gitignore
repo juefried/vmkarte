@@ -175,6 +175,7 @@ cython_debug/
 !/config/.htpasswd.sample
 !/config/config.json.sample
 !/config/cache_config.json.sample
+!/config/session_signing_key.sample
 
 # Local session logs
 /session-*.md
