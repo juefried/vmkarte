@@ -153,20 +153,20 @@ python data_grabber.py --refresh-members --refresh-user 12345
 
 ## Lokale Ortsauflösung vergleichen
 
-Die alternative Strategie `precision` ist nur für den lokalen Test gedacht; Default bleibt `classic`. Sie wird im Branch `feature/location-precision` entwickelt. Bei `PLZ + Ortsname` vergleicht sie Siedlung und PLZ-Fläche und nimmt die kleinere Fläche (bei Gleichstand die PLZ), damit sowohl Ebersberg als auch Berlin/Hamburg sinnvoll aufgelöst werden.
+Die Strategie `precision` ist der Default. Bei `PLZ + Ortsname` vergleicht sie Siedlung und PLZ-Fläche und nimmt die kleinere Fläche (bei Gleichstand die PLZ), damit sowohl Ebersberg als auch Berlin/Hamburg sinnvoll aufgelöst werden. Die bisherige Auflösung bleibt als Opt-out über `--location-strategy classic` verfügbar.
 
 ```bash
 cd src/data_grabber
 
-# 1. Produktionsnahen Stand inkl. Debug-Rohdaten erzeugen
-python data_grabber.py --debug
+# 1. Produktionsnahen Classic-Stand inkl. Debug-Rohdaten erzeugen
+python data_grabber.py --debug --location-strategy classic
 
 # 2. members.json + vmforum_members.json als feste Ausgangsbasis einfrieren
 python utils/freeze_location_baseline.py
 
 # 3. Vergleichslauf auf derselben Mitgliederbasis
 python data_grabber.py --members-from ../../local/baseline/members.json \
-  --location-strategy precision --write-location-details
+  --write-location-details
 
 # 4. Änderungen sortiert ausgeben (.csv, .json oder .md)
 python utils/compare_locations.py --output ../../local/compare/locations.csv

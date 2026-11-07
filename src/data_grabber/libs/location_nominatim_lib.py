@@ -325,7 +325,7 @@ def calculate_radius(boundingbox):
 def examine_locations(
     members,
     refresh_uids=(),
-    strategy='classic',
+    strategy='precision',
     refresh_locations=False,
     precision_guard='disjoint',
 ):
@@ -336,9 +336,9 @@ def examine_locations(
         members (dict): A dictionary containing the members' information.
         refresh_uids (iterable): UIDs whose Nominatim lookups must bypass the cache.
             Fresh results are still written to the cache.
-        strategy (str): 'classic' keeps the historical behavior. 'precision'
-            uses structured Nominatim queries and prefers settlements over
-            postal code areas.
+        strategy (str): 'precision' (default) uses structured Nominatim queries
+            and prefers settlements over postal code areas. 'classic' keeps the
+            historical behavior.
         refresh_locations (bool): Bypass the Nominatim cache for every member.
         precision_guard (str): 'disjoint' keeps the classic result when the
             precision and classic areas do not overlap. 'old-radius' is the
