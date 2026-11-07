@@ -6,10 +6,14 @@ import { HASHTAG_REGEX, HASHTAG_NAME_REGEX } from './hashtags.js';
 import { collectSearchSuggestions, filterSearchSuggestions } from './search-suggestions.js';
 import {
 	SEARCH_FIT_PADDING,
+	SEARCH_FIT_RADIUS_MAX_VISIBLE_PINS,
+	SEARCH_FIT_RADIUS_PERCENTILE,
 	clampSearchZoom,
 	findClosestFittingCenter,
 	findDensestCenter,
+	isPointInView,
 	isPortraitSize,
+	radiusZoomLimit,
 	shouldAdjustSearchView,
 } from './search-fit.js';
 import { describeGeolocationError, GEOLOCATION_OPTIONS } from './location.js';
@@ -654,21 +658,22 @@ function compute_search_center(points, zoom, size, preferredCenter) {
 	return fitted ? map.unproject(L.point(fitted.x, fitted.y), zoom) : preferredCenter;
 }
 
-function fit_search_results(points) {
-	if (!map || !Array.isArray(points) || points.length === 0)
+function fit_search_results(results) {
+	if (!map || !Array.isArray(results) || results.length === 0)
 		return;
 
-	const validPoints = points.filter(point => Array.isArray(point)
-		&& Number.isFinite(point[0])
-		&& Number.isFinite(point[1]));
-	if (validPoints.length === 0)
+	const validResults = results.filter(result => result
+		&& Number.isFinite(result.lat)
+		&& Number.isFinite(result.lon));
+	if (validResults.length === 0)
 		return;
 
+	const validPoints = validResults.map(result => [result.lat, result.lon]);
 	const bounds = L.latLngBounds(validPoints);
 	const size = map.getSize();
 	const portrait = isPortraitSize(size.x, size.y);
 	const singlePoint = bounds.getNorthEast().equals(bounds.getSouthWest());
-	const targetZoom = clampSearchZoom(
+	let targetZoom = clampSearchZoom(
 		singlePoint
 			? Number.POSITIVE_INFINITY
 			: map.getBoundsZoom(bounds, false, L.point(SEARCH_FIT_PADDING * 2, SEARCH_FIT_PADDING * 2)),
@@ -684,9 +689,34 @@ function fit_search_results(points) {
 		return;
 
 	const densestCenter = findDensestCenter(validPoints);
-	const center = densestCenter
-		? compute_search_center(validPoints, targetZoom, size, L.latLng(densestCenter))
-		: bounds.getCenter();
+	const preferredCenter = densestCenter ? L.latLng(densestCenter) : bounds.getCenter();
+	let center = compute_search_center(validPoints, targetZoom, size, preferredCenter);
+
+	const availableWidth = size.x - SEARCH_FIT_PADDING * 2;
+	const availableHeight = size.y - SEARCH_FIT_PADDING * 2;
+	const projectedPoints = validPoints.map(point => map.project(L.latLng(point), targetZoom));
+	const projectedCenter = map.project(center, targetZoom);
+	const visibleResults = validResults.filter((result, index) => isPointInView(
+		projectedPoints[index],
+		projectedCenter,
+		availableWidth,
+		availableHeight,
+	));
+
+	if (visibleResults.length > 0 && visibleResults.length <= SEARCH_FIT_RADIUS_MAX_VISIBLE_PINS) {
+		const radiusLimit = radiusZoomLimit(visibleResults, {
+			percentile: SEARCH_FIT_RADIUS_PERCENTILE,
+			viewportMinDimension: Math.min(size.x, size.y),
+			padding: SEARCH_FIT_PADDING,
+		});
+		const limitedZoom = radiusLimit === null
+			? targetZoom
+			: clampSearchZoom(targetZoom, { portrait, maxZoom: radiusLimit });
+		if (limitedZoom !== targetZoom) {
+			targetZoom = limitedZoom;
+			center = compute_search_center(validPoints, targetZoom, size, preferredCenter);
+		}
+	}
 
 	map.setView(center, targetZoom, { animate: false });
 }
@@ -761,11 +791,15 @@ function add_vmforum_members({ autoFit = false } = {}) {
 			).length
 		);
 
-	const search_points = [];
+	const search_results = [];
 
 	// Add a marker with popup to the markerClusterGroup for each remaining member.
 	filtered_members.forEach( function(v) {
-		search_points.push([Number(v.lat), Number(v.lon)]);
+		search_results.push({
+			lat: Number(v.lat),
+			lon: Number(v.lon),
+			radius: Number(v.radius),
+		});
 		markers.addLayer(
 			L
 			// Add the marker on the member’s address.
@@ -839,7 +873,7 @@ function add_vmforum_members({ autoFit = false } = {}) {
 	remove_tabindex();
 
 	if (autoFit)
-		fit_search_results(search_points);
+		fit_search_results(search_results);
 }
 
 function set_location_busy(busy) {
