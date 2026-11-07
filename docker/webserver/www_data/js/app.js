@@ -4,6 +4,13 @@ import { validateMembers, parseDataStatus, deriveStatusFromLastModified } from '
 import { resolveInitialMapState, filterSearchString, FILTER_PARAMS, shouldPersistMapState } from './map-state.js';
 import { HASHTAG_REGEX, HASHTAG_NAME_REGEX } from './hashtags.js';
 import { collectSearchSuggestions, filterSearchSuggestions } from './search-suggestions.js';
+import {
+	SEARCH_FIT_PADDING,
+	clampSearchZoom,
+	findDensestCenter,
+	isPortraitSize,
+	shouldAdjustSearchView,
+} from './search-fit.js';
 import { describeGeolocationError, GEOLOCATION_OPTIONS } from './location.js';
 import { APP_VERSION } from './version.js';
 import { DEV_MODE_KEY, parseAppVersion, isNewVersion, resolveDevMode } from './version-check.js';
@@ -55,7 +62,7 @@ function resize_map_to_full_window()
 
 function schedule_member_update() {
 	clearTimeout(member_update_timer);
-	member_update_timer = setTimeout(add_vmforum_members, 0);
+	member_update_timer = setTimeout(() => add_vmforum_members({ autoFit: true }), 0);
 }
 
 function apply_filter_search_to_url(search) {
@@ -139,7 +146,7 @@ async function reset_search() {
 		window.history.replaceState({}, '', url.href);
 	}
 
-	add_vmforum_members();
+	add_vmforum_members({ autoFit: true });
 	if (!(await save_map_state()))
 		await clear_stored_map_filter();
 }
@@ -393,7 +400,7 @@ async function loadDataStatus() {
 	return { unauthorized: false, status: parseDataStatus(raw) };
 }
 
-async function syncFromServer({ manual = false } = {}) {
+async function syncFromServer({ manual = false, autoFit = false } = {}) {
 	if (updateInProgress)
 		return;
 
@@ -464,7 +471,7 @@ async function syncFromServer({ manual = false } = {}) {
 		});
 
 		if (membersChanged) {
-			add_vmforum_members();
+			add_vmforum_members({ autoFit });
 			add_search_suggestions();
 			log_member_stats();
 		}
@@ -631,7 +638,59 @@ function remove_tabindex() {
 		.forEach(v => v.tabIndex = -1);
 }
 
-function add_vmforum_members() {
+function can_fit_all_points_at(center, zoom, points, size) {
+	const availableWidth = size.x - SEARCH_FIT_PADDING * 2;
+	const availableHeight = size.y - SEARCH_FIT_PADDING * 2;
+	if (availableWidth <= 0 || availableHeight <= 0)
+		return false;
+
+	const centerPoint = map.project(center, zoom);
+	return points.every(point => {
+		const projected = map.project(L.latLng(point), zoom);
+		return Math.abs(projected.x - centerPoint.x) <= availableWidth / 2
+			&& Math.abs(projected.y - centerPoint.y) <= availableHeight / 2;
+	});
+}
+
+function fit_search_results(points) {
+	if (!map || !Array.isArray(points) || points.length === 0)
+		return;
+
+	const validPoints = points.filter(point => Array.isArray(point)
+		&& Number.isFinite(point[0])
+		&& Number.isFinite(point[1]));
+	if (validPoints.length === 0)
+		return;
+
+	const bounds = L.latLngBounds(validPoints);
+	const size = map.getSize();
+	const portrait = isPortraitSize(size.x, size.y);
+	const singlePoint = bounds.getNorthEast().equals(bounds.getSouthWest());
+	const targetZoom = clampSearchZoom(
+		singlePoint
+			? Number.POSITIVE_INFINITY
+			: map.getBoundsZoom(bounds, false, L.point(SEARCH_FIT_PADDING * 2, SEARCH_FIT_PADDING * 2)),
+		{ portrait },
+	);
+
+	if (!shouldAdjustSearchView({
+		points: validPoints,
+		currentBounds: map.getBounds(),
+		currentZoom: map.getZoom(),
+		targetZoom,
+	}))
+		return;
+
+	const densestCenter = findDensestCenter(validPoints);
+	const center = densestCenter
+		&& can_fit_all_points_at(L.latLng(densestCenter), targetZoom, validPoints, size)
+		? L.latLng(densestCenter)
+		: bounds.getCenter();
+
+	map.setView(center, targetZoom, { animate: false });
+}
+
+function add_vmforum_members({ autoFit = false } = {}) {
 
 	// First, remove all members.
 	map.eachLayer(l => (l instanceof L.MarkerClusterGroup) && map.removeLayer(l));
@@ -669,7 +728,7 @@ function add_vmforum_members() {
 			.on('clustermouseover', c => { c.layer.spiderfy(); remove_tabindex(); });
 
 	// Create markers from the members array.
-	members
+	const filtered_members = members
 		// Filter 1: URL parameters
 		// * Iterate over all properties.
 		// * Exclude the member if any of the property checks fail (= the returned array from the inner filter has a non-zero length).
@@ -699,81 +758,87 @@ function add_vmforum_members() {
 					: true
 				)
 			).length
-		)
+		);
 
-		// Add a marker with popup to the markerClusterGroup for each remaining member.
-		.forEach( function(v) {
-			markers.addLayer(
-				L
-				// Add the marker on the member’s address.
-				.marker(
-					[v.lat, v.lon],
+	const search_points = [];
+
+	// Add a marker with popup to the markerClusterGroup for each remaining member.
+	filtered_members.forEach( function(v) {
+		search_points.push([Number(v.lat), Number(v.lon)]);
+		markers.addLayer(
+			L
+			// Add the marker on the member’s address.
+			.marker(
+				[v.lat, v.lon],
+				{
+					// Set the name + bikes as tooltip (separate name and bikes with newline, separate bikes with comma, surround bike string with parentheses).
+					'title': [
+						html_escape(v.name),
+						['vm', 'lr', 'tr']
+							.filter(n => v[n])
+							.map(n => html_escape(v[n]))
+							.join(', ')
+							.replace(/^.+$/, '($&)')
+						].join('\n')
+				})
+
+			// Format the popup.
+			.bindPopup(
+				'<a href="https://www.velomobilforum.de/forum/index.php?members/'
+				+ v.id
+				+ '/" target="_blank" rel="noopener" title="Mitglieder-Profil im Forum"><b>'
+				+ html_escape(v.name)
+				+ '</b></a>'
+				+ ' <a href="geo:' + v.lat + ',' + v.lon + '" title="Koordinaten, z.B. für BRouter">🌐</a>'
+				+ (v.vm ? '<br /><b>Velomobil:</b> ' + html_escape(v.vm) : '')
+				+ (v.lr ? '<br /><b>Liegerad:</b> ' + html_escape(v.lr) : '')
+				+ (v.tr ? '<br /><b>Trike:</b> ' + html_escape(v.tr) : '')
+				+ (v.other
+					? '<br />' + html_escape(v.other).replace(HASHTAG_REGEX, match => '<a href="karte.html?other=' + encodeURIComponent(match) + '" title="alle mit diesem Hashtag anzeigen">' + match + '</a>')
+					: '')
+				+ '<br /><span class="stand" title="Letzter Profilabruf: '
+				+ html_escape(v.profile_updated_at || 'unbekannt')
+				+ '">Stand: ' + format_profile_date(v.profile_updated_at) + '</span>',
+				{ 'closeOnEscapeKey': true }	// Seems to be broken.
+				)
+			// Close popup when Escape key is pressed.
+			.on('keydown', e => e.originalEvent.key === 'Escape' && e.target.closePopup() )
+
+			// When hovering over the marker, move the error circle there and set its radius;
+			// when moving away, set stroke and fill to false.
+			.on('mouseover', x => error_circle
+						.setLatLng([v.lat, v.lon])
+						.setRadius(v.radius)
+						.setStyle({'stroke': true, 'fill': true}))
+			.on('mouseout', x => error_circle
+						.setStyle({'stroke': false, 'fill': false}))
+		);
+
+		// If a hashtag has been found, look if:
+		// * the current member has it.
+		// * it has a radius attached.
+		// Then, add a circle.
+		if (found_tag) {
+
+			// Search for a radius after the hashtag, and add a circle if found.
+			const tag_radius = v.other.match(RegExp(found_tag[0] + '=([0-9.]+)km', 'i'));
+			if (tag_radius) {
+				layer_circles.addLayer(
+					L.circle([v.lat, v.lon],
 					{
-						// Set the name + bikes as tooltip (separate name and bikes with newline, separate bikes with comma, surround bike string with parentheses).
-						'title': [
-							html_escape(v.name),
-							['vm', 'lr', 'tr']
-								.filter(n => v[n])
-								.map(n => html_escape(v[n]))
-								.join(', ')
-								.replace(/^.+$/, '($&)')
-							].join('\n')
-					})
-
-				// Format the popup.
-				.bindPopup(
-					'<a href="https://www.velomobilforum.de/forum/index.php?members/'
-					+ v.id
-					+ '/" target="_blank" rel="noopener" title="Mitglieder-Profil im Forum"><b>'
-					+ html_escape(v.name)
-					+ '</b></a>'
-					+ ' <a href="geo:' + v.lat + ',' + v.lon + '" title="Koordinaten, z.B. für BRouter">🌐</a>'
-					+ (v.vm ? '<br /><b>Velomobil:</b> ' + html_escape(v.vm) : '')
-					+ (v.lr ? '<br /><b>Liegerad:</b> ' + html_escape(v.lr) : '')
-					+ (v.tr ? '<br /><b>Trike:</b> ' + html_escape(v.tr) : '')
-					+ (v.other
-						? '<br />' + html_escape(v.other).replace(HASHTAG_REGEX, match => '<a href="karte.html?other=' + encodeURIComponent(match) + '" title="alle mit diesem Hashtag anzeigen">' + match + '</a>')
-						: '')
-					+ '<br /><span class="stand" title="Letzter Profilabruf: '
-					+ html_escape(v.profile_updated_at || 'unbekannt')
-					+ '">Stand: ' + format_profile_date(v.profile_updated_at) + '</span>',
-					{ 'closeOnEscapeKey': true }	// Seems to be broken.
-					)
-				// Close popup when Escape key is pressed.
-				.on('keydown', e => e.originalEvent.key === 'Escape' && e.target.closePopup() )
-
-				// When hovering over the marker, move the error circle there and set its radius;
-				// when moving away, set stroke and fill to false.
-				.on('mouseover', x => error_circle
-							.setLatLng([v.lat, v.lon])
-							.setRadius(v.radius)
-							.setStyle({'stroke': true, 'fill': true}))
-				.on('mouseout', x => error_circle
-							.setStyle({'stroke': false, 'fill': false}))
-			);
-
-			// If a hashtag has been found, look if:
-			// * the current member has it.
-			// * it has a radius attached.
-			// Then, add a circle.
-			if (found_tag) {
-
-				// Search for a radius after the hashtag, and add a circle if found.
-				const tag_radius = v.other.match(RegExp(found_tag[0] + '=([0-9.]+)km', 'i'));
-				if (tag_radius) {
-					layer_circles.addLayer(
-						L.circle([v.lat, v.lon],
-						{
-							'radius': tag_radius[1] * 1000,
-							'className': 'tag_circle'
-						}));
-				}
+						'radius': tag_radius[1] * 1000,
+						'className': 'tag_circle'
+					}));
 			}
-		});
+		}
+	});
 
 	map.addLayer(markers);
 
 	remove_tabindex();
+
+	if (autoFit)
+		fit_search_results(search_points);
 }
 
 function set_location_busy(busy) {
@@ -900,6 +965,7 @@ async function create_map() {
 		}),
 	]);
 
+	const autoFitInitial = filterSearchString(window.location.search).length > 0;
 	const initialMapState = resolveInitialMapState({
 		urlSearch: window.location.search,
 		stored: storedMapState,
@@ -986,7 +1052,7 @@ async function create_map() {
 				return;
 			}
 			close_search_suggestions();
-			add_vmforum_members();
+			add_vmforum_members({ autoFit: true });
 		}
 	});
 
@@ -1020,7 +1086,7 @@ async function create_map() {
 		cachedEtag = cache.etag;
 		cachedLastModified = cache.lastModified;
 
-		add_vmforum_members();
+		add_vmforum_members({ autoFit: autoFitInitial });
 		add_search_suggestions();
 		log_member_stats();
 		show_current_status(false);
@@ -1057,7 +1123,9 @@ async function create_map() {
 		});
 	}
 
-	syncFromServer();
+	syncFromServer({
+		autoFit: autoFitInitial && !(cache && cache.members.length > 0),
+	});
 
 	if (!devMode.enabled) {
 		register_service_worker();
