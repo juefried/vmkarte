@@ -439,6 +439,20 @@ async function main() {
 	assert.equal(await evaluate(`document.getElementById('search_suggestions').hidden`), true);
 	check.pass('Leeres Suchfeld zeigt nur Unicode-Hashtags; Eingaben filtern Namen und Fahrzeuge; Auswahl per Klick und Tastatur funktioniert');
 
+	// 1a. A multi-character query without a matching suggestion clears all pins.
+	await evaluate(`(() => {
+		const input = document.getElementById('form_search');
+		input.value = 'kein-treffer-xyz';
+		input.dispatchEvent(new Event('input', { bubbles: true }));
+		input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+	})()`);
+	await waitFor(`document.querySelectorAll('.leaflet-marker-icon').length === 0`, 'empty map after unmatched search');
+	assert.equal(await evaluate(`document.getElementById('form_select').selectedIndex`), 8);
+	check.pass('Nicht vorhandener Suchbegriff entfernt alle Pins');
+
+	await evaluate(`document.getElementById('reset_button').click()`);
+	await waitFor(`document.querySelectorAll('.leaflet-marker-icon').length > 0`, 'markers restored after reset');
+
 	// 1b. The manual refresh button also checks the app version.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };
 	await evaluate(`document.getElementById('refresh_button').click()`);
@@ -450,8 +464,8 @@ async function main() {
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache');
 	assert.equal(await cacheContains('/app-version.json'), false);
 	const serviceWorkerSource = await (await fetch(ORIGIN + '/service-worker.js')).text();
-	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v16';"));
-	check.pass('Service Worker installiert, Cache ist v16 und app-version.json bleibt network-only');
+	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v17';"));
+	check.pass('Service Worker installiert, Cache ist v17 und app-version.json bleibt network-only');
 
 	// 3. ?dev=1 disables the service worker, removes caches and skips the version check.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };

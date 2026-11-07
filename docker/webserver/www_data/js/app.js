@@ -4,6 +4,7 @@ import { validateMembers, parseDataStatus, deriveStatusFromLastModified } from '
 import { resolveInitialMapState, filterSearchString, FILTER_PARAMS, shouldPersistMapState } from './map-state.js';
 import { HASHTAG_REGEX, HASHTAG_NAME_REGEX } from './hashtags.js';
 import { collectSearchSuggestions, filterSearchSuggestions } from './search-suggestions.js';
+import { filterMembers, resolveSearchMode } from './search-filter.js';
 import {
 	SEARCH_FIT_PADDING,
 	SEARCH_FIT_RADIUS_MAX_VISIBLE_PINS,
@@ -606,18 +607,14 @@ function move_search_suggestion(direction) {
 	set_active_search_suggestion(index);
 }
 
-function sync_search_type(value, key) {
-	if (/^#/.test(value))
-		form_select.selectedIndex = 7;
-	else if ((/^[^#]$/.test(value) && key !== 'Backspace' && key !== 'Delete')
-		|| (/^[^#]/.test(value) && form_select.selectedIndex === 7))
-		form_select.selectedIndex = 8;
+function sync_search_type(value) {
+	form_select.selectedIndex = resolveSearchMode(value, form_select.selectedIndex);
 }
 
 function select_search_suggestion(value) {
 	form_search.value = value;
 	close_search_suggestions();
-	sync_search_type(value, null);
+	sync_search_type(value);
 	schedule_member_update();
 }
 
@@ -759,37 +756,11 @@ function add_vmforum_members({ autoFit = false } = {}) {
 			.on('clustermouseover', c => { c.layer.spiderfy(); remove_tabindex(); });
 
 	// Create markers from the members array.
-	const filtered_members = members
-		// Filter 1: URL parameters
-		// * Iterate over all properties.
-		// * Exclude the member if any of the property checks fail (= the returned array from the inner filter has a non-zero length).
-		// * The check fails if the URL parameter of the current property is set, but the current member does not have this property or the regex match (case insensitive) fails.
-		// * The check succeeds if the property is not in the URL parameters or if the current member has this property and it matches the search if present.
-		.filter(
-			v => !['name', 'vm', 'lr', 'tr', 'other'].filter(n =>
-				urlparams.has(n) && (
-					!v[n] ||
-					!v[n].match(RegExp(urlparams.get(n), 'i'))
-				)
-			).length
-		)
-
-		// Filter 2: input form (input field + dropdown button)
-		// * Iterate over all properties.
-		// * Include the member if any of the property checks succeed.
-		// * The check succeeds if the bit of the dropdown value that corresponds to the current property is set and the current member has this property.
-		// * If the search bit is set (bit 5), evaluate also the search (by matching the current property of the current member with the regex from the input field (case insensitive)).
-		// * By default, the dropdown button has the value 1 which corresponds to the name property; since all members have names, this makes all members appear on the map.
-		.filter(
-			v => ['name', 'vm', 'lr', 'tr', 'other'].filter((n, i) =>
-				(form_select.value & 2**i) &&
-				v[n] &&
-				(form_select.value & 2**5
-					? v[n].match(RegExp(form_search.value, 'i'))
-					: true
-				)
-			).length
-		);
+	const filtered_members = filterMembers(members, {
+		urlParams: urlparams,
+		mode: Number(form_select.value),
+		query: form_search.value,
+	});
 
 	const search_results = [];
 
@@ -1043,7 +1014,10 @@ async function create_map() {
 	// suggestion pick is handled by select_search_suggestion().
 	form_select.addEventListener('input', schedule_member_update);
 	form_select.addEventListener('change', schedule_member_update);
-	form_search.addEventListener('change', schedule_member_update);
+	form_search.addEventListener('change', () => {
+		sync_search_type(form_search.value);
+		schedule_member_update();
+	});
 
 	form_search.addEventListener('focus', open_search_suggestions);
 	form_search.addEventListener('blur', () => {
@@ -1087,13 +1061,14 @@ async function create_map() {
 				return;
 			}
 			close_search_suggestions();
+			sync_search_type(form_search.value);
 			add_vmforum_members({ autoFit: true });
 		}
 	});
 
 	// Switch search type, but only after key is released, when the value has been updated.
-	L.DomEvent.on(form_search, 'keyup', function(e) {
-		sync_search_type(form_search.value, e.key);
+	L.DomEvent.on(form_search, 'keyup', function() {
+		sync_search_type(form_search.value);
 	});
 
 	// Add a layerGroup for all hashtag circles; empty at the beginning.
