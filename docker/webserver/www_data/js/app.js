@@ -7,6 +7,7 @@ import { collectSearchSuggestions, filterSearchSuggestions } from './search-sugg
 import {
 	SEARCH_FIT_PADDING,
 	clampSearchZoom,
+	findClosestFittingCenter,
 	findDensestCenter,
 	isPortraitSize,
 	shouldAdjustSearchView,
@@ -638,18 +639,19 @@ function remove_tabindex() {
 		.forEach(v => v.tabIndex = -1);
 }
 
-function can_fit_all_points_at(center, zoom, points, size) {
+function compute_search_center(points, zoom, size, preferredCenter) {
 	const availableWidth = size.x - SEARCH_FIT_PADDING * 2;
 	const availableHeight = size.y - SEARCH_FIT_PADDING * 2;
-	if (availableWidth <= 0 || availableHeight <= 0)
-		return false;
+	const projectedPoints = points.map(point => map.project(L.latLng(point), zoom));
+	const preferred = map.project(preferredCenter, zoom);
+	const fitted = findClosestFittingCenter(
+		projectedPoints,
+		preferred,
+		availableWidth,
+		availableHeight,
+	);
 
-	const centerPoint = map.project(center, zoom);
-	return points.every(point => {
-		const projected = map.project(L.latLng(point), zoom);
-		return Math.abs(projected.x - centerPoint.x) <= availableWidth / 2
-			&& Math.abs(projected.y - centerPoint.y) <= availableHeight / 2;
-	});
+	return fitted ? map.unproject(L.point(fitted.x, fitted.y), zoom) : preferredCenter;
 }
 
 function fit_search_results(points) {
@@ -683,8 +685,7 @@ function fit_search_results(points) {
 
 	const densestCenter = findDensestCenter(validPoints);
 	const center = densestCenter
-		&& can_fit_all_points_at(L.latLng(densestCenter), targetZoom, validPoints, size)
-		? L.latLng(densestCenter)
+		? compute_search_center(validPoints, targetZoom, size, L.latLng(densestCenter))
 		: bounds.getCenter();
 
 	map.setView(center, targetZoom, { animate: false });

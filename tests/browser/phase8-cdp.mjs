@@ -33,6 +33,12 @@ const members = [
 	{ id: '1', name: 'Alpha', lat: 50.0, lon: 11.0, vm: 'Flevo', lr: '', tr: '', other: '#berlin', profile_updated_at: '2026-11-01' },
 	{ id: '2', name: 'Beta', lat: 50.1, lon: 11.1, vm: '', lr: 'Liegerad', tr: '', other: '', profile_updated_at: '2026-11-01' },
 	{ id: '3', name: 'Gamma', lat: 50.2, lon: 11.2, vm: 'Quest', lr: '', tr: '', other: '#berlin', profile_updated_at: '2026-11-01' },
+	{ id: '4', name: 'Delta', lat: 50.05, lon: 11.05, vm: '', lr: '', tr: '', other: '#global', profile_updated_at: '2026-11-01' },
+	{ id: '5', name: 'Epsilon', lat: 50.06, lon: 11.06, vm: '', lr: '', tr: '', other: '#global', profile_updated_at: '2026-11-01' },
+	{ id: '6', name: 'Zeta', lat: 50.07, lon: 11.07, vm: '', lr: '', tr: '', other: '#global', profile_updated_at: '2026-11-01' },
+	{ id: '7', name: 'Outlier', lat: 60.0, lon: -100.0, vm: '', lr: '', tr: '', other: '#global', profile_updated_at: '2026-11-01' },
+	{ id: '8', name: 'Far', lat: -25.0, lon: 135.0, vm: '', lr: '', tr: '', other: '#global', profile_updated_at: '2026-11-01' },
+	{ id: '9', name: 'Solo', lat: 0.0, lon: 0.0, vm: 'Solo', lr: '', tr: '', other: '', profile_updated_at: '2026-11-01' },
 ];
 const dataStatus = {
 	runStartedAt: '2026-11-06T03:33:00+01:00',
@@ -419,7 +425,24 @@ async function main() {
 	await waitFor(`Array.from(document.querySelectorAll('img.leaflet-tile')).some(image => new URL(image.src).pathname.startsWith('/16/'))`, 'restored zoom tiles');
 	check.pass('Kartenstatus und gespeicherter Filter werden beim Start wiederhergestellt');
 
-	// 5. 401 clears IndexedDB and app caches.
+	// 5. Global results center on the densest cluster, not the bounding-box center.
+	await navigate('/karte.html?vm=Solo');
+	await waitForMap();
+	await waitFor(`Array.from(document.querySelectorAll('img.leaflet-tile')).some(image => new URL(image.src).pathname.startsWith('/15/'))`, 'solo auto-fit zoom tiles');
+	await delay(1000);
+	const soloState = await readMapState();
+	assert.ok(Math.abs(soloState.center[0]) < 0.5);
+	assert.ok(Math.abs(soloState.center[1]) < 0.5);
+
+	await navigate('/karte.html?other=%23global');
+	await waitForMap();
+	await delay(1000);
+	const globalState = await readMapState();
+	assert.ok(globalState.center[0] > 40, `expected densest cluster in Germany, got ${globalState.center[0]}`);
+	assert.ok(globalState.center[1] > 8 && globalState.center[1] < 15, `expected densest cluster in Germany, got ${globalState.center[1]}`);
+	check.pass('Globale Treffer zentrieren auf das dichteste Cluster statt auf die Bounding-Box');
+
+	// 6. 401 clears IndexedDB and app caches.
 	await fetch(ORIGIN + '/__test/401');
 	await navigate('/karte.html');
 	await waitFor(`location.pathname === '/login'`, '401 login redirect');
@@ -429,7 +452,7 @@ async function main() {
 	check.pass('401 löscht IndexedDB und vmkarte-Caches');
 	await fetch(ORIGIN + '/__test/401?off=1');
 
-	// 6. Reload for geolocation; the 401 left no map state behind.
+	// 7. Reload for geolocation; the 401 left no map state behind.
 	await navigate('/karte.html');
 	await waitForMap();
 	assert.equal(await readMapState(), undefined);
@@ -500,7 +523,7 @@ async function main() {
 	await delay(100);
 	check.pass('Karte lässt sich nach der Standortanzeige normal verschieben');
 
-	// 7. Logout clears IndexedDB, caches and leaves no location data.
+	// 8. Logout clears IndexedDB, caches and leaves no location data.
 	await evaluate(`document.getElementById('logout_button').click()`);
 	await waitFor(`location.pathname === '/login'`, 'logout redirect');
 	await delay(300);
