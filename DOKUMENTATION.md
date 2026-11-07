@@ -164,7 +164,7 @@ Einstiegspunkt und Orchestrierung.
 - CLI-Parameter `--refresh-members`: ignoriert den 23-Stunden-Cache `members_dict`, lädt alle Mitgliederseiten neu und ersetzt den Cache. Damit werden auch neu registrierte Benutzer innerhalb des 24-Stunden-Fensters gefunden.
 - CLI-Parameter `--refresh-user UID|NAME`: erzwingt einen frischen Profilabruf für einen Benutzer (Bypass von `user_details`). Mehrfach und kommagetrennt möglich. Akzeptiert numerische UIDs oder exakte Forennamen; mehrdeutige Namen führen zu einem Fehler mit den passenden UIDs. Ist das Ziel nicht im aktuellen Mitglieder-Cache, wird die Mitgliederliste automatisch einmal neu geladen. Für dieses Profil wird zusätzlich der Nominatim-Cache nicht gelesen; das frische Ergebnis wird mit neuer TTL gespeichert.
 - `--refresh-members` und `--refresh-user` lassen sich kombinieren. Dann stammen auch die Ortsangaben des Zielprofils garantiert aus der frisch geladenen Mitgliederliste.
-- CLI-Parameter `--location-strategy {classic,precision}`: wählt die Ortsauflösung. Default ist `classic`; `precision` ist die opt-in Alternative für den lokalen Vergleich und nutzt strukturierte Nominatim-Abfragen sowie einen separaten Cache-Namespace.
+- CLI-Parameter `--location-strategy {classic,precision}`: wählt die Ortsauflösung. Default ist `precision`; sie nutzt strukturierte Nominatim-Abfragen sowie einen separaten Cache-Namespace. `classic` bleibt als Opt-out für die historische Auflösung verfügbar.
 - CLI-Parameter `--precision-guard {none,old-radius,disjoint}`: Sicherheitsnetz für `precision`. Default `disjoint` verwirft einen Precision-Kandidaten nur, wenn sich sein Bereich nicht mit dem Classic-Bereich überschneidet. `old-radius` ist strenger, `none` deaktiviert den Guard.
 - CLI-Parameter `--refresh-locations`: umgeht den Nominatim-Cache für alle Mitglieder. Sinnvoll beim lokalen Iterieren an der Ortslogik.
 - CLI-Parameter `--members-from PATH`: liest die Rohdaten aus einer eingefrorenen Debug-`members.json`, statt die Forum-API abzufragen. Damit laufen Baseline- und Vergleichslauf auf exakt derselben Mitgliederbasis. Nicht mit `--refresh-members` oder `--refresh-user` kombinierbar.
@@ -297,14 +297,14 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - `calculate_radius_from_bbox_center()` liefert den klassischen Vergleichsradius für `compare_locations.py`.
 - `summarize_candidate()` speichert Query-Metadaten, `boundingbox` und `radius_classic` für den Standortvergleich.
 
-**`examine_locations(members, refresh_uids=(), strategy='classic', refresh_locations=False, precision_guard='disjoint')`**
+**`examine_locations(members, refresh_uids=(), strategy='precision', refresh_locations=False, precision_guard='disjoint')`**
 
 - Iteriert über das Dictionary `uid → Mitglied`.
 - Normalisiert den Ort, ermittelt Land/PLZ.
 - Probiert bei unbekanntem Land verschiedene Ländercode-Kombinationen.
 - Für UIDs in `refresh_uids` werden alle Nominatim-Abfragen mit `use_cache=False` ausgeführt. Alle anderen Mitglieder nutzen den Cache unverändert.
 - `refresh_locations=True` umgeht den Cache für alle Mitglieder.
-- `strategy='precision'` nutzt strukturierte Abfragen, PLZ-bewusste Flächenauswahl, Ranking und den marker-relativen Radius; `classic` bleibt Default und unverändert.
+- `strategy='precision'` ist der Default und nutzt strukturierte Abfragen, PLZ-bewusste Flächenauswahl, Ranking und den marker-relativen Radius; `classic` bleibt als Opt-out für das historische Verhalten verfügbar.
 - Bei `PLZ + Ortsname` wird zusätzlich die PLZ-Fläche aus dem Classic-Cache bzw. Precision-Cache verglichen; die kleinere Fläche gewinnt.
 - `precision_guard` (`disjoint` Default, `old-radius`, `none`) verwirft Precision-Kandidaten, wenn die Bereiche nicht überlappen bzw. der Marker außerhalb des alten Radius liegt.
 - Übernimmt `lat`, `lon`, `radius` nur bei erfolgreicher Nominatim-Antwort.
@@ -367,7 +367,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
   - `src/data_grabber/cache_config.json` → `/app/cache_config.json` (Default, wird durch den Compose-Mount überschrieben)
 - **Kopiert bewusst nicht** `members.json` oder `vmforum_members.json`. Beide Dateien sind Laufzeitartefakte: `members.json` entsteht durch `get_member_data()`, `vmforum_members.json` durch `examine_locations()`.
 - Voraussetzung dafür ist, dass der Scraper aktiv ist. Das ist seit der Rückkehr zum Masterstand wieder der Fall; siehe Befund C.
-- Cronjob: täglich 03:33 Uhr, `cd /app && python3 /app/data_grabber.py --location-strategy precision` (`docker/cron/crontab:5`). `--fast` entfällt; die Kartenauflösung nutzt jetzt die Precision-Strategie mit dem Default-Guard `disjoint`. Die erste Ausführung füllt den Precision-Cache und kann mehrere Stunden dauern.
+- Cronjob: täglich 03:33 Uhr, `cd /app && python3 /app/data_grabber.py --location-strategy precision` (`docker/cron/crontab:5`). `--fast` entfällt; die Kartenauflösung nutzt die Precision-Strategie mit dem Default-Guard `disjoint`. Der explizite Parameter ist seit dem Default-Wechsel redundant, bleibt aber zur Klarheit in der Crontab. Die erste Ausführung füllt den Precision-Cache und kann mehrere Stunden dauern.
 
 **Web-Container** (`docker/webserver`)
 
@@ -657,15 +657,15 @@ Die PLZ-Fläche umfasst in OSM auch den Ebersberger Forst. Deshalb liegt der PLZ
 
 Ortsnamen-Sonderkorrekturen stehen in `country_mapping.json` (z. B. `Stockholm` → Schweden) und in `prepare_location()` (z. B. `Franken` → Bayern, `South Florida` → Florida, USA).
 
-`classic` bleibt Default; `precision` wird nur bewusst per CLI aktiviert. Da sich die Verbesserung nicht automatisch messen lässt, wird sie über eine eingefrorene Baseline und viele manuelle Stichproben in der Karte bewertet.
+`precision` ist Default; `classic` bleibt als Opt-out über `--location-strategy classic` verfügbar. Da sich die Verbesserung nicht automatisch messen lässt, wird sie über eine eingefrorene Baseline und viele manuelle Stichproben in der Karte bewertet.
 
 **Ablauf für den lokalen Vergleich**
 
-1. Produktionsnahen Stand mit Debug-Rohdaten erzeugen:
+1. Produktionsnahen Classic-Stand mit Debug-Rohdaten erzeugen:
 
    ```bash
    cd src/data_grabber
-   python data_grabber.py --debug
+   python data_grabber.py --debug --location-strategy classic
    ```
 
    `members.json` enthält die Rohdaten inklusive Adressangabe; `shared/vmforum_members.json` enthält die daraus ermittelten Koordinaten.
@@ -683,7 +683,7 @@ Ortsnamen-Sonderkorrekturen stehen in `country_mapping.json` (z. B. `Stockholm` 
    ```bash
    python data_grabber.py \
      --members-from ../../local/baseline/members.json \
-     --location-strategy precision --write-location-details
+     --write-location-details
    ```
 
    `--refresh-locations` erzwingt frische Nominatim-Abfragen. Ohne das Flag werden neue Precision-Einträge aus dem versionierten Cache verwendet. Classic- und Precision-Cache sind getrennt; ein alter Freitext-Treffer kann eine neue strukturierte Anfrage nicht bedienen.
@@ -1438,6 +1438,12 @@ Die früheren Nominatim-Korrekturen (User-Agent, Timeout, Negativ-Cache) bleiben
 ---
 
 ## 16. Geänderte Dateien
+
+### 07.11.2026 (Branch `feature/location-precision-default`)
+
+- `src/data_grabber/data_grabber.py` und `src/data_grabber/libs/location_nominatim_lib.py`: Standard-Ortsauflösung von `classic` auf `precision` geändert. `classic` bleibt über `--location-strategy classic` als Opt-out verfügbar.
+- `src/data_grabber/tests/test_location_precision.py`: Regressionstest für den neuen Default von `examine_locations()`.
+- `README.md`, `DOKUMENTATION.md`, `docs/upgrade-docker.md` und `docs/upgrade-native.md`: Default und Rollback-Anleitung auf `precision` bzw. `--location-strategy classic` umgestellt.
 
 ### 07.11.2026 (Branch `fix/location-postcode-mismatch`)
 

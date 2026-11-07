@@ -1,5 +1,5 @@
 """
-Pure helpers for the opt-in precision location strategy.
+Pure helpers for the precision location strategy.
 
 The functions in this module do not perform any network or cache access so they
 can be tested in isolation. The Nominatim request layer lives in

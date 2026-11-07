@@ -175,9 +175,10 @@ def main():
     parser.add_argument(
         '--location-strategy',
         choices=LOCATION_STRATEGIES,
-        default='classic',
-        help="Location resolution strategy (default: classic). 'precision' uses "
-             "structured queries, PLZ-aware area selection and a versioned Nominatim cache."
+        default='precision',
+        help="Location resolution strategy (default: precision). 'precision' uses "
+             "structured queries, PLZ-aware area selection and a versioned Nominatim cache. "
+             "'classic' keeps the historical behavior."
     )
     parser.add_argument(
         '--precision-guard',

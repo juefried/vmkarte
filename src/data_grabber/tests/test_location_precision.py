@@ -1,5 +1,6 @@
 import sys
 import unittest
+from inspect import signature
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parents[1]
@@ -465,6 +466,16 @@ class SmallerAreaSelectionTests(unittest.TestCase):
         entry = {'name': '85560', 'address': {'postcode': '85560'}}
         self.assertTrue(postcode_matches(entry, '85560'))
         self.assertFalse(postcode_matches(entry, '85561'))
+
+
+class DefaultStrategyTests(unittest.TestCase):
+    def test_examine_locations_defaults_to_precision(self):
+        from libs.location_nominatim_lib import examine_locations
+
+        self.assertEqual(
+            signature(examine_locations).parameters['strategy'].default,
+            'precision',
+        )
 
 
 if __name__ == '__main__':
