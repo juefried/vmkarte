@@ -9,12 +9,19 @@ import requests
 from urllib.parse import quote, urlencode
 from geopy.distance import geodesic
 from libs.cache_config_lib import get_negative_ttl_seconds, get_ttl_seconds
-from libs.location_mapping_rules_lib import analyze_location_for_country, analyze_location_for_postal_code, prepare_location
+from libs.location_mapping_rules_lib import (
+    analyze_location_for_country,
+    analyze_location_for_postal_code,
+    country_code_candidates,
+    order_country_codes,
+    prepare_location,
+)
 from libs.location_precision_lib import (
     PRECISION_CACHE_VERSION,
     build_precision_queries,
     calculate_radius_from_point,
     candidate_is_good_enough,
+    candidate_matches_location,
     candidate_sort_key,
     choose_smaller_area,
     extract_place_name,
@@ -289,21 +296,10 @@ def query_nominatim_precision(location, place_name, postal_code, countrycodes, u
             best_candidate = candidate
             best_variant = variant
 
-        if candidate_is_good_enough(candidate, place_name):
+        if candidate_is_good_enough(candidate, place_name, postal_code):
             return candidate, variant
 
     return best_candidate, best_variant
-
-
-def _country_code_candidates(postal_code, country_code):
-    """Returns the country code candidates to try, most likely first."""
-    if country_code is not None:
-        return [country_code]
-    if postal_code is not None:
-        if len(postal_code) == 5:
-            return ['de', 'fr,fi,it', None]
-        return ['at,ch', 'dk,nl', None]
-    return ['de,at,ch', None]
 
 
 def calculate_radius(boundingbox):
@@ -407,7 +403,7 @@ def examine_locations(
                 used_countrycodes = None
 
                 fallback = None
-                for cc_try in _country_code_candidates(precision_postal_code, country_code):
+                for cc_try in country_code_candidates(precision_postal_code, country_code):
                     candidate, candidate_variant = query_nominatim_precision(
                         location,
                         place_name,
@@ -419,7 +415,9 @@ def examine_locations(
                         continue
                     if fallback is None:
                         fallback = (candidate, candidate_variant, cc_try)
-                    if candidate_is_good_enough(candidate, place_name):
+                    if candidate_is_good_enough(
+                        candidate, place_name, precision_postal_code
+                    ):
                         nominatim_data = candidate
                         query_variant = candidate_variant
                         used_countrycodes = cc_try
@@ -430,14 +428,17 @@ def examine_locations(
 
                 classic_data = None
                 classic_countrycodes = None
-                for cc_try in _country_code_candidates(postal_code, country_code):
-                    classic_data = query_nominatim(
+                for cc_try in country_code_candidates(precision_postal_code, country_code):
+                    candidate = query_nominatim(
                         location,
                         cc_try,
                         use_cache=True,
                         cache_only=True,
                     )
-                    if classic_data:
+                    if candidate and candidate_matches_location(
+                        candidate, place_name, precision_postal_code
+                    ):
+                        classic_data = candidate
                         classic_countrycodes = cc_try
                         break
 
@@ -456,7 +457,19 @@ def examine_locations(
                         postcode_variant = 'postcode_classic'
                         postcode_countrycodes = classic_countrycodes
                     else:
-                        for cc_try in _country_code_candidates(precision_postal_code, country_code):
+                        preferred_countrycode = None
+                        address = nominatim_data.get('address')
+                        if isinstance(address, dict):
+                            preferred_countrycode = address.get('country_code')
+                        if not preferred_countrycode:
+                            preferred_countrycode = used_countrycodes
+                        postcode_candidates = order_country_codes(
+                            country_code_candidates(
+                                precision_postal_code, country_code
+                            ),
+                            preferred_countrycode,
+                        )
+                        for cc_try in postcode_candidates:
                             data = _request_precision_candidates(
                                 'postcode',
                                 {'postalcode': precision_postal_code},
@@ -527,10 +540,18 @@ def examine_locations(
                     if selection_info:
                         match_metadata.update(selection_info)
             else:
-                for cc_try in _country_code_candidates(postal_code, country_code):
-                    nominatim_data = query_nominatim(location, cc_try, use_cache=use_nominatim_cache)  # Query Nominatim with country code try
-                    if nominatim_data:
-                        break  # Break loop if Nominatim data is found
+                place_name = extract_place_name(location, postal_code, country_code)
+                for cc_try in country_code_candidates(postal_code, country_code):
+                    candidate = query_nominatim(
+                        location,
+                        cc_try,
+                        use_cache=use_nominatim_cache,
+                    )
+                    if candidate and candidate_matches_location(
+                        candidate, place_name, postal_code
+                    ):
+                        nominatim_data = candidate
+                        break
 
             if nominatim_data:
                 member['lat'] = nominatim_data.get('lat', 'N/A')  # Update member's latitude
