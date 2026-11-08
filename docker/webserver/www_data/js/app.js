@@ -4,6 +4,19 @@ import { validateMembers, parseDataStatus, deriveStatusFromLastModified } from '
 import { resolveInitialMapState, filterSearchString, FILTER_PARAMS, shouldPersistMapState } from './map-state.js';
 import { HASHTAG_REGEX, HASHTAG_NAME_REGEX } from './hashtags.js';
 import { collectSearchSuggestions, filterSearchSuggestions } from './search-suggestions.js';
+import { filterMembers, resolveSearchMode } from './search-filter.js';
+import {
+	SEARCH_FIT_PADDING,
+	SEARCH_FIT_RADIUS_MAX_VISIBLE_PINS,
+	SEARCH_FIT_RADIUS_PERCENTILE,
+	clampSearchZoom,
+	findClosestFittingCenter,
+	findDensestCenter,
+	isPointInView,
+	isPortraitSize,
+	radiusZoomLimit,
+	shouldAdjustSearchView,
+} from './search-fit.js';
 import { describeGeolocationError, GEOLOCATION_OPTIONS } from './location.js';
 import { APP_VERSION } from './version.js';
 import { DEV_MODE_KEY, parseAppVersion, isNewVersion, resolveDevMode } from './version-check.js';
@@ -55,7 +68,7 @@ function resize_map_to_full_window()
 
 function schedule_member_update() {
 	clearTimeout(member_update_timer);
-	member_update_timer = setTimeout(add_vmforum_members, 0);
+	member_update_timer = setTimeout(() => add_vmforum_members({ autoFit: true }), 0);
 }
 
 function apply_filter_search_to_url(search) {
@@ -139,7 +152,7 @@ async function reset_search() {
 		window.history.replaceState({}, '', url.href);
 	}
 
-	add_vmforum_members();
+	add_vmforum_members({ autoFit: true });
 	if (!(await save_map_state()))
 		await clear_stored_map_filter();
 }
@@ -393,7 +406,7 @@ async function loadDataStatus() {
 	return { unauthorized: false, status: parseDataStatus(raw) };
 }
 
-async function syncFromServer({ manual = false } = {}) {
+async function syncFromServer({ manual = false, autoFit = false } = {}) {
 	if (updateInProgress)
 		return;
 
@@ -464,7 +477,7 @@ async function syncFromServer({ manual = false } = {}) {
 		});
 
 		if (membersChanged) {
-			add_vmforum_members();
+			add_vmforum_members({ autoFit });
 			add_search_suggestions();
 			log_member_stats();
 		}
@@ -594,18 +607,14 @@ function move_search_suggestion(direction) {
 	set_active_search_suggestion(index);
 }
 
-function sync_search_type(value, key) {
-	if (/^#/.test(value))
-		form_select.selectedIndex = 7;
-	else if ((/^[^#]$/.test(value) && key !== 'Backspace' && key !== 'Delete')
-		|| (/^[^#]/.test(value) && form_select.selectedIndex === 7))
-		form_select.selectedIndex = 8;
+function sync_search_type(value) {
+	form_select.selectedIndex = resolveSearchMode(value, form_select.selectedIndex);
 }
 
 function select_search_suggestion(value) {
 	form_search.value = value;
 	close_search_suggestions();
-	sync_search_type(value, null);
+	sync_search_type(value);
 	schedule_member_update();
 }
 
@@ -631,7 +640,85 @@ function remove_tabindex() {
 		.forEach(v => v.tabIndex = -1);
 }
 
-function add_vmforum_members() {
+function compute_search_center(points, zoom, size, preferredCenter) {
+	const availableWidth = size.x - SEARCH_FIT_PADDING * 2;
+	const availableHeight = size.y - SEARCH_FIT_PADDING * 2;
+	const projectedPoints = points.map(point => map.project(L.latLng(point), zoom));
+	const preferred = map.project(preferredCenter, zoom);
+	const fitted = findClosestFittingCenter(
+		projectedPoints,
+		preferred,
+		availableWidth,
+		availableHeight,
+	);
+
+	return fitted ? map.unproject(L.point(fitted.x, fitted.y), zoom) : preferredCenter;
+}
+
+function fit_search_results(results) {
+	if (!map || !Array.isArray(results) || results.length === 0)
+		return;
+
+	const validResults = results.filter(result => result
+		&& Number.isFinite(result.lat)
+		&& Number.isFinite(result.lon));
+	if (validResults.length === 0)
+		return;
+
+	const validPoints = validResults.map(result => [result.lat, result.lon]);
+	const bounds = L.latLngBounds(validPoints);
+	const size = map.getSize();
+	const portrait = isPortraitSize(size.x, size.y);
+	const singlePoint = bounds.getNorthEast().equals(bounds.getSouthWest());
+	let targetZoom = clampSearchZoom(
+		singlePoint
+			? Number.POSITIVE_INFINITY
+			: map.getBoundsZoom(bounds, false, L.point(SEARCH_FIT_PADDING * 2, SEARCH_FIT_PADDING * 2)),
+		{ portrait },
+	);
+
+	if (!shouldAdjustSearchView({
+		points: validPoints,
+		currentBounds: map.getBounds(),
+		currentZoom: map.getZoom(),
+		targetZoom,
+	}))
+		return;
+
+	const densestCenter = findDensestCenter(validPoints);
+	const preferredCenter = densestCenter ? L.latLng(densestCenter) : bounds.getCenter();
+	let center = compute_search_center(validPoints, targetZoom, size, preferredCenter);
+
+	const availableWidth = size.x - SEARCH_FIT_PADDING * 2;
+	const availableHeight = size.y - SEARCH_FIT_PADDING * 2;
+	const projectedPoints = validPoints.map(point => map.project(L.latLng(point), targetZoom));
+	const projectedCenter = map.project(center, targetZoom);
+	const visibleResults = validResults.filter((result, index) => isPointInView(
+		projectedPoints[index],
+		projectedCenter,
+		availableWidth,
+		availableHeight,
+	));
+
+	if (visibleResults.length > 0 && visibleResults.length <= SEARCH_FIT_RADIUS_MAX_VISIBLE_PINS) {
+		const radiusLimit = radiusZoomLimit(visibleResults, {
+			percentile: SEARCH_FIT_RADIUS_PERCENTILE,
+			viewportMinDimension: Math.min(size.x, size.y),
+			padding: SEARCH_FIT_PADDING,
+		});
+		const limitedZoom = radiusLimit === null
+			? targetZoom
+			: clampSearchZoom(targetZoom, { portrait, maxZoom: radiusLimit });
+		if (limitedZoom !== targetZoom) {
+			targetZoom = limitedZoom;
+			center = compute_search_center(validPoints, targetZoom, size, preferredCenter);
+		}
+	}
+
+	map.setView(center, targetZoom, { animate: false });
+}
+
+function add_vmforum_members({ autoFit = false } = {}) {
 
 	// First, remove all members.
 	map.eachLayer(l => (l instanceof L.MarkerClusterGroup) && map.removeLayer(l));
@@ -669,111 +756,95 @@ function add_vmforum_members() {
 			.on('clustermouseover', c => { c.layer.spiderfy(); remove_tabindex(); });
 
 	// Create markers from the members array.
-	members
-		// Filter 1: URL parameters
-		// * Iterate over all properties.
-		// * Exclude the member if any of the property checks fail (= the returned array from the inner filter has a non-zero length).
-		// * The check fails if the URL parameter of the current property is set, but the current member does not have this property or the regex match (case insensitive) fails.
-		// * The check succeeds if the property is not in the URL parameters or if the current member has this property and it matches the search if present.
-		.filter(
-			v => !['name', 'vm', 'lr', 'tr', 'other'].filter(n =>
-				urlparams.has(n) && (
-					!v[n] ||
-					!v[n].match(RegExp(urlparams.get(n), 'i'))
-				)
-			).length
-		)
+	const filtered_members = filterMembers(members, {
+		urlParams: urlparams,
+		mode: Number(form_select.value),
+		query: form_search.value,
+	});
 
-		// Filter 2: input form (input field + dropdown button)
-		// * Iterate over all properties.
-		// * Include the member if any of the property checks succeed.
-		// * The check succeeds if the bit of the dropdown value that corresponds to the current property is set and the current member has this property.
-		// * If the search bit is set (bit 5), evaluate also the search (by matching the current property of the current member with the regex from the input field (case insensitive)).
-		// * By default, the dropdown button has the value 1 which corresponds to the name property; since all members have names, this makes all members appear on the map.
-		.filter(
-			v => ['name', 'vm', 'lr', 'tr', 'other'].filter((n, i) =>
-				(form_select.value & 2**i) &&
-				v[n] &&
-				(form_select.value & 2**5
-					? v[n].match(RegExp(form_search.value, 'i'))
-					: true
-				)
-			).length
-		)
+	const search_results = [];
 
-		// Add a marker with popup to the markerClusterGroup for each remaining member.
-		.forEach( function(v) {
-			markers.addLayer(
-				L
-				// Add the marker on the member’s address.
-				.marker(
-					[v.lat, v.lon],
-					{
-						// Set the name + bikes as tooltip (separate name and bikes with newline, separate bikes with comma, surround bike string with parentheses).
-						'title': [
-							html_escape(v.name),
-							['vm', 'lr', 'tr']
-								.filter(n => v[n])
-								.map(n => html_escape(v[n]))
-								.join(', ')
-								.replace(/^.+$/, '($&)')
-							].join('\n')
-					})
-
-				// Format the popup.
-				.bindPopup(
-					'<a href="https://www.velomobilforum.de/forum/index.php?members/'
-					+ v.id
-					+ '/" target="_blank" rel="noopener" title="Mitglieder-Profil im Forum"><b>'
-					+ html_escape(v.name)
-					+ '</b></a>'
-					+ ' <a href="geo:' + v.lat + ',' + v.lon + '" title="Koordinaten, z.B. für BRouter">🌐</a>'
-					+ (v.vm ? '<br /><b>Velomobil:</b> ' + html_escape(v.vm) : '')
-					+ (v.lr ? '<br /><b>Liegerad:</b> ' + html_escape(v.lr) : '')
-					+ (v.tr ? '<br /><b>Trike:</b> ' + html_escape(v.tr) : '')
-					+ (v.other
-						? '<br />' + html_escape(v.other).replace(HASHTAG_REGEX, match => '<a href="karte.html?other=' + encodeURIComponent(match) + '" title="alle mit diesem Hashtag anzeigen">' + match + '</a>')
-						: '')
-					+ '<br /><span class="stand" title="Letzter Profilabruf: '
-					+ html_escape(v.profile_updated_at || 'unbekannt')
-					+ '">Stand: ' + format_profile_date(v.profile_updated_at) + '</span>',
-					{ 'closeOnEscapeKey': true }	// Seems to be broken.
-					)
-				// Close popup when Escape key is pressed.
-				.on('keydown', e => e.originalEvent.key === 'Escape' && e.target.closePopup() )
-
-				// When hovering over the marker, move the error circle there and set its radius;
-				// when moving away, set stroke and fill to false.
-				.on('mouseover', x => error_circle
-							.setLatLng([v.lat, v.lon])
-							.setRadius(v.radius)
-							.setStyle({'stroke': true, 'fill': true}))
-				.on('mouseout', x => error_circle
-							.setStyle({'stroke': false, 'fill': false}))
-			);
-
-			// If a hashtag has been found, look if:
-			// * the current member has it.
-			// * it has a radius attached.
-			// Then, add a circle.
-			if (found_tag) {
-
-				// Search for a radius after the hashtag, and add a circle if found.
-				const tag_radius = v.other.match(RegExp(found_tag[0] + '=([0-9.]+)km', 'i'));
-				if (tag_radius) {
-					layer_circles.addLayer(
-						L.circle([v.lat, v.lon],
-						{
-							'radius': tag_radius[1] * 1000,
-							'className': 'tag_circle'
-						}));
-				}
-			}
+	// Add a marker with popup to the markerClusterGroup for each remaining member.
+	filtered_members.forEach( function(v) {
+		search_results.push({
+			lat: Number(v.lat),
+			lon: Number(v.lon),
+			radius: Number(v.radius),
 		});
+		markers.addLayer(
+			L
+			// Add the marker on the member’s address.
+			.marker(
+				[v.lat, v.lon],
+				{
+					// Set the name + bikes as tooltip (separate name and bikes with newline, separate bikes with comma, surround bike string with parentheses).
+					'title': [
+						html_escape(v.name),
+						['vm', 'lr', 'tr']
+							.filter(n => v[n])
+							.map(n => html_escape(v[n]))
+							.join(', ')
+							.replace(/^.+$/, '($&)')
+						].join('\n')
+				})
+
+			// Format the popup.
+			.bindPopup(
+				'<a href="https://www.velomobilforum.de/forum/index.php?members/'
+				+ v.id
+				+ '/" target="_blank" rel="noopener" title="Mitglieder-Profil im Forum"><b>'
+				+ html_escape(v.name)
+				+ '</b></a>'
+				+ ' <a href="geo:' + v.lat + ',' + v.lon + '" title="Koordinaten, z.B. für BRouter">🌐</a>'
+				+ (v.vm ? '<br /><b>Velomobil:</b> ' + html_escape(v.vm) : '')
+				+ (v.lr ? '<br /><b>Liegerad:</b> ' + html_escape(v.lr) : '')
+				+ (v.tr ? '<br /><b>Trike:</b> ' + html_escape(v.tr) : '')
+				+ (v.other
+					? '<br />' + html_escape(v.other).replace(HASHTAG_REGEX, match => '<a href="karte.html?other=' + encodeURIComponent(match) + '" title="alle mit diesem Hashtag anzeigen">' + match + '</a>')
+					: '')
+				+ '<br /><span class="stand" title="Letzter Profilabruf: '
+				+ html_escape(v.profile_updated_at || 'unbekannt')
+				+ '">Stand: ' + format_profile_date(v.profile_updated_at) + '</span>',
+				{ 'closeOnEscapeKey': true }	// Seems to be broken.
+				)
+			// Close popup when Escape key is pressed.
+			.on('keydown', e => e.originalEvent.key === 'Escape' && e.target.closePopup() )
+
+			// When hovering over the marker, move the error circle there and set its radius;
+			// when moving away, set stroke and fill to false.
+			.on('mouseover', x => error_circle
+						.setLatLng([v.lat, v.lon])
+						.setRadius(v.radius)
+						.setStyle({'stroke': true, 'fill': true}))
+			.on('mouseout', x => error_circle
+						.setStyle({'stroke': false, 'fill': false}))
+		);
+
+		// If a hashtag has been found, look if:
+		// * the current member has it.
+		// * it has a radius attached.
+		// Then, add a circle.
+		if (found_tag) {
+
+			// Search for a radius after the hashtag, and add a circle if found.
+			const tag_radius = v.other.match(RegExp(found_tag[0] + '=([0-9.]+)km', 'i'));
+			if (tag_radius) {
+				layer_circles.addLayer(
+					L.circle([v.lat, v.lon],
+					{
+						'radius': tag_radius[1] * 1000,
+						'className': 'tag_circle'
+					}));
+			}
+		}
+	});
 
 	map.addLayer(markers);
 
 	remove_tabindex();
+
+	if (autoFit)
+		fit_search_results(search_results);
 }
 
 function set_location_busy(busy) {
@@ -900,6 +971,7 @@ async function create_map() {
 		}),
 	]);
 
+	const autoFitInitial = filterSearchString(window.location.search).length > 0;
 	const initialMapState = resolveInitialMapState({
 		urlSearch: window.location.search,
 		stored: storedMapState,
@@ -942,7 +1014,10 @@ async function create_map() {
 	// suggestion pick is handled by select_search_suggestion().
 	form_select.addEventListener('input', schedule_member_update);
 	form_select.addEventListener('change', schedule_member_update);
-	form_search.addEventListener('change', schedule_member_update);
+	form_search.addEventListener('change', () => {
+		sync_search_type(form_search.value);
+		schedule_member_update();
+	});
 
 	form_search.addEventListener('focus', open_search_suggestions);
 	form_search.addEventListener('blur', () => {
@@ -986,13 +1061,14 @@ async function create_map() {
 				return;
 			}
 			close_search_suggestions();
-			add_vmforum_members();
+			sync_search_type(form_search.value);
+			add_vmforum_members({ autoFit: true });
 		}
 	});
 
 	// Switch search type, but only after key is released, when the value has been updated.
-	L.DomEvent.on(form_search, 'keyup', function(e) {
-		sync_search_type(form_search.value, e.key);
+	L.DomEvent.on(form_search, 'keyup', function() {
+		sync_search_type(form_search.value);
 	});
 
 	// Add a layerGroup for all hashtag circles; empty at the beginning.
@@ -1020,7 +1096,7 @@ async function create_map() {
 		cachedEtag = cache.etag;
 		cachedLastModified = cache.lastModified;
 
-		add_vmforum_members();
+		add_vmforum_members({ autoFit: autoFitInitial });
 		add_search_suggestions();
 		log_member_stats();
 		show_current_status(false);
@@ -1057,7 +1133,9 @@ async function create_map() {
 		});
 	}
 
-	syncFromServer();
+	syncFromServer({
+		autoFit: autoFitInitial && !(cache && cache.members.length > 0),
+	});
 
 	if (!devMode.enabled) {
 		register_service_worker();
