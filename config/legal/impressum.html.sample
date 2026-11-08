@@ -1,0 +1,64 @@
+{{/*
+  Impressum-Vorlage für config/legal/impressum.html. In der Regel wird diese
+  Datei dorthin kopiert und angepasst. Die persönlichen Daten kommen aus
+  config/impressum.json.
+  Verfügbare Platzhalter: {{.Imprint.Name}}, {{.Imprint.Street}},
+  {{.Imprint.PostalCode}}, {{.Imprint.City}}, {{.Imprint.Country}},
+  {{.Imprint.Email}}, {{.Imprint.Phone}}, {{.Updated}}
+*/}}
+<h1>Impressum</h1>
+
+<p>Angaben gemäß § 5 DDG</p>
+
+<p>
+  {{.Imprint.Name}}<br>
+  {{.Imprint.Street}}<br>
+  {{.Imprint.PostalCode}} {{.Imprint.City}}<br>
+  {{.Imprint.Country}}
+</p>
+
+<h2>Kontakt</h2>
+<p>
+  E-Mail: <a href="mailto:{{.Imprint.Email}}">{{.Imprint.Email}}</a>
+  {{if .Imprint.Phone}}<br>Telefon: {{.Imprint.Phone}}{{end}}
+</p>
+
+<h2>Verantwortlich für den Inhalt</h2>
+<p>{{.Imprint.Name}}, Anschrift wie oben</p>
+
+<h2>Hinweis zum Angebot</h2>
+<p>
+  Diese Website ist ein privates, nicht kommerzielles Kartenangebot für
+  Mitglieder des Velomobilforums. Sie steht in keiner offiziellen Verbindung
+  zum Velomobilforum. Die dargestellten Mitgliederdaten stammen aus dem Forum
+  und werden nur nach Anmeldung angezeigt. Für Richtigkeit, Vollständigkeit und
+  Aktualität der übernommenen Angaben wird keine Gewähr übernommen. Es besteht
+  kein Anspruch auf Aufnahme in die Karte.
+</p>
+
+<h2>Kartendaten, Geocoding und Urheberrecht</h2>
+<p>
+  Die Karten- und Geodaten stammen von OpenStreetMap-Mitwirkenden und
+  unterliegen der Open Database License (ODbL 1.0).
+  <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">https://www.openstreetmap.org/copyright</a>
+</p>
+<p>
+  Die Umwandlung der Ortsangaben in Koordinaten erfolgt über den
+  Geocoding-Dienst Nominatim. Der öffentliche Nominatim-Dienst wird von der
+  OpenStreetMap Foundation betrieben; die zurückgegebenen Daten stammen aus
+  OpenStreetMap und unterliegen ebenfalls der ODbL.
+  <a href="https://nominatim.org/" target="_blank" rel="noopener noreferrer">https://nominatim.org/</a><br>
+  <a href="https://osmfoundation.org/" target="_blank" rel="noopener noreferrer">https://osmfoundation.org/</a>
+</p>
+<p>
+  Die Kartendarstellung verwendet Leaflet (BSD-2-Clause) und
+  Leaflet.markercluster (MIT-Lizenz).
+</p>
+
+<h2>Haftung für Links</h2>
+<p>
+  Diese Website enthält Links zu externen Websites Dritter, insbesondere zum
+  Velomobilforum, zu OpenStreetMap und zu BRouter. Auf deren Inhalte besteht
+  kein Einfluss. Für die Inhalte der verlinkten Seiten ist der jeweilige
+  Anbieter oder Betreiber verantwortlich.
+</p>

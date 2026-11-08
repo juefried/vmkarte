@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/hmac"
 	"crypto/rand"
@@ -81,6 +82,9 @@ button:hover { background: #256428; }
 .hint { margin: 0 0 0.75rem; color: #4b5d53; font-size: 0.9rem; }
 .message { padding: 0.75rem; border-radius: 0.5rem; background: #e8f1fb; color: #0d47a1; }
 .error { padding: 0.75rem; border-radius: 0.5rem; background: #fdecea; color: #8a1c16; }
+.legal { margin: 1.25rem 0 0; text-align: center; font-size: 0.78rem; color: #4b5d53; }
+.legal a { color: inherit; text-decoration: underline; }
+.legal a:focus-visible { outline: 2px solid #2e7d32; outline-offset: 2px; }
 @media (prefers-color-scheme: dark) {
   body { background-color: #101814; color: #e7efe9; }
   body::before { background: rgba(16, 24, 20, 0.55); }
@@ -90,6 +94,7 @@ button:hover { background: #256428; }
   .message { background: #16324a; color: #cfe4ff; }
   input { background: #101814; border-color: #4f6558; }
   .error { background: #4a1b18; color: #ffd7d3; }
+  .legal { color: #b7c8be; }
 }
 </style>
 </head>
@@ -115,6 +120,63 @@ button:hover { background: #256428; }
 </label>
 <button type="submit">Anmelden</button>
 </form>
+{{if or .PrivacyURL .ImprintURL}}
+<footer class="legal">
+{{if .PrivacyURL}}<a href="{{.PrivacyURL}}">Datenschutz</a>{{end}}
+{{if and .PrivacyURL .ImprintURL}}<span aria-hidden="true">·</span>{{end}}
+{{if .ImprintURL}}<a href="{{.ImprintURL}}">Impressum</a>{{end}}
+</footer>
+{{end}}
+</main>
+</body>
+</html>
+`))
+
+var legalPageTemplate = template.Must(template.New("legal").Parse(`<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>{{.Title}} – Karte Velomobil-Forum</title>
+<style>
+:root { color-scheme: light dark; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; padding: 2rem 1.25rem;
+       font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+       background: #eef2ef; color: #14231b; line-height: 1.6; }
+main { max-width: 46rem; margin: 0 auto; padding: 2rem;
+       border-radius: 1rem; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.08); }
+h1 { margin: 0 0 1rem; font-size: 1.6rem; }
+h2 { margin: 1.75rem 0 0.5rem; font-size: 1.2rem; }
+h3 { margin: 1.25rem 0 0.4rem; font-size: 1rem; }
+p, li { color: #31443a; }
+a { color: #1565c0; }
+code { font-size: 0.95em; }
+.legal { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #d8e1db;
+         display: flex; flex-wrap: wrap; justify-content: center; gap: 0.5rem;
+         font-size: 0.85rem; color: #4b5d53; }
+.legal a { color: inherit; text-decoration: underline; }
+.legal a:focus-visible { outline: 2px solid #2e7d32; outline-offset: 2px; }
+@media (prefers-color-scheme: dark) {
+  body { background: #101814; color: #e7efe9; }
+  main { background: #1a2620; }
+  p, li { color: #c2d1c8; }
+  a { color: #7cc4ff; }
+  .legal { border-top-color: #31443a; color: #b7c8be; }
+}
+</style>
+</head>
+<body>
+<main>
+{{.Content}}
+<footer class="legal">
+{{if .ShowPrivacy}}<a href="/datenschutz">Datenschutz</a>{{end}}
+{{if and .ShowPrivacy .ShowImprint}}<span aria-hidden="true">·</span>{{end}}
+{{if .ShowImprint}}<a href="/impressum">Impressum</a>{{end}}
+{{if or .ShowPrivacy .ShowImprint}}<span aria-hidden="true">·</span>{{end}}
+<a href="{{.BackURL}}">{{.BackLabel}}</a>
+</footer>
 </main>
 </body>
 </html>
@@ -139,6 +201,34 @@ type config struct {
 	cookieMaxAge      time.Duration
 	oauth             *oauthConfig
 	oauthAutoRedirect bool
+	imprintFile       string
+	legalDir          string
+	imprint           *imprint
+}
+
+type imprint struct {
+	Name       string `json:"name"`
+	Street     string `json:"street"`
+	PostalCode string `json:"postal_code"`
+	City       string `json:"city"`
+	Country    string `json:"country"`
+	Email      string `json:"email"`
+	Phone      string `json:"phone"`
+	Updated    string `json:"updated"`
+}
+
+type legalContentData struct {
+	Imprint imprint
+	Updated string
+}
+
+type legalPageData struct {
+	Title       string
+	Content     template.HTML
+	ShowPrivacy bool
+	ShowImprint bool
+	BackURL     string
+	BackLabel   string
 }
 
 type loginData struct {
@@ -148,6 +238,8 @@ type loginData struct {
 	Username     string
 	OAuthEnabled bool
 	OAuthURL     string
+	PrivacyURL   string
+	ImprintURL   string
 }
 
 type server struct {
@@ -179,6 +271,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	if cfg.imprint == nil {
+		slog.Warn("legal pages disabled: IMPRINT_FILE is not configured")
+	} else {
+		if !srv.legalPageAvailable("impressum.html") {
+			slog.Warn("imprint page disabled: file missing or invalid", "dir", cfg.legalDir)
+		}
+		if !srv.legalPageAvailable("datenschutz.html") {
+			slog.Warn("privacy page disabled: file missing or invalid", "dir", cfg.legalDir)
+		}
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", srv.health)
 	mux.HandleFunc("/login", srv.login)
@@ -187,6 +290,9 @@ func main() {
 	mux.HandleFunc("/session-check", srv.sessionCheck)
 	mux.HandleFunc("/auth/forum/login", srv.oauthLogin)
 	mux.HandleFunc("/auth/forum/callback", srv.oauthCallback)
+	mux.HandleFunc("/impressum", srv.imprintPage)
+	mux.HandleFunc("/datenschutz", srv.privacyPage)
+	mux.HandleFunc("/legal-status", srv.legalStatus)
 
 	httpServer := &http.Server{
 		Addr:              cfg.listenAddr,
@@ -258,6 +364,15 @@ func loadConfig() (config, error) {
 		return config{}, fmt.Errorf("OAUTH_AUTO_REDIRECT: %w", err)
 	}
 
+	imprintFile := strings.TrimSpace(os.Getenv("IMPRINT_FILE"))
+	var imprintData *imprint
+	if imprintFile != "" {
+		imprintData, err = loadImprint(imprintFile)
+		if err != nil {
+			return config{}, err
+		}
+	}
+
 	return config{
 		listenAddr:        env("LISTEN_ADDR", defaultListenAddr),
 		passwordFile:      env("PASSWORD_FILE", defaultPassword),
@@ -267,7 +382,53 @@ func loadConfig() (config, error) {
 		cookieMaxAge:      time.Duration(maxAgeDays) * 24 * time.Hour,
 		oauth:             oauth,
 		oauthAutoRedirect: autoRedirect,
+		imprintFile:       imprintFile,
+		legalDir:          env("LEGAL_DIR", "/app/legal"),
+		imprint:           imprintData,
 	}, nil
+}
+
+func loadImprint(path string) (*imprint, error) {
+	raw, err := os.ReadFile(filepath.Clean(path))
+	if err != nil {
+		return nil, fmt.Errorf("read IMPRINT_FILE: %w", err)
+	}
+
+	var data imprint
+	if err := json.Unmarshal(raw, &data); err != nil {
+		return nil, fmt.Errorf("decode IMPRINT_FILE: %w", err)
+	}
+
+	data.Name = strings.TrimSpace(data.Name)
+	data.Street = strings.TrimSpace(data.Street)
+	data.PostalCode = strings.TrimSpace(data.PostalCode)
+	data.City = strings.TrimSpace(data.City)
+	data.Country = strings.TrimSpace(data.Country)
+	data.Email = strings.TrimSpace(data.Email)
+	data.Phone = strings.TrimSpace(data.Phone)
+	data.Updated = strings.TrimSpace(data.Updated)
+
+	required := []struct {
+		name  string
+		value string
+	}{
+		{"name", data.Name},
+		{"street", data.Street},
+		{"postal_code", data.PostalCode},
+		{"city", data.City},
+		{"country", data.Country},
+		{"email", data.Email},
+		{"updated", data.Updated},
+	}
+	for _, field := range required {
+		if field.value == "" {
+			return nil, fmt.Errorf("IMPRINT_FILE: %s must not be empty", field.name)
+		}
+	}
+	if !strings.Contains(data.Email, "@") {
+		return nil, fmt.Errorf("IMPRINT_FILE: email is invalid")
+	}
+	return &data, nil
 }
 
 func loadOAuthConfig() (*oauthConfig, error) {
@@ -382,6 +543,118 @@ func (s *server) loginBackground(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = w.Write(loginBackgroundJPEG)
+}
+
+func (s *server) imprintPage(w http.ResponseWriter, r *http.Request) {
+	s.renderLegalPage(w, r, "impressum.html", "Impressum", "impressum")
+}
+
+func (s *server) privacyPage(w http.ResponseWriter, r *http.Request) {
+	s.renderLegalPage(w, r, "datenschutz.html", "Datenschutzerklärung", "datenschutz")
+}
+
+func (s *server) legalStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	privacyURL, imprintURL := s.legalLinks()
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-store")
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	_ = json.NewEncoder(w).Encode(map[string]bool{
+		"privacy": privacyURL != "",
+		"imprint": imprintURL != "",
+	})
+}
+
+func (s *server) renderLegalPage(w http.ResponseWriter, r *http.Request, filename, title, current string) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if s.cfg.imprint == nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	path := filepath.Clean(filepath.Join(s.cfg.legalDir, filename))
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		slog.Warn("legal page not configured", "page", filename, "error", err)
+		http.NotFound(w, r)
+		return
+	}
+
+	content, err := template.New("content").Parse(string(raw))
+	if err != nil {
+		slog.Error("cannot parse legal page", "page", filename, "error", err)
+		http.Error(w, "legal page unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	var body bytes.Buffer
+	if err := content.Execute(&body, legalContentData{
+		Imprint: *s.cfg.imprint,
+		Updated: s.cfg.imprint.Updated,
+	}); err != nil {
+		slog.Error("cannot render legal page", "page", filename, "error", err)
+		http.Error(w, "legal page unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	privacyURL, imprintURL := s.legalLinks()
+	data := legalPageData{
+		Title:       title,
+		Content:     template.HTML(body.String()),
+		ShowPrivacy: privacyURL != "" && current != "datenschutz",
+		ShowImprint: imprintURL != "" && current != "impressum",
+		BackURL:     "/",
+		BackLabel:   "Zur Anmeldung",
+	}
+	if s.sessionValid(r) {
+		data.BackLabel = "Zur Karte"
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Frame-Options", "DENY")
+	w.Header().Set("X-Robots-Tag", "noindex, nofollow")
+	w.WriteHeader(http.StatusOK)
+	if r.Method == http.MethodHead {
+		return
+	}
+	if err := legalPageTemplate.Execute(w, data); err != nil {
+		slog.Error("cannot render legal page shell", "page", filename, "error", err)
+	}
+}
+
+func (s *server) legalPageAvailable(filename string) bool {
+	if s.cfg.imprint == nil {
+		return false
+	}
+	path := filepath.Clean(filepath.Join(s.cfg.legalDir, filename))
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	_, err = template.New("content").Parse(string(raw))
+	return err == nil
+}
+
+func (s *server) legalLinks() (privacyURL, imprintURL string) {
+	if s.legalPageAvailable("datenschutz.html") {
+		privacyURL = "/datenschutz"
+	}
+	if s.legalPageAvailable("impressum.html") {
+		imprintURL = "/impressum"
+	}
+	return
 }
 
 func (s *server) oauthLogin(w http.ResponseWriter, r *http.Request) {
@@ -809,6 +1082,7 @@ func (s *server) sessionCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) renderLogin(w http.ResponseWriter, status int, data loginData) {
+	data.PrivacyURL, data.ImprintURL = s.legalLinks()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Frame-Options", "DENY")

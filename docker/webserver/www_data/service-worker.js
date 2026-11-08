@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vmkarte-shell-v18';
+const CACHE_NAME = 'vmkarte-shell-v19';
 
 const SHELL_URLS = [
 	'/',
@@ -25,6 +25,7 @@ const SHELL_URLS = [
 	'/js/location.js',
 	'/js/version.js',
 	'/js/version-check.js',
+	'/js/legal-links.js',
 	'/js/geo-handler.js',
 	'/leaflet/leaflet.css',
 	'/leaflet/leaflet.js',
@@ -39,6 +40,14 @@ const NETWORK_ONLY_PATHS = new Set([
 	'/session-check',
 	'/_internal/session-check',
 	'/app-version.json',
+	'/impressum',
+	'/datenschutz',
+	'/legal-status',
+]);
+
+const LEGAL_NAVIGATION_PATHS = new Set([
+	'/impressum',
+	'/datenschutz',
 ]);
 
 function isCacheableResponse(response) {
@@ -109,6 +118,16 @@ async function networkFirstNavigation(request) {
 	}
 }
 
+async function networkOnlyNavigation(request) {
+	try {
+		return await fetch(request);
+	}
+	catch (error) {
+		const cache = await caches.open(CACHE_NAME);
+		return (await cache.match('/offline.html')) || Response.error();
+	}
+}
+
 async function staleWhileRevalidate(request) {
 	const cache = await caches.open(CACHE_NAME);
 	const cached = await cache.match(request);
@@ -149,6 +168,10 @@ self.addEventListener('fetch', event => {
 		return;
 	if (url.pathname === '/service-worker.js')
 		return;
+	if (request.mode === 'navigate' && LEGAL_NAVIGATION_PATHS.has(url.pathname)) {
+		event.respondWith(networkOnlyNavigation(request));
+		return;
+	}
 	if (NETWORK_ONLY_PATHS.has(url.pathname) || url.pathname.startsWith('/shared/'))
 		return;
 

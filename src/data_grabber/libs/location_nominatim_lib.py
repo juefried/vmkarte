@@ -209,8 +209,8 @@ def query_nominatim(searchstring, country_code, use_cache=True, cache_only=False
         return result
 
     except (requests.RequestException, ValueError) as e:
-        # Print an error message if an exception occurs while fetching location details
-        print(f"An error occurred while fetching location details for \"{searchstring}\", country_code={country_code}: {e}")
+        # Do not log the raw location string: it can contain personal data.
+        print(f"An error occurred while fetching location details (country_code={country_code}): {e}")
     return None
 
 
@@ -250,9 +250,10 @@ def _request_precision_candidates(variant, params, countrycodes, use_cache=True)
         if not isinstance(data, list):
             data = []
     except (requests.RequestException, ValueError) as e:
+        # Do not log the raw query parameters: they can contain personal data.
         print(
-            "An error occurred while fetching precision location details for "
-            f"{params!r}, countrycodes={countrycodes}: {e}"
+            "An error occurred while fetching precision location details "
+            f"(countrycodes={countrycodes}): {e}"
         )
         return []
 

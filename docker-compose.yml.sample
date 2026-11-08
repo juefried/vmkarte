@@ -18,6 +18,11 @@ services:
     depends_on:
       auth:
         condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     restart: unless-stopped
 
   auth:
@@ -30,9 +35,21 @@ services:
     environment:
       PASSWORD_FILE: /run/secrets/htpasswd
       SESSION_KEY_FILE: /run/secrets/session_signing_key
+      # Optional: Impressum und Datenschutz. Erst aktivieren, wenn
+      # config/impressum.json und config/legal/*.html vorhanden sind.
+      # IMPRINT_FILE: /run/secrets/imprint
+      # LEGAL_DIR: /app/legal
+    # volumes:
+    #   - ./config/legal:/app/legal:ro
     secrets:
       - htpasswd
       - session_signing_key
+      # - imprint
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     read_only: true
     tmpfs:
       - /tmp
@@ -59,6 +76,11 @@ services:
       - ./config/cache_config.json:/app/cache_config.json:ro
       - ./volumes/cron/cache:/app/cache
       - ./docker/webserver/www_data/shared:/app/shared
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     restart: unless-stopped
 
 secrets:
@@ -66,3 +88,5 @@ secrets:
     file: ./config/.htpasswd
   session_signing_key:
     file: ./config/session_signing_key
+  # imprint:
+  #   file: ./config/impressum.json

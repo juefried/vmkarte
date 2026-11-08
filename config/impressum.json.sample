@@ -1,0 +1,10 @@
+{
+  "name": "Max Mustermann",
+  "street": "Musterstraße 1",
+  "postal_code": "12345",
+  "city": "Musterstadt",
+  "country": "Deutschland",
+  "email": "kontakt@example.org",
+  "phone": "",
+  "updated": "2026-11-08"
+}

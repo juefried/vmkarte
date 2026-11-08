@@ -68,6 +68,26 @@ Die TTL-Bereiche der Caches stehen in `cache_config.json`:
 
 Fehlende Datei oder fehlende Werte verwenden diese Defaults. Die TTL wird pro Cacheeintrag zufällig gezogen, damit sich die Aktualisierungen über die Zeit verteilen. `negative_ttl_days` cacht „kein Treffer“ für 30 Tage; Exceptions werden nicht gecacht.
 
+## Impressum und Datenschutz
+
+Die Loginseite, die Karte und die Offline-Seite können klein auf Impressum und
+Datenschutzerklärung verlinken. Die persönlichen Betreiberdaten stehen nicht im
+Repository, sondern in `config/impressum.json` (gitignored). Die Texte liegen
+als gemountete HTML-Fragmente unter `config/legal/`.
+
+Vorlagen:
+
+```bash
+cp config/impressum.json.sample config/impressum.json
+cp config/legal/impressum.html.sample config/legal/impressum.html
+cp config/legal/datenschutz.html.sample config/legal/datenschutz.html
+```
+
+Danach `config/impressum.json` ausfüllen und den Auth-Container mit dem Secret
+`imprint` sowie dem read-only Mount `./config/legal:/app/legal:ro` starten.
+Ohne gültige Konfiguration erscheinen keine Links. Details stehen in
+`docs/upgrade-3.0-legal.md`.
+
 ## Datenpfade
 
 Der Datengrabber schreibt die Kartendaten standardmäßig nach `docker/webserver/www_data/shared/vmforum_members.json`. IDE und native Installation nutzen damit direkt den Web-Root; ein manuelles Kopieren ist nicht nötig.
