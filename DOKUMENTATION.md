@@ -1440,6 +1440,12 @@ Die früheren Nominatim-Korrekturen (User-Agent, Timeout, Negativ-Cache) bleiben
 
 ## 16. Geänderte Dateien
 
+### 08.11.2026 (Branch `fix/service-worker-cache-v18`)
+
+- `docker/webserver/www_data/service-worker.js`: Cache auf `vmkarte-shell-v18` erhöht, damit Clients die geänderte Logout-Weiterleitung in `js/app.js` erhalten.
+- `tests/browser/phase9-cdp.mjs`: Cache-Prüfung auf `v18` aktualisiert.
+- `DOKUMENTATION.md`: Dateiliste aktualisiert.
+
 ### 07.11.2026 (Branch `fix/search-empty-result-clears-pins`)
 
 - `docker/webserver/www_data/js/search-filter.js`: neue pure Helfer `resolveSearchMode()` und `filterMembers()`; die zweistufige Filterlogik (URL-Parameter und Formularfelder) ist aus `app.js` ausgelagert.
