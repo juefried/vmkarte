@@ -464,8 +464,8 @@ async function main() {
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache');
 	assert.equal(await cacheContains('/app-version.json'), false);
 	const serviceWorkerSource = await (await fetch(ORIGIN + '/service-worker.js')).text();
-	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v17';"));
-	check.pass('Service Worker installiert, Cache ist v17 und app-version.json bleibt network-only');
+	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v18';"));
+	check.pass('Service Worker installiert, Cache ist v18 und app-version.json bleibt network-only');
 
 	// 3. ?dev=1 disables the service worker, removes caches and skips the version check.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };
