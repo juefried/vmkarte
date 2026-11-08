@@ -8,9 +8,11 @@ import (
 	"crypto/subtle"
 	_ "embed"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -35,6 +37,13 @@ const (
 	maxLoginBody      = 8 << 10
 	maxUsernameLen    = 128
 	maxPasswordLen    = 1024
+
+	oauthStateCookieName = "vmkarte_oauth_state"
+	oauthStateCookiePath = "/auth/forum/"
+	oauthStateLifetime   = 10 * time.Minute
+	oauthHTTPTimeout     = 15 * time.Second
+	oauthMaxResponseSize = 1 << 20
+	oauthDefaultScope    = "user:read"
 )
 
 //go:embed assets/login-background.jpg
@@ -45,7 +54,7 @@ var loginTemplate = template.Must(template.New("login").Parse(`<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Anmeldung – Velomobilkarte</title>
+<title>Anmeldung – Karte Velomobil-Forum</title>
 <style>
 :root { color-scheme: light dark; }
 * { box-sizing: border-box; }
@@ -66,12 +75,19 @@ input:focus { outline: 2px solid #2e7d32; outline-offset: 1px; border-color: #2e
 button { width: 100%; margin-top: 0.5rem; padding: 0.8rem 1rem; border: 0; border-radius: 0.5rem;
          font: inherit; font-weight: 700; color: #fff; background: #2e7d32; cursor: pointer; }
 button:hover { background: #256428; }
+.forum-login { display: block; margin: 0 0 1rem; padding: 0.8rem 1rem; border-radius: 0.5rem;
+               font-weight: 700; text-align: center; text-decoration: none; color: #fff; background: #1565c0; }
+.forum-login:hover { background: #0d47a1; }
+.hint { margin: 0 0 0.75rem; color: #4b5d53; font-size: 0.9rem; }
+.message { padding: 0.75rem; border-radius: 0.5rem; background: #e8f1fb; color: #0d47a1; }
 .error { padding: 0.75rem; border-radius: 0.5rem; background: #fdecea; color: #8a1c16; }
 @media (prefers-color-scheme: dark) {
   body { background-color: #101814; color: #e7efe9; }
   body::before { background: rgba(16, 24, 20, 0.55); }
   main { background: #1a2620; }
   p { color: #b7c8be; }
+  .hint { color: #b7c8be; }
+  .message { background: #16324a; color: #cfe4ff; }
   input { background: #101814; border-color: #4f6558; }
   .error { background: #4a1b18; color: #ffd7d3; }
 }
@@ -79,8 +95,15 @@ button:hover { background: #256428; }
 </head>
 <body>
 <main>
-<h1>Velomobilkarte</h1>
+<h1>Karte Velomobil-Forum</h1>
+{{if .Message}}<p class="message" role="status">{{.Message}}</p>{{end}}
+{{if .OAuthEnabled}}
+<p>Bitte über das Velomobil-Forum anmelden.</p>
+<p><a class="forum-login" href="{{.OAuthURL}}">Anmeldung über Velomobil-Forum</a></p>
+<p class="hint">Alternativ als Fallback über die bisherigen Zugangsdaten:</p>
+{{else}}
 <p>Bitte mit dem im Forum kommunizierten Zugang anmelden.</p>
+{{end}}
 {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
 <form method="post" action="/login">
 <input type="hidden" name="next" value="{{.Next}}">
@@ -97,27 +120,44 @@ button:hover { background: #256428; }
 </html>
 `))
 
+type oauthConfig struct {
+	clientID     string
+	clientSecret string
+	authorizeURL string
+	tokenURL     string
+	userInfoURL  string
+	scope        string
+	redirectURI  string
+}
+
 type config struct {
-	listenAddr   string
-	passwordFile string
-	keyFile      string
-	cookieName   string
-	cookieSecure bool
-	cookieMaxAge time.Duration
+	listenAddr        string
+	passwordFile      string
+	keyFile           string
+	cookieName        string
+	cookieSecure      bool
+	cookieMaxAge      time.Duration
+	oauth             *oauthConfig
+	oauthAutoRedirect bool
 }
 
 type loginData struct {
-	Error    string
-	Next     string
-	Username string
+	Error        string
+	Message      string
+	Next         string
+	Username     string
+	OAuthEnabled bool
+	OAuthURL     string
 }
 
 type server struct {
-	cfg       config
-	key       []byte
-	dummyHash []byte
-	tmpl      *template.Template
-	now       func() time.Time
+	cfg        config
+	key        []byte
+	oauth      *oauthConfig
+	httpClient *http.Client
+	dummyHash  []byte
+	tmpl       *template.Template
+	now        func() time.Time
 }
 
 func main() {
@@ -145,6 +185,8 @@ func main() {
 	mux.HandleFunc("/login-background.jpg", srv.loginBackground)
 	mux.HandleFunc("/logout", srv.logout)
 	mux.HandleFunc("/session-check", srv.sessionCheck)
+	mux.HandleFunc("/auth/forum/login", srv.oauthLogin)
+	mux.HandleFunc("/auth/forum/callback", srv.oauthCallback)
 
 	httpServer := &http.Server{
 		Addr:              cfg.listenAddr,
@@ -180,11 +222,13 @@ func newServer(cfg config, key []byte) (*server, error) {
 		return nil, fmt.Errorf("create dummy hash: %w", err)
 	}
 	return &server{
-		cfg:       cfg,
-		key:       key,
-		dummyHash: dummy,
-		tmpl:      loginTemplate,
-		now:       time.Now,
+		cfg:        cfg,
+		key:        key,
+		oauth:      cfg.oauth,
+		httpClient: &http.Client{Timeout: oauthHTTPTimeout},
+		dummyHash:  dummy,
+		tmpl:       loginTemplate,
+		now:        time.Now,
 	}, nil
 }
 
@@ -204,13 +248,70 @@ func loadConfig() (config, error) {
 		return config{}, fmt.Errorf("COOKIE_NAME must not be empty")
 	}
 
+	oauth, err := loadOAuthConfig()
+	if err != nil {
+		return config{}, err
+	}
+
+	autoRedirect, err := parseBool(env("OAUTH_AUTO_REDIRECT", "false"))
+	if err != nil {
+		return config{}, fmt.Errorf("OAUTH_AUTO_REDIRECT: %w", err)
+	}
+
 	return config{
-		listenAddr:   env("LISTEN_ADDR", defaultListenAddr),
-		passwordFile: env("PASSWORD_FILE", defaultPassword),
-		keyFile:      env("SESSION_KEY_FILE", defaultKeyFile),
-		cookieName:   cookieName,
-		cookieSecure: secure,
-		cookieMaxAge: time.Duration(maxAgeDays) * 24 * time.Hour,
+		listenAddr:        env("LISTEN_ADDR", defaultListenAddr),
+		passwordFile:      env("PASSWORD_FILE", defaultPassword),
+		keyFile:           env("SESSION_KEY_FILE", defaultKeyFile),
+		cookieName:        cookieName,
+		cookieSecure:      secure,
+		cookieMaxAge:      time.Duration(maxAgeDays) * 24 * time.Hour,
+		oauth:             oauth,
+		oauthAutoRedirect: autoRedirect,
+	}, nil
+}
+
+func loadOAuthConfig() (*oauthConfig, error) {
+	clientID := strings.TrimSpace(os.Getenv("OAUTH_CLIENT_ID"))
+	clientSecret := strings.TrimSpace(os.Getenv("OAUTH_CLIENT_SECRET"))
+	secretFile := strings.TrimSpace(os.Getenv("OAUTH_CLIENT_SECRET_FILE"))
+	authorizeURL := strings.TrimSpace(os.Getenv("OAUTH_AUTHORIZE_URL"))
+	tokenURL := strings.TrimSpace(os.Getenv("OAUTH_TOKEN_URL"))
+	userInfoURL := strings.TrimSpace(os.Getenv("OAUTH_USERINFO_URL"))
+	scope := strings.TrimSpace(os.Getenv("OAUTH_SCOPE"))
+	redirectURI := strings.TrimSpace(os.Getenv("OAUTH_REDIRECT_URI"))
+
+	scopeExplicit := scope != ""
+	if scope == "" {
+		scope = oauthDefaultScope
+	}
+
+	if clientID == "" && clientSecret == "" && secretFile == "" &&
+		authorizeURL == "" && tokenURL == "" && userInfoURL == "" &&
+		!scopeExplicit && redirectURI == "" {
+		return nil, nil
+	}
+
+	if secretFile != "" {
+		raw, err := os.ReadFile(filepath.Clean(secretFile))
+		if err != nil {
+			return nil, fmt.Errorf("read OAUTH_CLIENT_SECRET_FILE: %w", err)
+		}
+		clientSecret = strings.TrimSpace(string(raw))
+	}
+
+	if clientID == "" || clientSecret == "" || authorizeURL == "" ||
+		tokenURL == "" || userInfoURL == "" || redirectURI == "" {
+		return nil, fmt.Errorf("incomplete OAuth configuration")
+	}
+
+	return &oauthConfig{
+		clientID:     clientID,
+		clientSecret: clientSecret,
+		authorizeURL: authorizeURL,
+		tokenURL:     tokenURL,
+		userInfoURL:  userInfoURL,
+		scope:        scope,
+		redirectURI:  redirectURI,
 	}, nil
 }
 
@@ -283,16 +384,316 @@ func (s *server) loginBackground(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(loginBackgroundJPEG)
 }
 
+func (s *server) oauthLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	next := sanitizeNext(r.URL.Query().Get("next"), "/")
+	if s.oauth == nil {
+		http.Redirect(w, r, "/login?local=1&next="+url.QueryEscape(next), http.StatusSeeOther)
+		return
+	}
+
+	stateBytes := make([]byte, 32)
+	if _, err := rand.Read(stateBytes); err != nil {
+		slog.Error("cannot create OAuth state", "error", err)
+		s.redirectOAuthError(w, r, next)
+		return
+	}
+	state := base64.RawURLEncoding.EncodeToString(stateBytes)
+	expires := s.now().Add(oauthStateLifetime)
+
+	s.setOAuthStateCookie(w, signStateToken(s.key, expires, state, next), expires)
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, s.oauthAuthorizeURL(state), http.StatusSeeOther)
+}
+
+func (s *server) oauthCallback(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	cookie, err := r.Cookie(oauthStateCookieName)
+	if err != nil {
+		s.redirectOAuthError(w, r, "/")
+		return
+	}
+
+	state, stateNext, ok := verifyStateToken(s.key, cookie.Value, s.now())
+	if !ok {
+		s.clearOAuthStateCookie(w)
+		s.redirectOAuthError(w, r, "/")
+		return
+	}
+	next := sanitizeNext(stateNext, "/")
+	s.clearOAuthStateCookie(w)
+
+	if s.oauth == nil {
+		s.redirectOAuthError(w, r, next)
+		return
+	}
+	if providerError := r.URL.Query().Get("error"); providerError != "" {
+		slog.Warn("OAuth provider returned an error", "error", providerError)
+		s.redirectOAuthError(w, r, next)
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(state), []byte(r.URL.Query().Get("state"))) != 1 {
+		s.redirectOAuthError(w, r, next)
+		return
+	}
+	code := r.URL.Query().Get("code")
+	if code == "" {
+		s.redirectOAuthError(w, r, next)
+		return
+	}
+
+	token, err := s.exchangeOAuthCode(r.Context(), code)
+	if err != nil {
+		slog.Error("OAuth token exchange failed", "error", err)
+		s.redirectOAuthError(w, r, next)
+		return
+	}
+
+	user, err := s.fetchOAuthUser(r.Context(), token.AccessToken)
+	if err != nil {
+		slog.Error("OAuth user lookup failed", "error", err)
+		s.redirectOAuthError(w, r, next)
+		return
+	}
+
+	nonce := make([]byte, 32)
+	if _, err := rand.Read(nonce); err != nil {
+		slog.Error("cannot create session nonce", "error", err)
+		s.redirectOAuthError(w, r, next)
+		return
+	}
+	expires := s.now().Add(s.cfg.cookieMaxAge)
+	s.setSessionCookie(w, signToken(s.key, expires, nonce), expires)
+	slog.Info("OAuth login", "user_id", user.Me.ID, "username", user.Me.Username)
+	w.Header().Set("Cache-Control", "no-store")
+	http.Redirect(w, r, next, http.StatusSeeOther)
+}
+
+func (s *server) oauthAuthorizeURL(state string) string {
+	params := url.Values{}
+	params.Set("response_type", "code")
+	params.Set("client_id", s.oauth.clientID)
+	params.Set("redirect_uri", s.oauth.redirectURI)
+	params.Set("scope", s.oauth.scope)
+	params.Set("state", state)
+
+	separator := "?"
+	if strings.Contains(s.oauth.authorizeURL, "?") {
+		separator = "&"
+	}
+	return s.oauth.authorizeURL + separator + params.Encode()
+}
+
+func (s *server) setOAuthStateCookie(w http.ResponseWriter, token string, expires time.Time) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     oauthStateCookieName,
+		Value:    token,
+		Path:     oauthStateCookiePath,
+		HttpOnly: true,
+		Secure:   s.cfg.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(oauthStateLifetime / time.Second),
+		Expires:  expires,
+	})
+}
+
+func (s *server) clearOAuthStateCookie(w http.ResponseWriter) {
+	http.SetCookie(w, &http.Cookie{
+		Name:     oauthStateCookieName,
+		Value:    "",
+		Path:     oauthStateCookiePath,
+		HttpOnly: true,
+		Secure:   s.cfg.cookieSecure,
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+		Expires:  time.Unix(1, 0),
+	})
+}
+
+func (s *server) redirectOAuthError(w http.ResponseWriter, r *http.Request, next string) {
+	next = sanitizeNext(next, "/")
+	http.Redirect(w, r, "/login?local=1&error=oauth&next="+url.QueryEscape(next), http.StatusSeeOther)
+}
+
+func signStateToken(key []byte, expires time.Time, state, next string) string {
+	payload := "v1." + strconv.FormatInt(expires.Unix(), 10) + "." + state + "." +
+		base64.RawURLEncoding.EncodeToString([]byte(next))
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte(payload))
+	return payload + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func verifyStateToken(key []byte, token string, now time.Time) (string, string, bool) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 5 || parts[0] != "v1" {
+		return "", "", false
+	}
+	expires, err := strconv.ParseInt(parts[1], 10, 64)
+	if err != nil || now.Unix() >= expires {
+		return "", "", false
+	}
+	if parts[2] == "" {
+		return "", "", false
+	}
+	nextBytes, err := base64.RawURLEncoding.DecodeString(parts[3])
+	if err != nil {
+		return "", "", false
+	}
+	signature, err := base64.RawURLEncoding.DecodeString(parts[4])
+	if err != nil {
+		return "", "", false
+	}
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte("v1." + parts[1] + "." + parts[2] + "." + parts[3]))
+	if !hmac.Equal(mac.Sum(nil), signature) {
+		return "", "", false
+	}
+	return parts[2], string(nextBytes), true
+}
+
+type oauthTokenResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	Scope        string `json:"scope"`
+}
+
+type oauthErrorResponse struct {
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
+}
+
+type oauthUser struct {
+	ID       int64  `json:"user_id"`
+	Username string `json:"username"`
+	IsBanned bool   `json:"is_banned"`
+}
+
+type oauthUserResponse struct {
+	Me oauthUser `json:"me"`
+}
+
+func (s *server) exchangeOAuthCode(ctx context.Context, code string) (*oauthTokenResponse, error) {
+	form := url.Values{}
+	form.Set("client_id", s.oauth.clientID)
+	form.Set("client_secret", s.oauth.clientSecret)
+	form.Set("grant_type", "authorization_code")
+	form.Set("code", code)
+	form.Set("redirect_uri", s.oauth.redirectURI)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.oauth.tokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("create token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("token request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		var providerError oauthErrorResponse
+		if err := json.Unmarshal(body, &providerError); err == nil && providerError.Error != "" {
+			if providerError.ErrorDescription != "" {
+				return nil, fmt.Errorf("token endpoint returned HTTP %d: %s: %s",
+					resp.StatusCode, providerError.Error, providerError.ErrorDescription)
+			}
+			return nil, fmt.Errorf("token endpoint returned HTTP %d: %s",
+				resp.StatusCode, providerError.Error)
+		}
+		return nil, fmt.Errorf("token endpoint returned HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, oauthMaxResponseSize))
+	if err != nil {
+		return nil, fmt.Errorf("read token response: %w", err)
+	}
+	var token oauthTokenResponse
+	if err := json.Unmarshal(body, &token); err != nil {
+		return nil, fmt.Errorf("decode token response: %w", err)
+	}
+	if strings.TrimSpace(token.AccessToken) == "" {
+		return nil, fmt.Errorf("token response has no access token")
+	}
+	if !strings.EqualFold(token.TokenType, "bearer") {
+		return nil, fmt.Errorf("unexpected token type %q", token.TokenType)
+	}
+	return &token, nil
+}
+
+func (s *server) fetchOAuthUser(ctx context.Context, accessToken string) (*oauthUserResponse, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.oauth.userInfoURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create userinfo request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("userinfo request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("userinfo endpoint returned HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, oauthMaxResponseSize))
+	if err != nil {
+		return nil, fmt.Errorf("read userinfo response: %w", err)
+	}
+	var user oauthUserResponse
+	if err := json.Unmarshal(body, &user); err != nil {
+		return nil, fmt.Errorf("decode userinfo response: %w", err)
+	}
+	if user.Me.ID <= 0 || strings.TrimSpace(user.Me.Username) == "" {
+		return nil, fmt.Errorf("userinfo response is missing user_id or username")
+	}
+	if user.Me.IsBanned {
+		return nil, fmt.Errorf("forum user is banned")
+	}
+	return &user, nil
+}
+
 func (s *server) login(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		next := sanitizeNext(r.URL.Query().Get("next"), "/")
 		if s.sessionValid(r) {
-			http.Redirect(w, r, sanitizeNext(r.URL.Query().Get("next"), "/"), http.StatusSeeOther)
+			http.Redirect(w, r, next, http.StatusSeeOther)
 			return
 		}
-		s.renderLogin(w, http.StatusOK, loginData{
-			Next: sanitizeNext(r.URL.Query().Get("next"), "/"),
-		})
+		if s.cfg.oauthAutoRedirect && s.oauth != nil &&
+			r.URL.Query().Get("local") != "1" && r.URL.Query().Get("error") == "" {
+			http.Redirect(w, r, "/auth/forum/login?next="+url.QueryEscape(next), http.StatusSeeOther)
+			return
+		}
+		data := loginData{Next: next}
+		if r.URL.Query().Get("loggedout") == "1" {
+			data.Message = "Du wurdest abgemeldet."
+		}
+		if r.URL.Query().Get("error") == "oauth" {
+			data.Error = "Anmeldung über das Velomobilforum derzeit nicht möglich."
+		}
+		if s.oauth != nil {
+			data.OAuthEnabled = true
+			data.OAuthURL = "/auth/forum/login?next=" + url.QueryEscape(next)
+		}
+		s.renderLogin(w, http.StatusOK, data)
 	case http.MethodPost:
 		if isCrossSite(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
@@ -386,9 +787,11 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
+	// TODO: Revoke the forum access/refresh token once tokens are stored
+	// server-side and logout should also end the forum authorization.
 	s.clearSessionCookie(w)
 	w.Header().Set("Cache-Control", "no-store")
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	http.Redirect(w, r, "/login?local=1&loggedout=1", http.StatusSeeOther)
 }
 
 func (s *server) sessionCheck(w http.ResponseWriter, r *http.Request) {
