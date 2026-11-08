@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -682,6 +683,27 @@ func TestOAuthStateToken(t *testing.T) {
 	}
 	if _, _, ok := verifyStateToken(key, "v1.bad", now); ok {
 		t.Fatal("malformed state token was accepted")
+	}
+}
+
+func TestExchangeOAuthCodeIncludesProviderError(t *testing.T) {
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":"invalid_client","error_description":"client authentication failed"}`))
+	}))
+	defer tokenSrv.Close()
+
+	srv := testOAuthServer(t, tokenSrv.URL, "http://127.0.0.1:1/me")
+	_, err := srv.exchangeOAuthCode(context.Background(), "code-123")
+	if err == nil {
+		t.Fatal("expected token exchange error")
+	}
+	if !strings.Contains(err.Error(), "invalid_client") {
+		t.Fatalf("error does not contain provider code: %v", err)
+	}
+	if !strings.Contains(err.Error(), "client authentication failed") {
+		t.Fatalf("error does not contain provider description: %v", err)
 	}
 }
 

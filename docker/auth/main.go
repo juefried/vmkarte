@@ -558,6 +558,11 @@ type oauthTokenResponse struct {
 	Scope        string `json:"scope"`
 }
 
+type oauthErrorResponse struct {
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
+}
+
 type oauthUser struct {
 	ID       int64  `json:"user_id"`
 	Username string `json:"username"`
@@ -589,6 +594,16 @@ func (s *server) exchangeOAuthCode(ctx context.Context, code string) (*oauthToke
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		var providerError oauthErrorResponse
+		if err := json.Unmarshal(body, &providerError); err == nil && providerError.Error != "" {
+			if providerError.ErrorDescription != "" {
+				return nil, fmt.Errorf("token endpoint returned HTTP %d: %s: %s",
+					resp.StatusCode, providerError.Error, providerError.ErrorDescription)
+			}
+			return nil, fmt.Errorf("token endpoint returned HTTP %d: %s",
+				resp.StatusCode, providerError.Error)
+		}
 		return nil, fmt.Errorf("token endpoint returned HTTP %d", resp.StatusCode)
 	}
 
