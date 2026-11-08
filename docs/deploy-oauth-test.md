@@ -335,6 +335,41 @@ docker compose logs --tail=20 auth
 - Prüfen, ob der Scope `user:read` freigegeben ist.
 - Prüfen, ob der Server den Token-Endpunkt erreichen kann.
 
+### OAuth-Login läuft in einer Schleife
+
+Symptom:
+
+```text
+/auth/forum/callback?code=...&state=... -> 303
+/login?local=1&error=oauth&next=%2F    -> 303
+/auth/forum/login?next=%2F              -> 303
+```
+
+Dann fehlen im Auth-Service die Query-Parameter. Ursache ist `proxy_pass` mit
+einer Variable: nginx hängt den ursprünglichen Query-String nicht automatisch an.
+
+Prüfen:
+
+```bash
+docker compose exec web wget -S -O - \
+  'http://auth:8080/login?local=1&error=oauth&next=%2F' 2>&1 | head -n 10
+# erwartet: HTTP/1.1 200 OK
+
+curl -sS -D - -o /dev/null \
+  'https://karte-test.jfr-service.de/login?local=1&error=oauth&next=%2F'
+# erwartet nach dem Fix: HTTP/2 200, vorher 303
+```
+
+Die Auth-Routen in `docker/webserver/default.conf` müssen deshalb so aussehen:
+
+```nginx
+proxy_pass http://$auth_backend/login$is_args$args;
+proxy_pass http://$auth_backend/auth/forum/login$is_args$args;
+proxy_pass http://$auth_backend/auth/forum/callback$is_args$args;
+```
+
+Danach `docker compose build web` und `docker compose up -d web`.
+
 ### `permission denied` beim OAuth-Client-Secret
 
 ```bash
