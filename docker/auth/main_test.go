@@ -252,6 +252,9 @@ func TestLogoutClearsCookie(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
 	}
+	if location := rec.Header().Get("Location"); location != "/login?local=1&loggedout=1" {
+		t.Fatalf("Location = %q", location)
+	}
 	cookies := rec.Result().Cookies()
 	if len(cookies) != 1 || cookies[0].MaxAge >= 0 {
 		t.Fatal("logout did not clear the session cookie")
@@ -268,12 +271,27 @@ func TestLogoutGETClearsCookie(t *testing.T) {
 	if rec.Code != http.StatusSeeOther {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
 	}
-	if location := rec.Header().Get("Location"); location != "/login" {
+	if location := rec.Header().Get("Location"); location != "/login?local=1&loggedout=1" {
 		t.Fatalf("Location = %q", location)
 	}
 	cookies := rec.Result().Cookies()
 	if len(cookies) != 1 || cookies[0].MaxAge >= 0 {
 		t.Fatal("GET logout did not clear the session cookie")
+	}
+}
+
+func TestLoginShowsLogoutMessage(t *testing.T) {
+	srv := testOAuthServer(t, "https://forum.test/api/oauth2/token", "https://forum.test/api/me/")
+
+	req := httptest.NewRequest(http.MethodGet, "/login?local=1&loggedout=1", nil)
+	rec := httptest.NewRecorder()
+	srv.login(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	if !strings.Contains(rec.Body.String(), "Du wurdest abgemeldet.") {
+		t.Fatal("logout message is missing")
 	}
 }
 
@@ -428,6 +446,7 @@ func TestOAuthLoginRedirectsToForum(t *testing.T) {
 
 func TestLoginRedirectsToOAuthWhenEnabled(t *testing.T) {
 	srv := testOAuthServer(t, "https://forum.test/api/oauth2/token", "https://forum.test/api/me/")
+	srv.cfg.oauthAutoRedirect = true
 
 	req := httptest.NewRequest(http.MethodGet, "/login?next=/karte.html", nil)
 	rec := httptest.NewRecorder()
@@ -438,6 +457,25 @@ func TestLoginRedirectsToOAuthWhenEnabled(t *testing.T) {
 	}
 	if got, want := rec.Header().Get("Location"), "/auth/forum/login?next=%2Fkarte.html"; got != want {
 		t.Fatalf("Location = %q, want %q", got, want)
+	}
+}
+
+func TestLoginShowsPageWhenOAuthEnabledByDefault(t *testing.T) {
+	srv := testOAuthServer(t, "https://forum.test/api/oauth2/token", "https://forum.test/api/me/")
+
+	req := httptest.NewRequest(http.MethodGet, "/login?next=/karte.html", nil)
+	rec := httptest.NewRecorder()
+	srv.login(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Mit dem Velomobilforum anmelden") {
+		t.Fatal("OAuth login button is missing")
+	}
+	if !strings.Contains(body, `<form method="post" action="/login">`) {
+		t.Fatal("local login form is missing")
 	}
 }
 

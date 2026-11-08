@@ -104,6 +104,7 @@ OAUTH_TOKEN_URL=https://www.velomobilforum.de/forum/index.php?api/oauth2/token
 OAUTH_USERINFO_URL=https://www.velomobilforum.de/forum/index.php?api/me/
 OAUTH_SCOPE=user:read
 OAUTH_REDIRECT_URI=https://karte-test.jfr-service.de/auth/forum/callback
+OAUTH_AUTO_REDIRECT=false
 ```
 
 Das Client-Secret steht nicht in `.env`, sondern in `config/oauth_client_secret`.
@@ -123,6 +124,7 @@ Es wird als Docker-Secret eingebunden und vom Auth-Service über
 | `OAUTH_USERINFO_URL` | XenForo-API-Endpunkt für den angemeldeten Benutzer |
 | `OAUTH_SCOPE` | Benötigter Scope, aktuell `user:read` |
 | `OAUTH_REDIRECT_URI` | Exakt registrierte Callback-URL |
+| `OAUTH_AUTO_REDIRECT` | `false`: Loginseite anzeigen; `true`: direkt zum Forum weiterleiten |
 
 ## 7. Domain, DNS und Traefik
 
@@ -257,12 +259,16 @@ curl -s https://karte-test.jfr-service.de/manifest.webmanifest | grep name
 Danach im Browser:
 
 1. `https://karte-test.jfr-service.de` öffnen.
-2. Der Browser landet beim Velomobilforum.
-3. Dort mit einem normalen Forumskonto anmelden und die Freigabe erteilen.
-4. Zurück auf der Karte prüfen, dass Karte und Datenstand laden.
-5. `https://karte-test.jfr-service.de/login?local=1` prüfen: Der lokale
+2. Die Loginseite mit OAuth-Button und lokalem Fallback erscheint.
+3. Auf „Mit dem Velomobilforum anmelden“ klicken.
+4. Im Forum mit einem normalen Forumskonto anmelden und die Freigabe erteilen.
+5. Zurück auf der Karte prüfen, dass Karte und Datenstand laden.
+6. `https://karte-test.jfr-service.de/login?local=1` prüfen: Der lokale
    Formular-Login mit `velonaut` muss weiterhin funktionieren.
-6. Abmelden testen.
+7. Abmelden: Es erscheint wieder die Loginseite mit der Meldung
+   „Du wurdest abgemeldet.“
+8. In einem privaten Fenster eine geschützte URL öffnen: Bei
+   `OAUTH_AUTO_REDIRECT=false` erscheint die Loginseite, nicht direkt das Forum.
 
 ## 11. OAuth2-Ablauf
 
@@ -277,7 +283,14 @@ Implementiert sind:
 - Validierung von `user_id` und `username`,
 - Setzen des bestehenden signierten Session-Cookies,
 - OAuth-Button auf der Loginseite,
-- lokaler Formular-Fallback unter `/login?local=1`.
+- lokaler Formular-Fallback unter `/login?local=1`,
+- Loginseite als Standard bei `OAUTH_AUTO_REDIRECT=false`,
+- Logout auf `/login?local=1&loggedout=1` mit der Meldung
+  „Du wurdest abgemeldet.“.
+
+Mit `OAUTH_AUTO_REDIRECT=true` leitet `/login` bei fehlender Sitzung direkt zum
+Forum weiter. Das ist für den späteren Produktivbetrieb vorgesehen, wenn die
+nahtlose SSO-Anmeldung gewünscht ist.
 
 Nicht verwendet werden:
 
@@ -381,6 +394,14 @@ chmod 600 config/oauth_client_secret
 docker compose up -d --force-recreate auth
 docker compose logs --tail=20 auth
 ```
+
+### Nach dem Logout erscheint wieder die Forum-Seite
+
+- Prüfen, ob `OAUTH_AUTO_REDIRECT=false` in `.env` steht.
+- `auth` neu erstellen: `docker compose up -d --force-recreate auth`.
+- `web` neu bauen, damit `js/app.js` den Logout auf
+  `/login?local=1&loggedout=1` leitet:
+  `docker compose build web && docker compose up -d web`.
 
 ### Traefik liefert 404 oder 502
 

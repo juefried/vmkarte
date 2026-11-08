@@ -54,6 +54,7 @@ services:
       OAUTH_USERINFO_URL: ${OAUTH_USERINFO_URL:-}
       OAUTH_SCOPE: ${OAUTH_SCOPE:-user:read}
       OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-}
+      OAUTH_AUTO_REDIRECT: ${OAUTH_AUTO_REDIRECT:-false}
     secrets:
       - htpasswd
       - session_signing_key

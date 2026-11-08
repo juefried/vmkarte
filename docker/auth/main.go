@@ -79,6 +79,7 @@ button:hover { background: #256428; }
                font-weight: 700; text-align: center; text-decoration: none; color: #fff; background: #1565c0; }
 .forum-login:hover { background: #0d47a1; }
 .hint { margin: 0 0 0.75rem; color: #4b5d53; font-size: 0.9rem; }
+.message { padding: 0.75rem; border-radius: 0.5rem; background: #e8f1fb; color: #0d47a1; }
 .error { padding: 0.75rem; border-radius: 0.5rem; background: #fdecea; color: #8a1c16; }
 @media (prefers-color-scheme: dark) {
   body { background-color: #101814; color: #e7efe9; }
@@ -86,6 +87,7 @@ button:hover { background: #256428; }
   main { background: #1a2620; }
   p { color: #b7c8be; }
   .hint { color: #b7c8be; }
+  .message { background: #16324a; color: #cfe4ff; }
   input { background: #101814; border-color: #4f6558; }
   .error { background: #4a1b18; color: #ffd7d3; }
 }
@@ -94,6 +96,7 @@ button:hover { background: #256428; }
 <body>
 <main>
 <h1>Velomobilkarte</h1>
+{{if .Message}}<p class="message" role="status">{{.Message}}</p>{{end}}
 {{if .OAuthEnabled}}
 <p>Bitte mit dem Velomobilforum anmelden.</p>
 <p><a class="forum-login" href="{{.OAuthURL}}">Mit dem Velomobilforum anmelden</a></p>
@@ -128,17 +131,19 @@ type oauthConfig struct {
 }
 
 type config struct {
-	listenAddr   string
-	passwordFile string
-	keyFile      string
-	cookieName   string
-	cookieSecure bool
-	cookieMaxAge time.Duration
-	oauth        *oauthConfig
+	listenAddr        string
+	passwordFile      string
+	keyFile           string
+	cookieName        string
+	cookieSecure      bool
+	cookieMaxAge      time.Duration
+	oauth             *oauthConfig
+	oauthAutoRedirect bool
 }
 
 type loginData struct {
 	Error        string
+	Message      string
 	Next         string
 	Username     string
 	OAuthEnabled bool
@@ -248,14 +253,20 @@ func loadConfig() (config, error) {
 		return config{}, err
 	}
 
+	autoRedirect, err := parseBool(env("OAUTH_AUTO_REDIRECT", "false"))
+	if err != nil {
+		return config{}, fmt.Errorf("OAUTH_AUTO_REDIRECT: %w", err)
+	}
+
 	return config{
-		listenAddr:   env("LISTEN_ADDR", defaultListenAddr),
-		passwordFile: env("PASSWORD_FILE", defaultPassword),
-		keyFile:      env("SESSION_KEY_FILE", defaultKeyFile),
-		cookieName:   cookieName,
-		cookieSecure: secure,
-		cookieMaxAge: time.Duration(maxAgeDays) * 24 * time.Hour,
-		oauth:        oauth,
+		listenAddr:        env("LISTEN_ADDR", defaultListenAddr),
+		passwordFile:      env("PASSWORD_FILE", defaultPassword),
+		keyFile:           env("SESSION_KEY_FILE", defaultKeyFile),
+		cookieName:        cookieName,
+		cookieSecure:      secure,
+		cookieMaxAge:      time.Duration(maxAgeDays) * 24 * time.Hour,
+		oauth:             oauth,
+		oauthAutoRedirect: autoRedirect,
 	}, nil
 }
 
@@ -666,11 +677,15 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, next, http.StatusSeeOther)
 			return
 		}
-		if s.oauth != nil && r.URL.Query().Get("local") != "1" && r.URL.Query().Get("error") == "" {
+		if s.cfg.oauthAutoRedirect && s.oauth != nil &&
+			r.URL.Query().Get("local") != "1" && r.URL.Query().Get("error") == "" {
 			http.Redirect(w, r, "/auth/forum/login?next="+url.QueryEscape(next), http.StatusSeeOther)
 			return
 		}
 		data := loginData{Next: next}
+		if r.URL.Query().Get("loggedout") == "1" {
+			data.Message = "Du wurdest abgemeldet."
+		}
 		if r.URL.Query().Get("error") == "oauth" {
 			data.Error = "Anmeldung über das Velomobilforum derzeit nicht möglich."
 		}
@@ -776,7 +791,7 @@ func (s *server) logout(w http.ResponseWriter, r *http.Request) {
 	// server-side and logout should also end the forum authorization.
 	s.clearSessionCookie(w)
 	w.Header().Set("Cache-Control", "no-store")
-	http.Redirect(w, r, "/login", http.StatusSeeOther)
+	http.Redirect(w, r, "/login?local=1&loggedout=1", http.StatusSeeOther)
 }
 
 func (s *server) sessionCheck(w http.ResponseWriter, r *http.Request) {
