@@ -415,3 +415,22 @@ docker compose logs --tail=20 auth
 - Prüfen, ob `VMKARTE_SHARED_DATA_DIR` auf den produktiven Shared-Ordner zeigt.
 - Prüfen, ob `vmforum_members.json` und `data-status.json` dort lesbar sind.
 - Der Test-Stack erzeugt diese Dateien nicht selbst.
+
+## 14. Übergabe in Produktion und Sync mit Release
+
+Die Übergabe und die spätere Synchronisation mit `release/3.0-pwa` sind
+dokumentiert in:
+
+- [OAuth2-Teststand: Übergabe und Produktionsübernahme](oauth2-test-handover.md)
+- [Prompt: OAuth2 nach `release/3.0-pwa` übernehmen](prompts/merge-oauth2-into-release-3.0-pwa.md)
+- [Prompt: Testinstallation mit `release/3.0-pwa` synchronisieren](prompts/sync-oauth2-test-with-release-3.0-pwa.md)
+
+Entscheidungen für die weitere Planung:
+
+- Token-Widerruf beim lokalen Logout ist gewünscht, aber noch nicht implementiert.
+- Ein vollständiges Forum-Logout beim Abmelden aus der Karte ist nicht gewünscht.
+- Der lokale Formular-Fallback bleibt bestehen, bis OAuth in Produktion für alle
+  funktioniert.
+- Für die Produktion wird ein eigener OAuth-Client mit der Redirect-URI
+  `https://karte.jfr-service.de/auth/forum/callback` benötigt.
+- Das Test-Secret wird beim Einstellen der Testumgebung gelöscht.
