@@ -1,0 +1,244 @@
+{{/*
+  Datenschutzerklärung-Vorlage für config/legal/datenschutz.html. In der Regel
+  wird diese Datei dorthin kopiert und angepasst. Die persönlichen Daten kommen
+  aus config/impressum.json. Verfügbare Platzhalter:
+  {{.Imprint.Name}}, {{.Imprint.Street}}, {{.Imprint.PostalCode}},
+  {{.Imprint.City}}, {{.Imprint.Country}}, {{.Imprint.Email}},
+  {{.Imprint.Phone}}, {{.Updated}}
+*/}}
+<h1>Datenschutzerklärung</h1>
+
+<p>Stand: {{.Updated}}</p>
+
+<h2>1. Verantwortlicher</h2>
+<p>Verantwortlich für die Datenverarbeitung auf dieser Website ist:</p>
+<p>
+  {{.Imprint.Name}}<br>
+  {{.Imprint.Street}}<br>
+  {{.Imprint.PostalCode}} {{.Imprint.City}}<br>
+  {{.Imprint.Country}}<br>
+  E-Mail: <a href="mailto:{{.Imprint.Email}}">{{.Imprint.Email}}</a>
+  {{if .Imprint.Phone}}<br>Telefon: {{.Imprint.Phone}}{{end}}
+</p>
+
+<h2>2. Allgemeines</h2>
+<p>
+  Diese Website stellt Mitgliederdaten des Velomobilforums auf einer Karte dar.
+  Die Nutzung ist nur nach Anmeldung möglich. Es werden keine Analyse-, Werbe-
+  oder Tracking-Dienste eingesetzt. Es findet kein Profiling und keine
+  automatisierte Entscheidungsfindung statt.
+</p>
+
+<h2>3. Hosting, Server-Logfiles und Missbrauchsschutz</h2>
+<p>
+  Die Website wird bei der Contabo GmbH, Welfenstraße 22, 81541 München,
+  Deutschland, auf Servern in der EU (Luxemburg) gehostet. Der Hoster
+  verarbeitet in unserem Auftrag Server-Logfiles und stellt die technische
+  Infrastruktur bereit. Mit der Contabo GmbH besteht ein Vertrag zur
+  Auftragsverarbeitung nach Art. 28 DSGVO.
+</p>
+<p>
+  Beim Aufruf verarbeitet der Webserver und die vorgeschaltete Infrastruktur
+  automatisch:
+</p>
+<ul>
+  <li>IP-Adresse</li>
+  <li>Datum und Uhrzeit des Zugriffs</li>
+  <li>aufgerufene URL, HTTP-Status und übertragene Datenmenge</li>
+  <li>Referrer-URL</li>
+  <li>Browser, Betriebssystem und User-Agent</li>
+</ul>
+<p>
+  Die IP-Adresse wird außerdem zur Begrenzung von Login-Versuchen
+  (Rate Limiting) und zur Abwehr von Angriffen verwendet.
+</p>
+<p>
+  Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an einem
+  sicheren und stabilen Betrieb).
+</p>
+<p>
+  Speicherdauer: 30 Tage, sofern keine längere Aufbewahrung zur Aufklärung von
+  Sicherheitsvorfällen erforderlich ist.
+</p>
+
+<h2>4. Anmeldung</h2>
+<h3>a) Anmeldung über das Velomobilforum (OAuth2)</h3>
+<p>
+  Bei der Anmeldung über das Velomobilforum wirst du zum Forum weitergeleitet
+  und meldest dich dort mit deinem Forum-Konto an. Der Karten-Server erhält vom
+  Forum eine Bestätigung sowie deine Benutzer-ID und deinen Benutzernamen;
+  außerdem wird abgefragt, ob dein Forum-Konto gesperrt ist. Das Zugriffstoken
+  wird nur für die Abfrage deines Profils verwendet und nicht dauerhaft auf dem
+  Karten-Server gespeichert. Für die Anmeldung und die Datenverarbeitung im
+  Forum gelten zusätzlich die Datenschutzbestimmungen des Velomobilforums.
+</p>
+<p>
+  Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO (Nutzung des Angebots) und
+  Art. 6 Abs. 1 lit. f DSGVO (sichere Anmeldung).
+</p>
+
+<h3>b) Lokale Anmeldung (Fallback)</h3>
+<p>
+  Alternativ kann ein lokaler Zugang verwendet werden. Dabei werden Benutzername
+  und ein Passwort-Hash (bcrypt) in einer geschützten Datei auf dem Server
+  gespeichert. Das Klartextpasswort wird nicht gespeichert.
+</p>
+<p>Rechtsgrundlage: Art. 6 Abs. 1 lit. b und lit. f DSGVO.</p>
+
+<h3>c) Sitzungs-Cookies</h3>
+<p>Für die Anmeldung werden technisch notwendige Cookies gesetzt:</p>
+<ul>
+  <li><code>vmkarte_session</code>: signierte Sitzung, Laufzeit 90 Tage,
+    HttpOnly, Secure, SameSite=Lax</li>
+  <li><code>vmkarte_oauth_state</code>: Schutz des OAuth-Ablaufs, Laufzeit
+    10 Minuten</li>
+</ul>
+<p>
+  Diese Cookies sind für den Betrieb erforderlich. Eine Einwilligung nach
+  § 25 Abs. 2 TDDDG ist daher nicht erforderlich. Es werden keine Marketing-
+  oder Analyse-Cookies gesetzt.
+</p>
+
+<h2>5. Lokale Speicherung im Browser</h2>
+<p>Die Karte speichert folgende Daten lokal auf deinem Gerät:</p>
+<ul>
+  <li>zuletzt geladene Kartendaten (Mitgliederdaten) in IndexedDB</li>
+  <li>Kartenausschnitt, Zoomstufe und Filter in IndexedDB</li>
+  <li>im Entwicklungsmodus einen Schalter in sessionStorage</li>
+  <li>App-Dateien (HTML, CSS, JavaScript, Icons) im Service-Worker-Cache,
+    damit die App offline starten kann; diese enthalten keine
+    Mitgliederdaten</li>
+</ul>
+<p>
+  Diese Daten verbleiben auf deinem Gerät und werden nicht an den Server
+  übertragen. Sie werden beim Abmelden oder bei einer abgelaufenen Sitzung
+  gelöscht. Du kannst sie jederzeit über die Browser-Einstellungen entfernen.
+</p>
+<p>
+  Rechtsgrundlage: § 25 Abs. 2 TDDDG bzw. Art. 6 Abs. 1 lit. b DSGVO, soweit
+  die Speicherung für die Nutzung erforderlich ist.
+</p>
+
+<h2>6. Mitgliederdaten und Kartendarstellung</h2>
+<p>
+  Die dargestellten Mitgliederdaten (Benutzername, freiwillig angegebene
+  Ortsangabe, Fahrzeugangaben, Link zum Forumprofil) werden über die
+  Forum-API gelesen. Aus der Ortsangabe werden über den Geocoding-Dienst
+  Nominatim (OpenStreetMap) Koordinaten ermittelt.
+</p>
+<p>
+  In der an die Karte ausgelieferten Datei werden keine Ortsangaben
+  gespeichert, sondern nur die ermittelten Koordinaten (einschließlich eines
+  daraus abgeleiteten Radius), der Benutzername, die Fahrzeugangaben, der
+  Profil-Link und ein Aktualisierungszeitpunkt. Die Rohdaten mit der Ortsangabe
+  werden auf dem Server nur für die Geocodierung zwischengespeichert:
+  Mitgliederdaten für 7 bis 14 Tage, Geocoding-Anfragen für 180 bis 365 Tage.
+  Danach werden sie erneuert bzw. gelöscht. Die Daten werden nur angemeldeten
+  Nutzern angezeigt und nicht öffentlich indexiert.
+</p>
+<p>
+  Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der
+  Darstellung der freiwillig im Forum veröffentlichten
+  Mitgliederinformationen).
+</p>
+<p>
+  Betroffene können die Angaben in ihrem Forumprofil ändern oder löschen oder
+  sich an den oben genannten Verantwortlichen wenden. Sie haben das Recht, der
+  Verarbeitung nach Art. 21 DSGVO zu widersprechen. Es besteht kein Anspruch
+  auf Aufnahme in die Karte.
+</p>
+
+<h2>7. Standortfunktion</h2>
+<p>
+  Wenn du die Standortfunktion nutzt, wird dein Standort ausschließlich nach
+  deinem Klick über die Browser-API ermittelt. Die Koordinaten werden nur lokal
+  im Browser verarbeitet, nicht an den Karten-Server übertragen und nicht
+  gespeichert.
+</p>
+<p>
+  Rechtsgrundlage: Art. 6 Abs. 1 lit. a DSGVO (Einwilligung). Du kannst die
+  Einwilligung jederzeit über die Browser-Einstellungen widerrufen.
+</p>
+
+<h2>8. OpenStreetMap-Kartenkacheln</h2>
+<p>
+  Zur Anzeige der Karte lädt dein Browser Kartenkacheln direkt von den Servern
+  der OpenStreetMap Foundation (OSMF). Dabei werden deine IP-Adresse, der
+  User-Agent und die angeforderte Kachel an die OSMF übertragen. Weitere
+  Informationen:
+  <a href="https://osmfoundation.org/wiki/Privacy_Policy" target="_blank" rel="noopener noreferrer">https://osmfoundation.org/wiki/Privacy_Policy</a>
+</p>
+<p>
+  Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (berechtigtes Interesse an der
+  Kartendarstellung).
+</p>
+
+<h2>9. Externe Links und Dienste</h2>
+<p>
+  Die Karte enthält Links zum Velomobilforum und zur Routenplanung mit BRouter.
+  Beim Anklicken werden Daten an den jeweiligen Anbieter übertragen; es gelten
+  deren Datenschutzbestimmungen. Für die Nutzung des geo:-Protokollhandlers
+  werden Koordinaten an brouter.de übergeben.
+</p>
+
+<h2>10. Empfänger und Drittlandübermittlung</h2>
+<p>
+  Empfänger der Daten sind die Contabo GmbH (Hosting, EU/Luxemburg), das
+  Velomobilforum (Anmeldung und Mitgliederdaten), die OpenStreetMap Foundation
+  (Kartenkacheln und Nominatim, Vereinigtes Königreich) und ggf. BRouter
+  (Routenplanung). Für das Vereinigte Königreich besteht ein
+  Angemessenheitsbeschluss der EU. Eine darüber hinausgehende Übermittlung in
+  Drittländer ist nicht vorgesehen.
+</p>
+
+<h2>11. Speicherdauer</h2>
+<ul>
+  <li>Sitzungs-Cookie: 90 Tage bzw. bis zur Abmeldung</li>
+  <li>OAuth-State-Cookie: 10 Minuten</li>
+  <li>Server-Logs: 30 Tage</li>
+  <li>Mitgliederdaten-Cache: 7 bis 14 Tage</li>
+  <li>Geocoding-Cache (Nominatim): 180 bis 365 Tage; negative Treffer
+    30 Tage</li>
+  <li>Ausgelieferte Kartendaten: nur Koordinaten, keine Ortsangaben</li>
+  <li>Lokale Browserdaten: bis zur Löschung durch dich oder beim Abmelden</li>
+</ul>
+
+<h2>12. Deine Rechte</h2>
+<p>Du hast nach der DSGVO folgende Rechte:</p>
+<ul>
+  <li>Auskunft (Art. 15)</li>
+  <li>Berichtigung (Art. 16)</li>
+  <li>Löschung (Art. 17)</li>
+  <li>Einschränkung der Verarbeitung (Art. 18)</li>
+  <li>Datenübertragbarkeit (Art. 20)</li>
+  <li>Widerspruch gegen die Verarbeitung (Art. 21)</li>
+  <li>Widerruf einer Einwilligung (Art. 7 Abs. 3)</li>
+</ul>
+<p>
+  Zur Ausübung genügt eine Nachricht an
+  <a href="mailto:{{.Imprint.Email}}">{{.Imprint.Email}}</a>.
+</p>
+
+<h2>13. Beschwerderecht</h2>
+<p>
+  Du hast das Recht, dich bei einer Datenschutz-Aufsichtsbehörde zu beschweren,
+  insbesondere in dem Mitgliedstaat deines gewöhnlichen Aufenthaltsorts, deines
+  Arbeitsplatzes oder des Orts des mutmaßlichen Verstoßes.
+</p>
+<p>Die für den Verantwortlichen zuständige Aufsichtsbehörde ist:</p>
+<p>
+  Bayerisches Landesamt für Datenschutzaufsicht (BayLDA)<br>
+  Promenade 18<br>
+  91522 Ansbach<br>
+  Deutschland<br>
+  Telefon: +49 981 180093-0<br>
+  E-Mail: <a href="mailto:poststelle@lda.bayern.de">poststelle@lda.bayern.de</a><br>
+  <a href="https://www.lda.bayern.de/" target="_blank" rel="noopener noreferrer">https://www.lda.bayern.de/</a>
+</p>
+
+<h2>14. Änderungen</h2>
+<p>
+  Diese Datenschutzerklärung kann angepasst werden, wenn sich die
+  Datenverarbeitung oder die rechtlichen Rahmenbedingungen ändern. Es gilt die
+  jeweils auf dieser Seite veröffentlichte Fassung.
+</p>

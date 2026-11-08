@@ -8,11 +8,20 @@
 		body { font: 16px/1.5 system-ui, sans-serif; margin: 24px; color: #222; }
 		h1 { font-size: 1.3em; }
 		a { color: #1565c0; }
+		.legal-links { margin-top: 2rem; display: flex; gap: 0.5rem; justify-content: center;
+			       font-size: 0.85rem; }
+		.legal-links a { color: inherit; }
+		[hidden] { display: none !important; }
 	</style>
 </head>
 <body>
 	<h1>Keine Verbindung</h1>
 	<p>Die Karte konnte offline nicht geladen werden. Bitte die Verbindung prüfen und erneut versuchen.</p>
 	<p><a href="/">Erneut versuchen</a></p>
+	<div id="legal_links" class="legal-links" hidden>
+		<a href="/datenschutz" data-legal="privacy" hidden>Datenschutz</a>
+		<a href="/impressum" data-legal="imprint" hidden>Impressum</a>
+	</div>
+	<script src="/js/legal-links.js"></script>
 </body>
 </html>

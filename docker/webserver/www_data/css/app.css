@@ -93,4 +93,17 @@ body { max-width: initial; margin: 0; padding: 0; }
 		  background: #c62828; color: #fff; font-size: 0.8em; font-weight: 600;
 		  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3); }
 
+/* legal links at the bottom center; hidden until configured */
+.legal-links	{ position: fixed; left: 50%; bottom: max(10px, env(safe-area-inset-bottom));
+		  transform: translateX(-50%); z-index: 1000; display: flex; gap: 0.5rem;
+		  align-items: center; padding: 2px 8px; border-radius: 4px;
+		  background: rgba(255, 255, 255, 0.88); color: #333;
+		  font-size: 0.72rem; line-height: 1.4; white-space: nowrap;
+		  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25); pointer-events: auto; }
+.legal-links a	{ color: inherit; text-decoration: underline; }
+.legal-links a:focus-visible	{ outline: 2px solid #1565c0; outline-offset: 2px; }
+@media (max-width: 640px) {
+	.legal-links	{ bottom: max(44px, env(safe-area-inset-bottom)); }
+}
+
 [hidden]	{ display: none !important; }
