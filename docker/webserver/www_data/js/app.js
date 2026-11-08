@@ -211,7 +211,7 @@ async function logout() {
 	catch (e) {
 		console.error(e);
 	}
-	window.location.assign('/login');
+	window.location.assign('/login?local=1&loggedout=1');
 }
 
 async function handleUnauthorized() {
