@@ -260,7 +260,7 @@ Danach im Browser:
 
 1. `https://karte-test.jfr-service.de` öffnen.
 2. Die Loginseite mit OAuth-Button und lokalem Fallback erscheint.
-3. Auf „Mit dem Velomobilforum anmelden“ klicken.
+3. Auf „Anmeldung über Velomobil-Forum“ klicken.
 4. Im Forum mit einem normalen Forumskonto anmelden und die Freigabe erteilen.
 5. Zurück auf der Karte prüfen, dass Karte und Datenstand laden.
 6. `https://karte-test.jfr-service.de/login?local=1` prüfen: Der lokale

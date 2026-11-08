@@ -54,7 +54,7 @@ var loginTemplate = template.Must(template.New("login").Parse(`<!doctype html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Anmeldung – Velomobilkarte</title>
+<title>Anmeldung – Karte Velomobil-Forum</title>
 <style>
 :root { color-scheme: light dark; }
 * { box-sizing: border-box; }
@@ -95,12 +95,12 @@ button:hover { background: #256428; }
 </head>
 <body>
 <main>
-<h1>Velomobilkarte</h1>
+<h1>Karte Velomobil-Forum</h1>
 {{if .Message}}<p class="message" role="status">{{.Message}}</p>{{end}}
 {{if .OAuthEnabled}}
-<p>Bitte mit dem Velomobilforum anmelden.</p>
-<p><a class="forum-login" href="{{.OAuthURL}}">Mit dem Velomobilforum anmelden</a></p>
-<p class="hint">Alternativ lokaler Fallback:</p>
+<p>Bitte über das Velomobil-Forum anmelden.</p>
+<p><a class="forum-login" href="{{.OAuthURL}}">Anmeldung über Velomobil-Forum</a></p>
+<p class="hint">Alternativ als Fallback über die bisherigen Zugangsdaten:</p>
 {{else}}
 <p>Bitte mit dem im Forum kommunizierten Zugang anmelden.</p>
 {{end}}

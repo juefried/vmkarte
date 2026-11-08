@@ -471,8 +471,20 @@ func TestLoginShowsPageWhenOAuthEnabledByDefault(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Mit dem Velomobilforum anmelden") {
+	if !strings.Contains(body, "<title>Anmeldung – Karte Velomobil-Forum</title>") {
+		t.Fatal("login page title is missing")
+	}
+	if !strings.Contains(body, "<h1>Karte Velomobil-Forum</h1>") {
+		t.Fatal("login heading is missing")
+	}
+	if !strings.Contains(body, "Bitte über das Velomobil-Forum anmelden.") {
+		t.Fatal("OAuth login hint is missing")
+	}
+	if !strings.Contains(body, "Anmeldung über Velomobil-Forum") {
 		t.Fatal("OAuth login button is missing")
+	}
+	if !strings.Contains(body, "Alternativ als Fallback über die bisherigen Zugangsdaten:") {
+		t.Fatal("local fallback hint is missing")
 	}
 	if !strings.Contains(body, `<form method="post" action="/login">`) {
 		t.Fatal("local login form is missing")
@@ -490,7 +502,7 @@ func TestLoginLocalFallbackShowsOAuthButton(t *testing.T) {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
 	body := rec.Body.String()
-	if !strings.Contains(body, "Mit dem Velomobilforum anmelden") {
+	if !strings.Contains(body, "Anmeldung über Velomobil-Forum") {
 		t.Fatal("OAuth login button is missing")
 	}
 	if !strings.Contains(body, `href="/auth/forum/login?next=%2Fkarte.html"`) {
@@ -515,7 +527,7 @@ func TestLoginShowsFallbackOnOAuthError(t *testing.T) {
 	if !strings.Contains(body, "Anmeldung über das Velomobilforum derzeit nicht möglich.") {
 		t.Fatal("OAuth error message is missing")
 	}
-	if !strings.Contains(body, "Mit dem Velomobilforum anmelden") {
+	if !strings.Contains(body, "Anmeldung über Velomobil-Forum") {
 		t.Fatal("OAuth retry button is missing")
 	}
 }
@@ -530,7 +542,7 @@ func TestOAuthDisabledKeepsLocalLogin(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
 	}
-	if strings.Contains(rec.Body.String(), "Mit dem Velomobilforum anmelden") {
+	if strings.Contains(rec.Body.String(), "Anmeldung über Velomobil-Forum") {
 		t.Fatal("OAuth login button is present without OAuth configuration")
 	}
 }

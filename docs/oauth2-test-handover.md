@@ -55,7 +55,7 @@ Der Produktivbetrieb läuft unter `karte.jfr-service.de` und bleibt unberührt.
 
 | Datei | Änderung |
 |---|---|
-| `docker/auth/main.go` | OAuth2-Flow, State-Cookie, Token-Tausch, `/api/me/`, Logout-Meldung, `OAUTH_AUTO_REDIRECT` |
+| `docker/auth/main.go` | OAuth2-Flow, State-Cookie, Token-Tausch, `/api/me/`, Logout-Meldung, `OAUTH_AUTO_REDIRECT`, Login-Texte („Karte Velomobil-Forum“, „Anmeldung über Velomobil-Forum“, Fallback-Hinweis) |
 | `docker/auth/main_test.go` | Tests für den OAuth2-Flow |
 | `docker/webserver/default.conf` | Routen `/auth/forum/login`, `/auth/forum/callback`; `$is_args$args` bei Auth-Routen |
 | `docker/webserver/www_data/js/app.js` | Logout-Ziel `/login?local=1&loggedout=1` |
@@ -193,6 +193,8 @@ Danach prüfen:
 - `https://karte.jfr-service.de` zeigt bei `OAUTH_AUTO_REDIRECT=false` die
   Loginseite.
 - OAuth-Login führt zurück zur Karte.
+- Die Loginseite zeigt „Karte Velomobil-Forum“, „Anmeldung über
+  Velomobil-Forum“ und den Fallback-Hinweis.
 - Logout führt auf die Loginseite mit „Du wurdest abgemeldet.“.
 - Lokaler Fallback funktioniert weiterhin.
 - Geschützte Daten ohne Sitzung liefern `401`.

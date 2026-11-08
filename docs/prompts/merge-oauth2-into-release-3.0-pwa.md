@@ -18,6 +18,9 @@ Weiterentwicklungen im Release-Branch zu verlieren.
 ## Ziel
 
 - OAuth2-Login im Auth-Service.
+- Login-Maske mit den Texten „Karte Velomobil-Forum“,
+  „Anmeldung über Velomobil-Forum“ und
+  „Alternativ als Fallback über die bisherigen Zugangsdaten:“.
 - nginx-Routen für `/auth/forum/login` und `/auth/forum/callback`.
 - Query-String-Erhalt bei Auth-Routen (`$is_args$args`).
 - Logout-Ziel `/login?local=1&loggedout=1` in `app.js`.
@@ -180,6 +183,9 @@ Zusätzlich prüfen:
 
 - `docker/webserver/default.conf` enthält die OAuth-Routen und
   `$is_args$args`.
+- `docker/auth/main.go` enthält die Login-Texte „Karte Velomobil-Forum“,
+  „Anmeldung über Velomobil-Forum“ und
+  „Alternativ als Fallback über die bisherigen Zugangsdaten:“.
 - `docker/auth/main.go` enthält keine Testdomain und keine Test-Secrets.
 - `app.js` enthält weiterhin die Release-Suchfunktionen.
 - Keine Secrets oder Test-`.env`-Werte wurden übernommen.
