@@ -48,13 +48,16 @@ services:
       COOKIE_NAME: vmkarte_test_session
       COOKIE_SECURE: ${COOKIE_SECURE:-true}
       OAUTH_CLIENT_ID: ${OAUTH_CLIENT_ID:-}
-      OAUTH_CLIENT_SECRET: ${OAUTH_CLIENT_SECRET:-}
+      OAUTH_CLIENT_SECRET_FILE: /run/secrets/oauth_client_secret
       OAUTH_AUTHORIZE_URL: ${OAUTH_AUTHORIZE_URL:-}
       OAUTH_TOKEN_URL: ${OAUTH_TOKEN_URL:-}
+      OAUTH_USERINFO_URL: ${OAUTH_USERINFO_URL:-}
+      OAUTH_SCOPE: ${OAUTH_SCOPE:-user:read}
       OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-}
     secrets:
       - htpasswd
       - session_signing_key
+      - oauth_client_secret
     read_only: true
     tmpfs:
       - /tmp
@@ -81,3 +84,5 @@ secrets:
     file: ./config/.htpasswd
   session_signing_key:
     file: ./config/session_signing_key
+  oauth_client_secret:
+    file: ./config/oauth_client_secret

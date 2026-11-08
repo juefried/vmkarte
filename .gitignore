@@ -176,6 +176,7 @@ cython_debug/
 !/config/config.json.sample
 !/config/cache_config.json.sample
 !/config/session_signing_key.sample
+!/config/oauth_client_secret.sample
 
 # Local session logs
 /session-*.md
