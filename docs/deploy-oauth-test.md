@@ -175,6 +175,7 @@ openssl rand -base64 48 > config/session_signing_key
 # Client-ID in .env eintragen und OAuth-Endpunkte prüfen.
 # Client-Secret separat ablegen (nano oder vi):
 nano config/oauth_client_secret
+# In dieser Datei steht nur der Wert, nicht "OAUTH_CLIENT_SECRET=...".
 
 # Passwort-Hash für velonaut interaktiv erzeugen
 docker run --rm -it httpd:2.4-alpine htpasswd -nB -C 12 velonaut
@@ -330,6 +331,8 @@ docker compose logs --tail=20 auth
 - Prüfen, ob `OAUTH_CLIENT_ID` in `.env` gesetzt ist.
 - Prüfen, ob `config/oauth_client_secret` existiert, `10001:10001` gehört und
   `0600` hat.
+- Prüfen, ob in `config/oauth_client_secret` nur der Secret-Wert steht. Nicht
+  `OAUTH_CLIENT_SECRET=...`, keine Anführungszeichen und keine Kommentare.
 - Prüfen, ob die Redirect-URI exakt
   `https://karte-test.jfr-service.de/auth/forum/callback` lautet.
 - Prüfen, ob der Scope `user:read` freigegeben ist.
