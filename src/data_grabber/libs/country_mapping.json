@@ -27,7 +27,8 @@
     "Sankt Vith",
     "Belgium"
   ],
-  "bu": [
+  "bg": [
+    "BG",
     "Bulgarien",
     "Bulgaria",
     "Sofia"
@@ -58,6 +59,15 @@
     "Luzern",
     "Lausanne",
     "Winterthur"
+  ],
+  "cz": [
+    "CZ",
+    "Tschechien",
+    "Tschechische Republik",
+    "Czechia",
+    "Czech Republic",
+    "Česko",
+    "Česká republika"
   ],
   "de": [
     "D",
@@ -109,11 +119,28 @@
     "united kingdom",
     "London"
   ],
+  "gr": [
+    "GR",
+    "Griechenland",
+    "Greece",
+    "Hellas"
+  ],
+  "hr": [
+    "HR",
+    "Kroatien",
+    "Croatia",
+    "Hrvatska"
+  ],
   "hu": [
     "HUN",
     "Ungarn",
     "Magyarország",
     "Budapest"
+  ],
+  "ie": [
+    "IE",
+    "Irland",
+    "Ireland"
   ],
   "it": [
     "I",
@@ -142,14 +169,20 @@
     "Tokyo",
     "Yokohama"
   ],
-  "kr": [
-    "Kroatien",
-    "Croatia"
+  "lt": [
+    "LT",
+    "Litauen",
+    "Lithuania"
   ],
   "lu": [
     "Luxemburg",
     "Luxembourg",
     "LUX"
+  ],
+  "lv": [
+    "LV",
+    "Lettland",
+    "Latvia"
   ],
   "nl": [
     "NL",
@@ -178,9 +211,23 @@
     "Norway",
     "Oslo"
   ],
+  "nz": [
+    "NZ",
+    "Neuseeland",
+    "New Zealand"
+  ],
   "pl": [
     "Polen",
     "Poland"
+  ],
+  "pt": [
+    "PT",
+    "Portugal"
+  ],
+  "ro": [
+    "RO",
+    "Rumänien",
+    "Romania"
   ],
   "ru": [
     "Russian Federation",

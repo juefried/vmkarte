@@ -371,6 +371,31 @@ class LocationMappingTests(unittest.TestCase):
     def test_stockholm_is_recognized_as_sweden(self):
         self.assertEqual(analyze_location_for_country('stockholm'), 'se')
 
+    def test_additional_country_codes_are_recognized(self):
+        cases = {
+            '50781, cz': 'cz',
+            'hohenfurth, cz': 'cz',
+            'lisboa, pt': 'pt',
+            'kroatien': 'hr',
+            'hrvatska': 'hr',
+            'bulgarien': 'bg',
+            'griechenland': 'gr',
+            'irland': 'ie',
+            'litauen': 'lt',
+            'lettland': 'lv',
+            'new zealand': 'nz',
+            'rumänien': 'ro',
+        }
+        for location, expected in cases.items():
+            with self.subTest(location=location):
+                self.assertEqual(
+                    analyze_location_for_country(location),
+                    expected,
+                )
+
+    def test_czech_country_code_limits_postcode_candidates(self):
+        self.assertEqual(country_code_candidates('50781', 'cz'), ['cz'])
+
 
 class PrecisionRejectionTests(unittest.TestCase):
     def test_rejects_marker_outside_classic_radius(self):
