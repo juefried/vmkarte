@@ -39,6 +39,7 @@ var error_circle;
 var layer_circles;
 var layer_offset_lines;
 var duplicate_marker_groups = [];
+var last_duplicate_offset_zoom = null;
 var form_select;
 var form_search;
 var search_suggestions;
@@ -737,11 +738,38 @@ function fit_search_results(results) {
 	map.setView(center, targetZoom, { animate: false });
 }
 
-function update_duplicate_marker_offsets() {
-	if (!map || !markers || duplicate_marker_groups.length === 0)
+function unspiderfy_markers_immediately() {
+	if (map && markers && map.hasLayer(markers) && markers._spiderfied)
+		markers._noanimationUnspiderfy();
+}
+
+function schedule_duplicate_marker_offset_update() {
+	if (!map || !markers || !map.hasLayer(markers))
 		return;
 
 	const zoom = map.getZoom();
+	if (zoom === last_duplicate_offset_zoom)
+		return;
+
+	const group = markers;
+	setTimeout(() => {
+		if (markers !== group || !map.hasLayer(group)
+			|| map.getZoom() !== zoom || zoom === last_duplicate_offset_zoom)
+			return;
+		update_duplicate_marker_offsets();
+	}, 0);
+}
+
+function update_duplicate_marker_offsets() {
+	if (!map || !markers || !map.hasLayer(markers))
+		return;
+
+	const zoom = map.getZoom();
+	last_duplicate_offset_zoom = zoom;
+
+	if (duplicate_marker_groups.length === 0)
+		return;
+
 	const updates = [];
 
 	duplicate_marker_groups.forEach(group => {
@@ -830,6 +858,7 @@ function add_vmforum_members({ autoFit = false } = {}) {
 	layer_circles.clearLayers();
 	layer_offset_lines.clearLayers();
 	duplicate_marker_groups = [];
+	last_duplicate_offset_zoom = null;
 
 	// Get URL parameters.
 	const urlparams = new URL(window.location).searchParams;
@@ -858,7 +887,13 @@ function add_vmforum_members({ autoFit = false } = {}) {
 			})
 
 			// When hovering with the mouse, show all markers of the cluster, but remove their tabindex.
-			.on('clustermouseover', c => { c.layer.spiderfy(); remove_tabindex(); });
+			.on('clustermouseover', c => { c.layer.spiderfy(); remove_tabindex(); })
+
+			// Unspiderfy before zooming; otherwise markers split by the zoom can be removed again.
+			.on('clusterclick', unspiderfy_markers_immediately)
+
+			// Recalculate offsets only after the clustering animations have finished.
+			.on('animationend', schedule_duplicate_marker_offset_update);
 
 	// Create markers from the members array.
 	const filtered_members = filterMembers(members, {
@@ -1225,7 +1260,7 @@ async function create_map() {
 	if (location_button)
 		L.DomEvent.on(location_button, 'click', request_location);
 	map.on('moveend zoomend', schedule_map_state_save);
-	map.on('zoomend', update_duplicate_marker_offsets);
+	map.on('zoomstart', unspiderfy_markers_immediately);
 
 	if (cache && cache.members.length > 0) {
 		members = cache.members;

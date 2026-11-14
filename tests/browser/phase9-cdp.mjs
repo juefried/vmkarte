@@ -38,6 +38,11 @@ const duplicateMembers = [
 	...members,
 	{ id: '4', name: 'Delta', lat: 50.0, lon: 11.0, vm: '', lr: '', tr: '', other: '#offsettest', profile_updated_at: '2026-11-01' },
 	{ id: '5', name: 'Epsilon', lat: 50.0, lon: 11.0, vm: '', lr: '', tr: '', other: '#offsettest', profile_updated_at: '2026-11-01' },
+	{ id: '6', name: 'Cluster A1', lat: 49.0, lon: 10.0, vm: '', lr: '', tr: '', other: '#clustertest', profile_updated_at: '2026-11-01' },
+	{ id: '7', name: 'Cluster A2', lat: 49.0, lon: 10.0, vm: '', lr: '', tr: '', other: '#clustertest', profile_updated_at: '2026-11-01' },
+	{ id: '8', name: 'Cluster A3', lat: 49.0, lon: 10.0, vm: '', lr: '', tr: '', other: '#clustertest', profile_updated_at: '2026-11-01' },
+	{ id: '9', name: 'Cluster B1', lat: 49.1, lon: 10.1, vm: '', lr: '', tr: '', other: '#clustertest', profile_updated_at: '2026-11-01' },
+	{ id: '10', name: 'Cluster B2', lat: 49.108, lon: 10.1, vm: '', lr: '', tr: '', other: '#clustertest', profile_updated_at: '2026-11-01' },
 ];
 const dataStatus = {
 	runStartedAt: '2026-11-06T03:33:00+01:00',
@@ -326,6 +331,17 @@ async function main() {
 		await waitFor(`document.querySelectorAll('.leaflet-marker-icon').length > 0`, 'member markers');
 	}
 
+	async function tileZoom() {
+		return evaluate(`(() => {
+			for (const image of document.querySelectorAll('img.leaflet-tile')) {
+				const match = image.src.match(/\\/(\\d+)\\/\\d+\\/\\d+\\.png(?:\\?|$)/);
+				if (match)
+					return Number(match[1]);
+			}
+			return null;
+		})()`);
+	}
+
 	async function openMarkerPopup() {
 		await waitFor(`document.querySelectorAll('.leaflet-marker-icon').length > 0`, 'marker icons');
 		for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -477,9 +493,9 @@ async function main() {
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache');
 	assert.equal(await cacheContains('/app-version.json'), false);
 	const serviceWorkerSource = await (await fetch(ORIGIN + '/service-worker.js')).text();
-	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v20';"));
+	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v21';"));
 	await waitFor(`navigator.serviceWorker.getRegistration().then(registration => Boolean(registration && registration.active && !registration.installing && !registration.waiting))`, 'service worker installed');
-	check.pass('Service Worker installiert, Cache ist v20 und app-version.json bleibt network-only');
+	check.pass('Service Worker installiert, Cache ist v21 und app-version.json bleibt network-only');
 
 	// 3. ?dev=1 disables the service worker, removes caches and skips the version check.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };
@@ -573,6 +589,39 @@ async function main() {
 		/^geo:50(\.0+)?,11(\.0+)?$/,
 	);
 	check.pass('Identische Koordinaten werden getrennt angezeigt; Linien und geo-Link bleiben exakt');
+
+	// 9. A cluster click must not hide unrelated markers when duplicate offsets are updated.
+	await navigate('/karte.html?dev=1&other=%23clustertest');
+	await waitForMap();
+	const clusterZoom = 10;
+	for (let attempt = 0; attempt < 10; attempt += 1) {
+		const zoom = await tileZoom();
+		if (zoom === clusterZoom)
+			break;
+		const control = zoom > clusterZoom ? '.leaflet-control-zoom-out' : '.leaflet-control-zoom-in';
+		await evaluate(`document.querySelector(${JSON.stringify(control)}).click()`);
+		await delay(700);
+	}
+	assert.equal(await tileZoom(), clusterZoom);
+	await waitFor(`Array.from(document.querySelectorAll('.marker-cluster')).some(cluster => cluster.textContent.trim() === '2')`, 'two-pin cluster');
+	await evaluate(`Array.from(document.querySelectorAll('.marker-cluster')).find(cluster => cluster.textContent.trim() === '2').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
+	await delay(500);
+	await evaluate(`Array.from(document.querySelectorAll('.marker-cluster')).find(cluster => cluster.textContent.trim() === '2').click()`);
+	await delay(1200);
+	assert.ok(await evaluate(`document.querySelectorAll('.leaflet-marker-icon').length >= 2`));
+
+	await evaluate(`document.querySelector('.leaflet-control-zoom-out').click()`);
+	await delay(700);
+	await evaluate(`document.querySelector('.leaflet-control-zoom-out').click()`);
+	await delay(700);
+	assert.equal(await tileZoom(), clusterZoom);
+	await waitFor(`Array.from(document.querySelectorAll('.marker-cluster')).some(cluster => cluster.textContent.trim() === '2')`, 'two-pin cluster after zoom out');
+	await evaluate(`Array.from(document.querySelectorAll('.marker-cluster')).find(cluster => cluster.textContent.trim() === '2').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
+	await delay(500);
+	await evaluate(`document.querySelector('.leaflet-control-zoom-in').click()`);
+	await delay(1200);
+	assert.ok(await evaluate(`document.querySelectorAll('.leaflet-marker-icon').length >= 2`));
+	check.pass('Cluster-Klick und Zoom nach Hover-Spiderfy lassen unabhängige Pins sichtbar');
 
 	console.log(`\n${check.count} browser checks passed.`);
 }

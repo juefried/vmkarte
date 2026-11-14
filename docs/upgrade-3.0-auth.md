@@ -469,7 +469,8 @@ Build-Datum automatisch:
 docker compose build web
 ```
 
-Optional lassen sich beide Werte überschreiben:
+Für das normale Deployment ist keine zusätzliche Variable nötig. Nur für
+Sonderfälle lassen sich beide Werte überschreiben:
 
 ```bash
 APP_VERSION=$(git describe --tags --always --dirty) \

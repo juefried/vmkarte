@@ -353,7 +353,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - Hashtags werden aus dem Freitextfeld `other` erkannt: `#`, danach ein Unicode-Buchstabe und mindestens ein weiteres Unicode-Buchstaben-, Ziffern- oder Unterstrichzeichen. Umlaute, Akzente und nicht-lateinische Buchstaben sind erlaubt.
 - Der Stand wird als Datum (`TT.MM.JJJJ`) aus `profile_updated_at` angezeigt; der exakte Zeitstempel steht im Tooltip. Fehlt der Wert, erscheint `Stand: unbekannt`.
 - Nutzt `radius` beim Hover, um die Unsicherheit der Ortsauflösung als Kreis darzustellen.
-- Pins mit exakt identischer Koordinate werden in der Anzeige auf einem Ring bzw. einer Spirale um den echten Punkt verteilt. Eine dünne Linie verbindet jeden verschobenen Pin mit der exakten Position. Der Versatz ist geografisch auf 100 m begrenzt und wird bei kleinem Zoom unsichtbar, sodass das Clustering erhalten bleibt. Popup, `geo:`-Link, Hover-Radius und Suche verwenden weiterhin die unveränderten Originalkoordinaten.
+- Pins mit exakt identischer Koordinate werden in der Anzeige auf einem Ring bzw. einer Spirale um den echten Punkt verteilt. Eine dünne Linie verbindet jeden verschobenen Pin mit der exakten Position. Der Versatz ist geografisch auf 100 m begrenzt und wird bei kleinem Zoom unsichtbar, sodass das Clustering erhalten bleibt. Die Positionen werden erst nach dem Clustering-`animationend` neu berechnet. Beim Hover gespiderfyte Cluster werden vor einem Zoom sofort wieder zusammengeführt, damit Cluster-Klicks keine Pins entfernen. Popup, `geo:`-Link, Hover-Radius und Suche verwenden weiterhin die unveränderten Originalkoordinaten.
 - Registriert einen same-origin `geo:`-Protokollhandler auf `/geo-handler?l=%s`. `geo-handler.html` und `js/geo-handler.js` leiten gültige `geo:lat,lon`-Werte zu BRouter weiter; `geo-handler.php` bleibt als Legacy-Datei liegen.
 - Fehler beim Datenabruf werden verständlich angezeigt. Mit lokalem Stand bleibt die Karte bedienbar; ohne lokalen Stand erscheint eine Meldung mit „Erneut versuchen“. Meldungen blenden automatisch aus und lassen sich schließen.
 
@@ -435,10 +435,12 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 
 ### 5.10 App-Version und Entwicklungsmodus
 
-- `docker/webserver/www_data/VERSION` ist die gepflegte Versionsquelle
-  (aktuell `3.0.2`).
+- `docker/webserver/www_data/VERSION` ist die gepflegte, git-versionierte
+  Versionsquelle (aktuell `3.0.5`).
 - Das Dockerfile erzeugt beim Build daraus `app-version.json` und
-  `js/version.js`; `APP_VERSION` und `BUILD_DATE` können als Build-Args
+  `js/version.js`. Ein normales Deployment benötigt daher keine
+  `APP_VERSION`-Variable auf der Kommandozeile. `APP_VERSION` und
+  `BUILD_DATE` können für Sonderfälle weiterhin als Build-Args
   überschrieben werden. Ohne Docker gelten die lokalen Dev-Fallbacks `dev`
   und `null`.
 - `js/app.js` vergleicht `APP_VERSION` exakt mit der Version aus
@@ -1444,10 +1446,11 @@ Die früheren Nominatim-Korrekturen (User-Agent, Timeout, Negativ-Cache) bleiben
 ### 14.11.2026 (Branch `feature/pin-offset-duplicates`)
 
 - `docker/webserver/www_data/js/marker-offset.js`: neues Modul für Duplikatgruppen, Ring-/Spiralpositionen, geografische Versatzbegrenzung und Web-Mercator-Offsets.
-- `docker/webserver/www_data/js/app.js`: Pins mit identischer Koordinate werden in der Anzeige versetzt, mit dünnen Linien zur exakten Position verbunden und bei Zoomänderungen neu berechnet. Originalkoordinaten bleiben für Popups, `geo:`-Links, Hover-Radius und Suche maßgeblich.
-- `docker/webserver/www_data/service-worker.js`: Cache auf `vmkarte-shell-v20` erhöht, `js/marker-offset.js` in die App-Shell aufgenommen.
+- `docker/webserver/www_data/js/app.js`: Pins mit identischer Koordinate werden in der Anzeige versetzt, mit dünnen Linien zur exakten Position verbunden und bei Zoomänderungen neu berechnet. Die Neuberechnung erfolgt erst nach dem Clustering-`animationend`. Beim Hover gespiderfyte Cluster werden vor einem Zoom sofort wieder zusammengeführt, damit ein Cluster-Klick die MarkerClusterGroup nicht in einem inkonsistenten Zwischenzustand verändert. Originalkoordinaten bleiben für Popups, `geo:`-Links, Hover-Radius und Suche maßgeblich.
+- `docker/webserver/www_data/service-worker.js`: Cache auf `vmkarte-shell-v21` erhöht, `js/marker-offset.js` in die App-Shell aufgenommen.
+- `docker/webserver/www_data/VERSION`: App-Version auf `3.0.5` erhöht. Der Docker-Build liest sie direkt; eine `APP_VERSION`-Variable auf der Kommandozeile ist nicht nötig.
 - `tests/frontend/marker-offset.test.js`: Unit-Tests für Gruppierung, Ring-/Spiralverteilung, Zoom-Skalierung und Mercator-Offsets.
-- `tests/browser/phase9-cdp.mjs`: Cache-Prüfung auf `v20` aktualisiert.
+- `tests/browser/phase9-cdp.mjs`: Cache-Prüfung auf `v21` aktualisiert und ein Regressionstest für Cluster-Klicks nach Hover-Spiderfy ergänzt.
 - `DOKUMENTATION.md`: Frontend-Verhalten und Dateiliste aktualisiert.
 
 ### 08.11.2026 (Branch `fix/service-worker-cache-v18`)
