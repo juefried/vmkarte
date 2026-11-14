@@ -1,4 +1,4 @@
-const CACHE_NAME = 'vmkarte-shell-v19';
+const CACHE_NAME = 'vmkarte-shell-v24';
 
 const SHELL_URLS = [
 	'/',
@@ -14,6 +14,7 @@ const SHELL_URLS = [
 	'/screenshots/screenshot-narrow.png',
 	'/css/app.css',
 	'/js/app.js',
+	'/js/cluster-auto-spiderfy.js',
 	'/js/data.js',
 	'/js/hashtags.js',
 	'/js/storage.js',

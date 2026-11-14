@@ -34,6 +34,27 @@ const members = [
 	{ id: '2', name: 'Beta', lat: 50.1, lon: 11.1, vm: '', lr: 'Liegerad', tr: '', other: '', profile_updated_at: '2026-11-01' },
 	{ id: '3', name: 'Gamma', lat: 50.2, lon: 11.2, vm: 'Quest', lr: '', tr: '', other: '#berlin', profile_updated_at: '2026-11-01' },
 ];
+
+function fixtureMembers(count, lat, lon, tag, prefix) {
+	return Array.from({ length: count }, (_, index) => ({
+		id: `${prefix}${index + 1}`,
+		name: `${prefix} ${index + 1}`,
+		lat,
+		lon,
+		vm: '',
+		lr: '',
+		tr: '',
+		other: tag,
+		profile_updated_at: '2026-11-14',
+	}));
+}
+
+const singleClusterMembers = fixtureMembers(4, 50.0, 11.0, '#single', 'Single');
+const largeClusterMembers = fixtureMembers(12, 50.0, 11.0, '#large', 'Large');
+const multipleClusterMembers = [
+	...fixtureMembers(3, 50.0, 11.0, '#multi', 'MultiA'),
+	...fixtureMembers(3, 52.0, 13.0, '#multi', 'MultiB'),
+];
 const dataStatus = {
 	runStartedAt: '2026-11-06T03:33:00+01:00',
 	generatedAt: '2026-11-06T03:41:12+01:00',
@@ -313,6 +334,43 @@ async function main() {
 		await waitFor(`document.querySelectorAll('.leaflet-marker-icon').length > 0`, 'member markers');
 	}
 
+	async function openFixture(fixture, query) {
+		members.splice(0, members.length, ...fixture);
+		dataStatus.memberCount = members.length;
+		await navigate('/offline.html');
+		await page.send('Storage.clearDataForOrigin', {
+			origin: ORIGIN,
+			storageTypes: 'indexeddb,cache_storage',
+		});
+		await navigate('/karte.html?dev=1&' + query);
+		await waitForMap();
+	}
+
+	async function clickMapAt(x, y) {
+		await page.send('Input.dispatchMouseEvent', {
+			type: 'mouseMoved',
+			x,
+			y,
+			button: 'none',
+		});
+		await page.send('Input.dispatchMouseEvent', {
+			type: 'mousePressed',
+			x,
+			y,
+			button: 'left',
+			buttons: 1,
+			clickCount: 1,
+		});
+		await page.send('Input.dispatchMouseEvent', {
+			type: 'mouseReleased',
+			x,
+			y,
+			button: 'left',
+			buttons: 0,
+			clickCount: 1,
+		});
+	}
+
 	async function openMarkerPopup() {
 		await waitFor(`document.querySelectorAll('.leaflet-marker-icon').length > 0`, 'marker icons');
 		for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -461,11 +519,12 @@ async function main() {
 
 	// 2. Service worker installs and does not cache app-version.json.
 	await waitFor(`navigator.serviceWorker.getRegistration().then(registration => Boolean(registration))`, 'service worker registration');
+	await waitFor(`navigator.serviceWorker.ready.then(registration => Boolean(registration.active))`, 'active service worker');
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache');
 	assert.equal(await cacheContains('/app-version.json'), false);
 	const serviceWorkerSource = await (await fetch(ORIGIN + '/service-worker.js')).text();
-	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v18';"));
-	check.pass('Service Worker installiert, Cache ist v18 und app-version.json bleibt network-only');
+	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v24';"));
+	check.pass('Service Worker installiert, Cache ist v24 und app-version.json bleibt network-only');
 
 	// 3. ?dev=1 disables the service worker, removes caches and skips the version check.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };
@@ -474,6 +533,13 @@ async function main() {
 	await waitFor(`document.getElementById('data_message').textContent.includes('Entwicklungsmodus aktiv')`, 'dev mode message');
 	assert.equal(await evaluate(`document.getElementById('data_message').textContent.includes('Eine neue Version ist verfügbar.')`), false);
 	await waitFor(`navigator.serviceWorker.getRegistrations().then(registrations => registrations.length === 0)`, 'service workers unregistered');
+	await delay(300);
+	await evaluate(`(async () => {
+		for (const key of await caches.keys()) {
+			if (key.startsWith('vmkarte-'))
+				await caches.delete(key);
+		}
+	})()`);
 	await waitFor(`caches.keys().then(keys => keys.filter(key => key.startsWith('vmkarte-')).length === 0)`, 'vmkarte caches deleted');
 	check.pass('?dev=1 meldet Service Worker ab, löscht Caches und überspringt die Versionsprüfung');
 
@@ -539,6 +605,48 @@ async function main() {
 	assert.equal(await evaluate(`document.querySelector('.leaflet-popup-content a[href^="karte.html?other="]').getAttribute('target')`), null);
 	assert.equal(await evaluate(`document.querySelector('.leaflet-popup-content a[href^="geo:"]').getAttribute('target')`), null);
 	check.pass('Forenprofil-Links öffnen in einem neuen Tab; Hashtag- und geo-Links bleiben im selben Tab');
+
+	// 8. A single small cluster opens automatically; a map click closes it.
+	await openFixture(singleClusterMembers, 'other=%23single');
+	await waitFor(`document.querySelectorAll('img.leaflet-marker-icon').length >= 4`, 'single small cluster spiderfied');
+	await waitFor(`!document.querySelector('.leaflet-map-pane').classList.contains('leaflet-cluster-anim')`, 'spiderfy animation finished');
+	assert.equal(await evaluate(`document.querySelectorAll('.marker-cluster').length`), 1);
+	check.pass('Ein einzelner Cluster mit höchstens 10 Pins öffnet automatisch');
+
+	const mapClickPoint = await evaluate(`(() => {
+		const rect = document.querySelector('.leaflet-container').getBoundingClientRect();
+		return { x: rect.left + 30, y: rect.top + rect.height / 2 };
+	})()`);
+	await clickMapAt(mapClickPoint.x, mapClickPoint.y);
+	await waitFor(`document.querySelectorAll('img.leaflet-marker-icon').length === 0`, 'single cluster closed after map click');
+	await delay(500);
+	assert.equal(await evaluate(`document.querySelectorAll('img.leaflet-marker-icon').length`), 0);
+	check.pass('Kartenklick schließt die Schnecke und öffnet sie nicht sofort wieder');
+
+	await evaluate(`document.querySelector('.leaflet-control-zoom-out').click()`);
+	await waitFor(`document.querySelectorAll('img.leaflet-marker-icon').length >= 4`, 'single small cluster reopens after zoom');
+	check.pass('Nach einem Zoom wird die Automatik erneut ausgewertet');
+
+	// 9. A large cluster stays closed on hover and opens on click.
+	await openFixture(largeClusterMembers, 'other=%23large');
+	await waitFor(`!document.querySelector('.leaflet-map-pane').classList.contains('leaflet-cluster-anim')`, 'large cluster animation finished');
+	assert.equal(await evaluate(`document.querySelectorAll('img.leaflet-marker-icon').length`), 0);
+	assert.equal(await evaluate(`document.querySelectorAll('.marker-cluster').length`), 1);
+	await evaluate(`document.querySelector('.marker-cluster').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
+	await delay(400);
+	assert.equal(await evaluate(`document.querySelectorAll('img.leaflet-marker-icon').length`), 0);
+	await evaluate(`document.querySelector('.marker-cluster').click()`);
+	await waitFor(`document.querySelectorAll('img.leaflet-marker-icon').length >= 12`, 'large cluster opened by click');
+	check.pass('Große Cluster bleiben bei Hover zu und öffnen per Klick');
+
+	// 10. Multiple visible clusters are not opened automatically.
+	await openFixture(multipleClusterMembers, 'other=%23multi');
+	await waitFor(`!document.querySelector('.leaflet-map-pane').classList.contains('leaflet-cluster-anim')`, 'multiple cluster animation finished');
+	assert.equal(await evaluate(`document.querySelectorAll('.marker-cluster').length`), 2);
+	assert.equal(await evaluate(`document.querySelectorAll('img.leaflet-marker-icon').length`), 0);
+	await evaluate(`document.querySelector('.marker-cluster').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
+	await waitFor(`document.querySelectorAll('img.leaflet-marker-icon').length >= 3`, 'small cluster opened by hover');
+	check.pass('Bei mehreren sichtbaren Clustern öffnet erst Hover/Klick genau einen Cluster');
 
 	console.log(`\n${check.count} browser checks passed.`);
 }

@@ -18,6 +18,11 @@ import {
 	shouldAdjustSearchView,
 } from './search-fit.js';
 import { describeGeolocationError, GEOLOCATION_OPTIONS } from './location.js';
+import {
+	AUTO_SPIDERFY_EDGE_MARGIN_PX,
+	AUTO_SPIDERFY_MAX_PINS,
+	shouldAutoSpiderfy,
+} from './cluster-auto-spiderfy.js';
 import { APP_VERSION } from './version.js';
 import { DEV_MODE_KEY, parseAppVersion, isNewVersion, resolveDevMode } from './version-check.js';
 
@@ -37,6 +42,8 @@ var all_search_suggestions = [];
 var active_search_suggestion = -1;
 var search_suggestion_close_timer;
 var member_update_timer;
+var auto_spiderfy_timer;
+var auto_spiderfy_retries = 0;
 var map_state_save_timer;
 var map_state_save_promise = null;
 var map_state_save_suspended = false;
@@ -640,6 +647,75 @@ function remove_tabindex() {
 		.forEach(v => v.tabIndex = -1);
 }
 
+function markers_are_idle() {
+	return markers
+		&& !markers._inZoomAnimation
+		&& !(markers._queue && markers._queue.length);
+}
+
+function visible_clusters() {
+	const result = [];
+	if (!map || !markers)
+		return result;
+
+	const bounds = map.getBounds();
+	markers._featureGroup.eachLayer(layer => {
+		if (layer instanceof L.MarkerCluster
+				&& layer._icon
+				&& bounds.contains(layer.getLatLng()))
+			result.push(layer);
+	});
+	return result;
+}
+
+function cluster_edge_distance_pixels(cluster) {
+	const point = map.latLngToContainerPoint(cluster.getLatLng());
+	const size = map.getSize();
+	return Math.min(point.x, point.y, size.x - point.x, size.y - point.y);
+}
+
+function maybe_auto_spiderfy() {
+	clearTimeout(auto_spiderfy_timer);
+	auto_spiderfy_timer = null;
+
+	if (!map || !markers || !map.hasLayer(markers))
+		return;
+
+	if (!markers_are_idle()) {
+		if (auto_spiderfy_retries >= 30)
+			return;
+		auto_spiderfy_retries += 1;
+		auto_spiderfy_timer = setTimeout(maybe_auto_spiderfy, 100);
+		return;
+	}
+	auto_spiderfy_retries = 0;
+
+	if (markers._spiderfied)
+		return;
+
+	const clusters = visible_clusters();
+	if (clusters.length !== 1)
+		return;
+
+	const cluster = clusters[0];
+	if (!shouldAutoSpiderfy({
+		visibleClusterCount: clusters.length,
+		childCount: cluster.getChildCount(),
+		edgeDistancePixels: cluster_edge_distance_pixels(cluster),
+	}))
+		return;
+
+	cluster.spiderfy();
+	remove_tabindex();
+}
+
+function schedule_auto_spiderfy() {
+	clearTimeout(auto_spiderfy_timer);
+	auto_spiderfy_timer = null;
+	auto_spiderfy_retries = 0;
+	auto_spiderfy_timer = setTimeout(maybe_auto_spiderfy, 0);
+}
+
 function compute_search_center(points, zoom, size, preferredCenter) {
 	const availableWidth = size.x - SEARCH_FIT_PADDING * 2;
 	const availableHeight = size.y - SEARCH_FIT_PADDING * 2;
@@ -748,12 +824,23 @@ function add_vmforum_members({ autoFit = false } = {}) {
 			// Cluster all markers within the given radius; by default, the radius is 80 px.
 			// Instead use a user-defined function which decreases the radius with increasing zoom level.
 			.markerClusterGroup({
-				'maxClusterRadius': x => 40 - 3 * (map.getZoom() - 6),
-				'zoomToBoundsOnClick': true
+				'maxClusterRadius': zoom => Math.max(1, 40 - 3 * (zoom - 6)),
+				'zoomToBoundsOnClick': false,
+				'spiderfyOnMaxZoom': false
 			})
 
-			// When hovering with the mouse, show all markers of the cluster, but remove their tabindex.
-			.on('clustermouseover', c => { c.layer.spiderfy(); remove_tabindex(); });
+			// Hovering opens small clusters only. Clicking always opens the cluster,
+			// because zooming into a dense cluster would only keep it clustered.
+			.on('clustermouseover', c => {
+				if (c.layer.getChildCount() > AUTO_SPIDERFY_MAX_PINS)
+					return;
+				c.layer.spiderfy();
+				remove_tabindex();
+			})
+			.on('clusterclick', c => {
+				c.layer.spiderfy();
+				remove_tabindex();
+			});
 
 	// Create markers from the members array.
 	const filtered_members = filterMembers(members, {
@@ -845,6 +932,8 @@ function add_vmforum_members({ autoFit = false } = {}) {
 
 	if (autoFit)
 		fit_search_results(search_results);
+
+	schedule_auto_spiderfy();
 }
 
 function set_location_busy(busy) {
@@ -1088,6 +1177,7 @@ async function create_map() {
 	if (location_button)
 		L.DomEvent.on(location_button, 'click', request_location);
 	map.on('moveend zoomend', schedule_map_state_save);
+	map.on('zoomend', schedule_auto_spiderfy);
 
 	if (cache && cache.members.length > 0) {
 		members = cache.members;

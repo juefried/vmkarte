@@ -106,6 +106,7 @@ vmkarte/
 │   │   └── app.css                     # Styles der Karte
 │   ├── js/
 │   │   ├── app.js                      # Karte, Filter, Datenabruf
+│   │   ├── cluster-auto-spiderfy.js    # Automatik-Entscheidung für Cluster
 │   │   ├── data.js                     # Validierung/Formatierung
 │   │   ├── storage.js                  # IndexedDB
 │   │   ├── status-ui.js                # Status- und Meldungsleiste
@@ -335,7 +336,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 
 ### 5.6 Frontend `karte.html`
 
-- `karte.html` ist die App-Shell. Styles liegen in `css/app.css`, das JavaScript in `js/app.js` und den Modulen `js/data.js`, `js/storage.js`, `js/status-ui.js`, `js/hashtags.js`, `js/search-suggestions.js` und `js/search-filter.js`.
+- `karte.html` ist die App-Shell. Styles liegen in `css/app.css`, das JavaScript in `js/app.js` und den Modulen `js/data.js`, `js/storage.js`, `js/status-ui.js`, `js/hashtags.js`, `js/search-suggestions.js`, `js/search-filter.js` und `js/cluster-auto-spiderfy.js`.
 - Lädt `shared/vmforum_members.json` und `shared/data-status.json`.
 - Speichert den zuletzt geladenen Stand in IndexedDB (`vmkarte`, Store `kv`) und zeigt ihn beim Start sofort an. Ohne lokalen Stand erscheint `Kartendaten werden geladen …`.
 - Gleicht im Hintergrund mit dem Server ab und nutzt ETag/`304`, wenn ein lokaler Stand vorhanden ist. Der manuelle Button `Kartendaten aktualisieren` lädt ohne HTTP-Cache und prüft zusätzlich die App-Version.
@@ -344,6 +345,8 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - Die Buttons sind kompakte Lucide-Icons (`filter-x`, `refresh-cw`, `log-out`) mit weißen Symbolen auf farbigem Hintergrund; die Größen skalieren responsiv.
 - `401` und Logout löschen die lokalen Kartendaten aus IndexedDB.
 - Erstellt eine Leaflet-Karte mit MarkerCluster.
+- Ein einzelner sichtbarer Cluster mit maximal 10 Pins wird nach dem Zoom automatisch geöffnet (Spiderfy). Bei mehreren sichtbaren Clustern oder mehr als 10 Pins bleibt er geschlossen. Zusätzlich muss der Cluster mindestens 80 px von allen Kartenrändern entfernt sein, damit die Spirale vollständig sichtbar bleibt.
+- Ein Klick auf einen Cluster öffnet ihn sofort, unabhängig von der Pin-Anzahl. Hover öffnet nur Cluster mit maximal 10 Pins. Es wird immer nur ein Cluster gleichzeitig geöffnet.
 - Zeigt die vorgeschriebene Attribution im Leaflet-Attribution-Control unten rechts: „© OpenStreetMap-Mitwirkende, ODbL“ sowie „Geocoding: Nominatim“.
 - Filtert nach URL-Parametern und Formularfeldern.
 - Das Suchfeld zeigt bei Fokus und leerem Inhalt nur Hashtags; beim Tippen werden Namen, Fahrzeuglabels und Hashtags case-insensitiv gefiltert, häufige Werte zuerst. Die Vorschlagsliste ist auf etwa sechs Zeilen begrenzt, bleibt scrollbar und liegt direkt unter dem Eingabefeld. Scrollen und Wischen auf der Liste bewegen die Karte nicht.
@@ -392,7 +395,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 ### 5.8 Service Worker und Offline
 
 - `js/app.js` registriert `/service-worker.js` mit Scope `/`.
-- Cache `vmkarte-shell-v13` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html`, `offline.html`, `js/version.js` und `js/version-check.js`.
+- Cache `vmkarte-shell-v24` enthält die App-Shell (`/`, `/karte.html`), CSS/JS, Leaflet, MarkerCluster, `geo-handler.html`, `offline.html`, `js/version.js` und `js/version-check.js`.
 - Navigationen laufen network-first mit Fallback auf den angeforderten Cache-Eintrag, `/karte.html`, `/` und schließlich `/offline.html`.
 - Statische Assets laufen stale-while-revalidate.
 - `/shared/`, `/login`, `/logout`, `/session-check`, `/_internal/session-check` und `/app-version.json` bleiben network-only. `data-status.json` liegt unter `/shared/` und wird daher nie gecacht.
@@ -426,7 +429,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
   - `screenshots/screenshot-narrow.png` (390×844, `form_factor: narrow`)
   - Die Screenshots zeigen ausschließlich fiktive Testmarker, keine echten
     Mitgliederdaten.
-- Der Service-Worker-Cache `vmkarte-shell-v13` enthält Manifest, Icons und
+- Der Service-Worker-Cache `vmkarte-shell-v24` enthält Manifest, Icons und
   Screenshots.
 - Chrome-Installability-Check: keine Manifest-, Installability- oder
   Screenshot-Warnungen.
@@ -435,7 +438,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 ### 5.10 App-Version und Entwicklungsmodus
 
 - `docker/webserver/www_data/VERSION` ist die gepflegte Versionsquelle
-  (aktuell `3.0.2`).
+  (aktuell `3.0.8`).
 - Das Dockerfile erzeugt beim Build daraus `app-version.json` und
   `js/version.js`; `APP_VERSION` und `BUILD_DATE` können als Build-Args
   überschrieben werden. Ohne Docker gelten die lokalen Dev-Fallbacks `dev`
@@ -1439,6 +1442,16 @@ Die früheren Nominatim-Korrekturen (User-Agent, Timeout, Negativ-Cache) bleiben
 ---
 
 ## 16. Geänderte Dateien
+
+### 14.11.2026 (Branch `fix/map-auto-spiderfy-single-cluster`)
+
+- `docker/webserver/www_data/js/app.js`: Cluster werden nur noch bei genau einem sichtbaren Cluster mit maximal 10 Pins automatisch geöffnet. Klick öffnet sofort, Hover nur bis 10 Pins. `maxClusterRadius` nutzt den Zoom-Parameter.
+- `docker/webserver/www_data/js/cluster-auto-spiderfy.js`: neue pure Entscheidungslogik inklusive 80-px-Randabstand.
+- `tests/frontend/cluster-auto-spiderfy.test.js`: Unit-Tests für Clusteranzahl, Pin-Grenze und Randabstand.
+- `tests/browser/phase9-cdp.mjs`: Regressionstests für Automatik, Klick, Hover, mehrere Cluster und erneute Auswertung nach Zoom.
+- `docker/webserver/www_data/service-worker.js`: Cache auf `vmkarte-shell-v24` erhöht, neues Modul in die App-Shell aufgenommen.
+- `docker/webserver/www_data/VERSION`: App-Version auf `3.0.8` erhöht.
+- `DOKUMENTATION.md`: Cluster-Verhalten, Dateiliste und Versionen aktualisiert.
 
 ### 08.11.2026 (Branch `fix/service-worker-cache-v18`)
 
