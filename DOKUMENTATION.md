@@ -353,7 +353,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - Hashtags werden aus dem Freitextfeld `other` erkannt: `#`, danach ein Unicode-Buchstabe und mindestens ein weiteres Unicode-Buchstaben-, Ziffern- oder Unterstrichzeichen. Umlaute, Akzente und nicht-lateinische Buchstaben sind erlaubt.
 - Der Stand wird als Datum (`TT.MM.JJJJ`) aus `profile_updated_at` angezeigt; der exakte Zeitstempel steht im Tooltip. Fehlt der Wert, erscheint `Stand: unbekannt`.
 - Nutzt `radius` beim Hover, um die Unsicherheit der Ortsauflösung als Kreis darzustellen.
-- Pins mit exakt identischer Koordinate werden in der Anzeige auf einem Ring bzw. einer Spirale um den echten Punkt verteilt. Eine dünne Linie verbindet jeden verschobenen Pin mit der exakten Position. Der Versatz ist geografisch auf 100 m begrenzt und wird bei kleinem Zoom unsichtbar, sodass das Clustering erhalten bleibt. Die Positionen werden erst nach dem Clustering-`animationend` neu berechnet. Beim Hover gespiderfyte Cluster werden vor einem Zoom sofort wieder zusammengeführt, damit Cluster-Klicks keine Pins entfernen. Popup, `geo:`-Link, Hover-Radius und Suche verwenden weiterhin die unveränderten Originalkoordinaten.
+- Pins mit exakt identischer Koordinate werden in der Anzeige auf einem Ring bzw. einer Spirale um den echten Punkt verteilt. Eine dünne Linie verbindet jeden verschobenen Pin mit der exakten Position. Der Versatz ist geografisch auf 100 m begrenzt und wird bei kleinem Zoom unsichtbar, sodass das Clustering erhalten bleibt. Die Positionen werden nach abgeschlossenen Clustering-Animationen und bei jeder Zoomstufe neu berechnet; der Cluster-Radius verkleinert sich dabei pro Zoomstufe. Beim Hover gespiderfyte Cluster werden vor einem Zoom sofort wieder zusammengeführt, damit Cluster-Klicks keine Pins entfernen. Popup, `geo:`-Link, Hover-Radius und Suche verwenden weiterhin die unveränderten Originalkoordinaten.
 - Registriert einen same-origin `geo:`-Protokollhandler auf `/geo-handler?l=%s`. `geo-handler.html` und `js/geo-handler.js` leiten gültige `geo:lat,lon`-Werte zu BRouter weiter; `geo-handler.php` bleibt als Legacy-Datei liegen.
 - Fehler beim Datenabruf werden verständlich angezeigt. Mit lokalem Stand bleibt die Karte bedienbar; ohne lokalen Stand erscheint eine Meldung mit „Erneut versuchen“. Meldungen blenden automatisch aus und lassen sich schließen.
 
@@ -436,7 +436,7 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
 ### 5.10 App-Version und Entwicklungsmodus
 
 - `docker/webserver/www_data/VERSION` ist die gepflegte, git-versionierte
-  Versionsquelle (aktuell `3.0.5`).
+  Versionsquelle (aktuell `3.0.6`).
 - Das Dockerfile erzeugt beim Build daraus `app-version.json` und
   `js/version.js`. Ein normales Deployment benötigt daher keine
   `APP_VERSION`-Variable auf der Kommandozeile. `APP_VERSION` und
@@ -1442,6 +1442,14 @@ Die früheren Nominatim-Korrekturen (User-Agent, Timeout, Negativ-Cache) bleiben
 ---
 
 ## 16. Geänderte Dateien
+
+### 14.11.2026 (Branch `fix/map-cluster-offset-zoom`)
+
+- `docker/webserver/www_data/js/app.js`: `maxClusterRadius` nutzt jetzt den übergebenen Zoom-Level statt `map.getZoom()`. Dadurch wird der Cluster-Radius pro Zoomstufe korrekt berechnet und Duplikat-Pins werden ab dem passenden Zoom getrennt. Duplikat-Offsets werden erst berechnet, wenn die MarkerClusterGroup keine Zoom-Animation und keine gepufferten Animationsschritte mehr offen hat. Offset-Linien werden nur für tatsächlich einzeln sichtbare Pins gezeichnet.
+- `docker/webserver/www_data/service-worker.js`: Cache auf `vmkarte-shell-v22` erhöht.
+- `docker/webserver/www_data/VERSION`: App-Version auf `3.0.6` erhöht.
+- `tests/browser/phase9-cdp.mjs`: Regressionstests für frischen Kartenstart, schrittweises Rein-/Rauszoomen, schnelle Zoom-Schritte und die Invariante, dass keine Einzelpins neben sichtbaren Clustern stehen bleiben. Cache-Prüfung auf `v22` aktualisiert.
+- `DOKUMENTATION.md`: Frontend-Verhalten aktualisiert.
 
 ### 14.11.2026 (Branch `feature/pin-offset-duplicates`)
 

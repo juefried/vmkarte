@@ -331,6 +331,47 @@ async function main() {
 		await waitFor(`document.querySelectorAll('.leaflet-marker-icon').length > 0`, 'member markers');
 	}
 
+	async function resetMapState() {
+		await navigate('/offline.html');
+		const deleted = await evaluate(`new Promise(resolve => {
+			const request = indexedDB.deleteDatabase('vmkarte');
+			request.onsuccess = () => resolve(true);
+			request.onerror = () => resolve(false);
+			request.onblocked = () => resolve(false);
+		})`);
+		if (!deleted)
+			throw new Error('IndexedDB map state could not be deleted');
+		await evaluate(`localStorage.clear()`);
+	}
+
+	async function mapDisplayState() {
+		return evaluate(`(() => {
+			const zoom = (() => {
+				for (const image of document.querySelectorAll('img.leaflet-tile')) {
+					const match = image.src.match(/\\/(\\d+)\\/\\d+\\/\\d+\\.png(?:\\?|$)/);
+					if (match)
+						return Number(match[1]);
+				}
+				return null;
+			})();
+			const clusters = Array.from(document.querySelectorAll('.marker-cluster'));
+			const clusterChildren = clusters.reduce(
+				(total, cluster) => total + Number(cluster.textContent.trim() || 0),
+				0,
+			);
+			const icons = document.querySelectorAll('.leaflet-marker-icon').length;
+			const individualMarkers = icons - clusters.length;
+			return {
+				zoom,
+				clusters: clusters.map(cluster => cluster.textContent.trim()),
+				clusterChildren,
+				individualMarkers,
+				displayedMarkers: clusterChildren + individualMarkers,
+				legs: document.querySelectorAll('.marker-offset-leg').length,
+			};
+		})()`);
+	}
+
 	async function tileZoom() {
 		return evaluate(`(() => {
 			for (const image of document.querySelectorAll('img.leaflet-tile')) {
@@ -493,9 +534,9 @@ async function main() {
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache');
 	assert.equal(await cacheContains('/app-version.json'), false);
 	const serviceWorkerSource = await (await fetch(ORIGIN + '/service-worker.js')).text();
-	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v21';"));
+	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v22';"));
 	await waitFor(`navigator.serviceWorker.getRegistration().then(registration => Boolean(registration && registration.active && !registration.installing && !registration.waiting))`, 'service worker installed');
-	check.pass('Service Worker installiert, Cache ist v21 und app-version.json bleibt network-only');
+	check.pass('Service Worker installiert, Cache ist v22 und app-version.json bleibt network-only');
 
 	// 3. ?dev=1 disables the service worker, removes caches and skips the version check.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };
@@ -572,13 +613,11 @@ async function main() {
 
 	// 8. Identical coordinates are separated on screen while popups keep the exact position.
 	await evaluate(`fetch('/__test/duplicates?on=1').then(response => response.text())`);
+	await resetMapState();
 	await navigate('/karte.html?dev=1&other=%23offsettest');
 	await waitForMap();
-	await delay(1000);
-	await navigate('/karte.html?dev=1&other=%23offsettest');
-	await waitForMap();
-	await waitFor(`document.querySelectorAll('.leaflet-marker-icon').length >= 2`, 'offset marker icons');
 	await waitFor(`document.querySelectorAll('.marker-offset-leg').length >= 2`, 'offset leader lines');
+	await waitFor(`document.querySelectorAll('.marker-cluster').length === 0`, 'separated duplicate markers');
 	const markerTransforms = await evaluate(`Array.from(document.querySelectorAll('.leaflet-marker-icon')).map(icon => icon.style.transform)`);
 	assert.ok(markerTransforms.length >= 2);
 	assert.equal(new Set(markerTransforms).size, markerTransforms.length);
@@ -608,7 +647,8 @@ async function main() {
 	await delay(500);
 	await evaluate(`Array.from(document.querySelectorAll('.marker-cluster')).find(cluster => cluster.textContent.trim() === '2').click()`);
 	await delay(1200);
-	assert.ok(await evaluate(`document.querySelectorAll('.leaflet-marker-icon').length >= 2`));
+	const afterClusterClick = await mapDisplayState();
+	assert.ok(afterClusterClick.displayedMarkers >= 2 && afterClusterClick.displayedMarkers <= 5);
 
 	await evaluate(`document.querySelector('.leaflet-control-zoom-out').click()`);
 	await delay(700);
@@ -616,12 +656,49 @@ async function main() {
 	await delay(700);
 	assert.equal(await tileZoom(), clusterZoom);
 	await waitFor(`Array.from(document.querySelectorAll('.marker-cluster')).some(cluster => cluster.textContent.trim() === '2')`, 'two-pin cluster after zoom out');
+	assert.equal((await mapDisplayState()).displayedMarkers, 5);
 	await evaluate(`Array.from(document.querySelectorAll('.marker-cluster')).find(cluster => cluster.textContent.trim() === '2').dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))`);
 	await delay(500);
 	await evaluate(`document.querySelector('.leaflet-control-zoom-in').click()`);
 	await delay(1200);
-	assert.ok(await evaluate(`document.querySelectorAll('.leaflet-marker-icon').length >= 2`));
+	assert.equal((await mapDisplayState()).displayedMarkers, 5);
 	check.pass('Cluster-Klick und Zoom nach Hover-Spiderfy lassen unabhängige Pins sichtbar');
+
+	// 10. Duplicate offsets are recalculated for every zoom step without leaving pins behind.
+	await resetMapState();
+	await navigate('/karte.html?dev=1&other=%23offsettest');
+	await waitForMap();
+	await waitFor(`document.querySelectorAll('.marker-offset-leg').length === 2`, 'two offset leader lines');
+	await waitFor(`document.querySelectorAll('.marker-cluster').length === 0`, 'offset duplicates separated');
+	assert.equal((await mapDisplayState()).displayedMarkers, 2);
+
+	let lastOffsetState = null;
+	for (let attempt = 0; attempt < 12; attempt += 1) {
+		const state = await mapDisplayState();
+		lastOffsetState = state;
+		assert.equal(state.displayedMarkers, 2, `displayed duplicates at zoom ${state.zoom}`);
+		if (state.clusters.length > 0)
+			assert.equal(state.individualMarkers, 0, `individual pins next to clusters at zoom ${state.zoom}`);
+		if (state.zoom <= 9)
+			assert.equal(state.legs, 0, `leader lines for clustered duplicates at zoom ${state.zoom}`);
+		if (state.zoom <= 7)
+			break;
+		await evaluate(`document.querySelector('.leaflet-control-zoom-out').click()`);
+		await delay(700);
+	}
+	assert.ok(lastOffsetState.zoom <= 7);
+
+	// Rapid steps exercise overlapping cluster animations.
+	for (let step = 0; step < 6; step += 1) {
+		await evaluate(`document.querySelector('.leaflet-control-zoom-in').click()`);
+		await delay(100);
+	}
+	await delay(1500);
+	const rapidState = await mapDisplayState();
+	assert.equal(rapidState.displayedMarkers, 2);
+	if (rapidState.clusters.length > 0)
+		assert.equal(rapidState.individualMarkers, 0);
+	check.pass('Duplikat-Offsets werden pro Zoomstufe ohne Restpins neu berechnet');
 
 	console.log(`\n${check.count} browser checks passed.`);
 }

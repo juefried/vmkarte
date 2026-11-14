@@ -39,7 +39,8 @@ var error_circle;
 var layer_circles;
 var layer_offset_lines;
 var duplicate_marker_groups = [];
-var last_duplicate_offset_zoom = null;
+var duplicate_offset_update_timer = null;
+var duplicate_offset_update_generation = 0;
 var form_select;
 var form_search;
 var search_suggestions;
@@ -743,21 +744,41 @@ function unspiderfy_markers_immediately() {
 		markers._noanimationUnspiderfy();
 }
 
-function schedule_duplicate_marker_offset_update() {
-	if (!map || !markers || !map.hasLayer(markers))
-		return;
+function markers_are_idle() {
+	return markers
+		&& map
+		&& map.hasLayer(markers)
+		&& !markers._inZoomAnimation
+		&& !(markers._queue && markers._queue.length);
+}
 
-	const zoom = map.getZoom();
-	if (zoom === last_duplicate_offset_zoom)
-		return;
+function schedule_duplicate_marker_offset_update() {
+	clearTimeout(duplicate_offset_update_timer);
 
 	const group = markers;
-	setTimeout(() => {
-		if (markers !== group || !map.hasLayer(group)
-			|| map.getZoom() !== zoom || zoom === last_duplicate_offset_zoom)
+	const generation = ++duplicate_offset_update_generation;
+	const deadline = Date.now() + 10000;
+
+	const run = () => {
+		duplicate_offset_update_timer = null;
+
+		if (generation !== duplicate_offset_update_generation
+			|| !group || markers !== group || !map || !map.hasLayer(group)
+			|| duplicate_marker_groups.length === 0)
 			return;
+
+		// MarkerClusterGroup must not be changed while it is merging or splitting
+		// clusters; its pending animation would restore the old marker positions.
+		if (!markers_are_idle()) {
+			if (Date.now() < deadline)
+				duplicate_offset_update_timer = setTimeout(run, 100);
+			return;
+		}
+
 		update_duplicate_marker_offsets();
-	}, 0);
+	};
+
+	duplicate_offset_update_timer = setTimeout(run, 0);
 }
 
 function update_duplicate_marker_offsets() {
@@ -765,7 +786,6 @@ function update_duplicate_marker_offsets() {
 		return;
 
 	const zoom = map.getZoom();
-	last_duplicate_offset_zoom = zoom;
 
 	if (duplicate_marker_groups.length === 0)
 		return;
@@ -828,8 +848,11 @@ function update_duplicate_marker_offsets() {
 			const markerLatLng = record.marker.getLatLng();
 			const originalPoint = map.project([record.lat, record.lon], zoom);
 			const markerPoint = map.project(markerLatLng, zoom);
+			const markerVisible = record.marker._icon
+				&& markers._featureGroup
+				&& markers._featureGroup.hasLayer(record.marker);
 
-			if (originalPoint.distanceTo(markerPoint) < 1) {
+			if (!markerVisible || originalPoint.distanceTo(markerPoint) < 1) {
 				if (layer_offset_lines.hasLayer(record.line))
 					layer_offset_lines.removeLayer(record.line);
 				return;
@@ -858,7 +881,8 @@ function add_vmforum_members({ autoFit = false } = {}) {
 	layer_circles.clearLayers();
 	layer_offset_lines.clearLayers();
 	duplicate_marker_groups = [];
-	last_duplicate_offset_zoom = null;
+	clearTimeout(duplicate_offset_update_timer);
+	duplicate_offset_update_generation++;
 
 	// Get URL parameters.
 	const urlparams = new URL(window.location).searchParams;
@@ -880,14 +904,21 @@ function add_vmforum_members({ autoFit = false } = {}) {
 	// Create a markerClusterGroup.
 	markers = L
 			// Cluster all markers within the given radius; by default, the radius is 80 px.
-			// Instead use a user-defined function which decreases the radius with increasing zoom level.
+			// Instead use a user-defined function which decreases the radius with increasing
+			// zoom level. The callback is called once per zoom level while the clustering
+			// grids are built, so it must use its argument instead of the current map zoom.
 			.markerClusterGroup({
-				'maxClusterRadius': x => 40 - 3 * (map.getZoom() - 6),
+				'maxClusterRadius': zoom => Math.max(1, 40 - 3 * (zoom - 6)),
 				'zoomToBoundsOnClick': true
 			})
 
 			// When hovering with the mouse, show all markers of the cluster, but remove their tabindex.
-			.on('clustermouseover', c => { c.layer.spiderfy(); remove_tabindex(); })
+			.on('clustermouseover', c => {
+				if (markers && markers._inZoomAnimation)
+					return;
+				c.layer.spiderfy();
+				remove_tabindex();
+			})
 
 			// Unspiderfy before zooming; otherwise markers split by the zoom can be removed again.
 			.on('clusterclick', unspiderfy_markers_immediately)
@@ -1008,7 +1039,7 @@ function add_vmforum_members({ autoFit = false } = {}) {
 		});
 	});
 
-	update_duplicate_marker_offsets();
+	schedule_duplicate_marker_offset_update();
 
 	remove_tabindex();
 
