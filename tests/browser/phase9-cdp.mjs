@@ -34,6 +34,11 @@ const members = [
 	{ id: '2', name: 'Beta', lat: 50.1, lon: 11.1, vm: '', lr: 'Liegerad', tr: '', other: '', profile_updated_at: '2026-11-01' },
 	{ id: '3', name: 'Gamma', lat: 50.2, lon: 11.2, vm: 'Quest', lr: '', tr: '', other: '#berlin', profile_updated_at: '2026-11-01' },
 ];
+const duplicateMembers = [
+	...members,
+	{ id: '4', name: 'Delta', lat: 50.0, lon: 11.0, vm: '', lr: '', tr: '', other: '#offsettest', profile_updated_at: '2026-11-01' },
+	{ id: '5', name: 'Epsilon', lat: 50.0, lon: 11.0, vm: '', lr: '', tr: '', other: '#offsettest', profile_updated_at: '2026-11-01' },
+];
 const dataStatus = {
 	runStartedAt: '2026-11-06T03:33:00+01:00',
 	generatedAt: '2026-11-06T03:41:12+01:00',
@@ -41,6 +46,7 @@ const dataStatus = {
 };
 
 let membersUnauthorized = false;
+let useDuplicateMembers = false;
 let appVersion = { version: 'dev', buildDate: '2026-11-06T10:00:00Z' };
 let appVersionStatus = 200;
 let chrome = null;
@@ -90,13 +96,20 @@ async function startServer() {
 			return;
 		}
 
+		if (url.pathname === '/__test/duplicates') {
+			useDuplicateMembers = url.searchParams.get('on') !== '0';
+			res.writeHead(200, { 'content-type': 'text/plain' });
+			res.end('ok');
+			return;
+		}
+
 		if (url.pathname === '/shared/vmforum_members.json') {
 			if (membersUnauthorized) {
 				res.writeHead(401, { 'content-type': 'application/json' });
 				res.end('{"error":"unauthorized"}');
 				return;
 			}
-			sendJson(res, members);
+			sendJson(res, useDuplicateMembers ? duplicateMembers : members);
 			return;
 		}
 
@@ -464,8 +477,9 @@ async function main() {
 	await waitFor(`caches.keys().then(keys => keys.some(key => key.startsWith('vmkarte-')))`, 'app shell cache');
 	assert.equal(await cacheContains('/app-version.json'), false);
 	const serviceWorkerSource = await (await fetch(ORIGIN + '/service-worker.js')).text();
-	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v18';"));
-	check.pass('Service Worker installiert, Cache ist v18 und app-version.json bleibt network-only');
+	assert.ok(serviceWorkerSource.includes("const CACHE_NAME = 'vmkarte-shell-v20';"));
+	await waitFor(`navigator.serviceWorker.getRegistration().then(registration => Boolean(registration && registration.active && !registration.installing && !registration.waiting))`, 'service worker installed');
+	check.pass('Service Worker installiert, Cache ist v20 und app-version.json bleibt network-only');
 
 	// 3. ?dev=1 disables the service worker, removes caches and skips the version check.
 	appVersion = { version: '9.9.9', buildDate: '2026-11-07T10:00:00Z' };
@@ -539,6 +553,26 @@ async function main() {
 	assert.equal(await evaluate(`document.querySelector('.leaflet-popup-content a[href^="karte.html?other="]').getAttribute('target')`), null);
 	assert.equal(await evaluate(`document.querySelector('.leaflet-popup-content a[href^="geo:"]').getAttribute('target')`), null);
 	check.pass('Forenprofil-Links öffnen in einem neuen Tab; Hashtag- und geo-Links bleiben im selben Tab');
+
+	// 8. Identical coordinates are separated on screen while popups keep the exact position.
+	await evaluate(`fetch('/__test/duplicates?on=1').then(response => response.text())`);
+	await navigate('/karte.html?dev=1&other=%23offsettest');
+	await waitForMap();
+	await delay(1000);
+	await navigate('/karte.html?dev=1&other=%23offsettest');
+	await waitForMap();
+	await waitFor(`document.querySelectorAll('.leaflet-marker-icon').length >= 2`, 'offset marker icons');
+	await waitFor(`document.querySelectorAll('.marker-offset-leg').length >= 2`, 'offset leader lines');
+	const markerTransforms = await evaluate(`Array.from(document.querySelectorAll('.leaflet-marker-icon')).map(icon => icon.style.transform)`);
+	assert.ok(markerTransforms.length >= 2);
+	assert.equal(new Set(markerTransforms).size, markerTransforms.length);
+	await evaluate(`document.querySelector('.leaflet-marker-icon').click()`);
+	await waitFor(`document.querySelector('.leaflet-popup-content') !== null`, 'offset marker popup');
+	assert.match(
+		await evaluate(`document.querySelector('.leaflet-popup-content a[href^="geo:"]').getAttribute('href')`),
+		/^geo:50(\.0+)?,11(\.0+)?$/,
+	);
+	check.pass('Identische Koordinaten werden getrennt angezeigt; Linien und geo-Link bleiben exakt');
 
 	console.log(`\n${check.count} browser checks passed.`);
 }

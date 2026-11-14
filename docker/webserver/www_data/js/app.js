@@ -18,6 +18,13 @@ import {
 	shouldAdjustSearchView,
 } from './search-fit.js';
 import { describeGeolocationError, GEOLOCATION_OPTIONS } from './location.js';
+import {
+	computeOffsetPixels,
+	groupDuplicateMarkers,
+	maxOffsetRadius,
+	offsetLatLng,
+	offsetScaleForZoom,
+} from './marker-offset.js';
 import { APP_VERSION } from './version.js';
 import { DEV_MODE_KEY, parseAppVersion, isNewVersion, resolveDevMode } from './version-check.js';
 
@@ -30,6 +37,8 @@ var map;
 var markers;
 var error_circle;
 var layer_circles;
+var layer_offset_lines;
+var duplicate_marker_groups = [];
 var form_select;
 var form_search;
 var search_suggestions;
@@ -179,11 +188,21 @@ async function clearAppCaches() {
 		return;
 
 	try {
-		await deleteAppCaches();
-		// In-flight service worker handlers may recreate the cache after the
-		// first delete. Give them a moment, then delete again.
-		await new Promise(resolve => setTimeout(resolve, 100));
-		await deleteAppCaches();
+		const deadline = Date.now() + 5000;
+		let emptySince = null;
+		while (Date.now() < deadline) {
+			await deleteAppCaches();
+			await new Promise(resolve => setTimeout(resolve, 100));
+			const remaining = (await caches.keys()).filter(key => key.startsWith('vmkarte-'));
+			if (remaining.length > 0) {
+				emptySince = null;
+				continue;
+			}
+			if (emptySince === null)
+				emptySince = Date.now();
+			else if (Date.now() - emptySince >= 800)
+				return;
+		}
 	}
 	catch (error) {
 		console.warn('App-Caches konnten nicht gelöscht werden.', error);
@@ -718,6 +737,90 @@ function fit_search_results(results) {
 	map.setView(center, targetZoom, { animate: false });
 }
 
+function update_duplicate_marker_offsets() {
+	if (!map || !markers || duplicate_marker_groups.length === 0)
+		return;
+
+	const zoom = map.getZoom();
+	const updates = [];
+
+	duplicate_marker_groups.forEach(group => {
+		const radius = maxOffsetRadius(group.offsets);
+		if (radius <= 0)
+			return;
+
+		const scale = offsetScaleForZoom({
+			latitude: group.lat,
+			zoom,
+			maxRadiusPixels: radius,
+		});
+
+		group.records.forEach((record, index) => {
+			const offset = group.offsets[index];
+			const display = offsetLatLng({
+				lat: record.lat,
+				lon: record.lon,
+				dx: offset.x * scale,
+				dy: offset.y * scale,
+				zoom,
+			});
+			if (!display)
+				return;
+
+			const current = record.marker.getLatLng();
+			const currentPoint = map.project(current, zoom);
+			const displayPoint = map.project(display, zoom);
+			if (currentPoint.distanceTo(displayPoint) < 0.25)
+				return;
+
+			updates.push({
+				record,
+				marker: record.marker,
+				latlng: display,
+			});
+		});
+	});
+
+	if (updates.length > 0) {
+		if (typeof markers.removeLayers === 'function' && typeof markers.addLayers === 'function') {
+			markers.removeLayers(updates.map(update => update.marker));
+			updates.forEach(update => update.marker.setLatLng(update.latlng));
+			markers.addLayers(updates.map(update => update.marker));
+		}
+		else {
+			updates.forEach(update => update.marker.setLatLng(update.latlng));
+		}
+	}
+
+	duplicate_marker_groups.forEach(group => {
+		group.records.forEach(record => {
+			if (!record.line)
+				return;
+
+			const markerLatLng = record.marker.getLatLng();
+			const originalPoint = map.project([record.lat, record.lon], zoom);
+			const markerPoint = map.project(markerLatLng, zoom);
+
+			if (originalPoint.distanceTo(markerPoint) < 1) {
+				if (layer_offset_lines.hasLayer(record.line))
+					layer_offset_lines.removeLayer(record.line);
+				return;
+			}
+
+			record.line.setLatLngs([
+				[record.lat, record.lon],
+				[markerLatLng.lat, markerLatLng.lng],
+			]);
+			record.line.setStyle({ opacity: 0.35 });
+			if (!layer_offset_lines.hasLayer(record.line))
+				layer_offset_lines.addLayer(record.line);
+		});
+	});
+
+	if (updates.length > 0)
+		remove_tabindex();
+}
+
 function add_vmforum_members({ autoFit = false } = {}) {
 
 	// First, remove all members.
@@ -725,6 +828,8 @@ function add_vmforum_members({ autoFit = false } = {}) {
 
 	// Clear the hashtag circles, and fill them again.
 	layer_circles.clearLayers();
+	layer_offset_lines.clearLayers();
+	duplicate_marker_groups = [];
 
 	// Get URL parameters.
 	const urlparams = new URL(window.location).searchParams;
@@ -763,6 +868,7 @@ function add_vmforum_members({ autoFit = false } = {}) {
 	});
 
 	const search_results = [];
+	const marker_records = [];
 
 	// Add a marker with popup to the markerClusterGroup for each remaining member.
 	filtered_members.forEach( function(v) {
@@ -771,8 +877,7 @@ function add_vmforum_members({ autoFit = false } = {}) {
 			lon: Number(v.lon),
 			radius: Number(v.radius),
 		});
-		markers.addLayer(
-			L
+		const marker = L
 			// Add the marker on the member’s address.
 			.marker(
 				[v.lat, v.lon],
@@ -817,8 +922,13 @@ function add_vmforum_members({ autoFit = false } = {}) {
 						.setRadius(v.radius)
 						.setStyle({'stroke': true, 'fill': true}))
 			.on('mouseout', x => error_circle
-						.setStyle({'stroke': false, 'fill': false}))
-		);
+						.setStyle({'stroke': false, 'fill': false}));
+		markers.addLayer(marker);
+		marker_records.push({
+			marker,
+			lat: Number(v.lat),
+			lon: Number(v.lon),
+		});
 
 		// If a hashtag has been found, look if:
 		// * the current member has it.
@@ -840,6 +950,30 @@ function add_vmforum_members({ autoFit = false } = {}) {
 	});
 
 	map.addLayer(markers);
+
+	duplicate_marker_groups = groupDuplicateMarkers(marker_records)
+		.map(group => ({
+			...group,
+			records: group.indexes.map(index => marker_records[index]),
+			offsets: computeOffsetPixels(group.indexes.length),
+		}));
+
+	duplicate_marker_groups.forEach(group => {
+		group.records.forEach(record => {
+			record.line = L.polyline(
+				[[record.lat, record.lon], [record.lat, record.lon]],
+				{
+					'color': '#1565c0',
+					'weight': 1,
+					'opacity': 0.35,
+					'interactive': false,
+					'className': 'marker-offset-leg',
+				},
+			);
+		});
+	});
+
+	update_duplicate_marker_offsets();
 
 	remove_tabindex();
 
@@ -1075,6 +1209,9 @@ async function create_map() {
 	layer_circles = L.layerGroup();
 	map.addLayer(layer_circles);
 
+	layer_offset_lines = L.layerGroup();
+	map.addLayer(layer_offset_lines);
+
 	// A circle showing the size of the bounding box given by Nominatim.
 	// Create only one circle and move it to the current marker.
 	error_circle = L.circle([0, 0], { stroke: false, fill: false }).addTo(map);
@@ -1088,6 +1225,7 @@ async function create_map() {
 	if (location_button)
 		L.DomEvent.on(location_button, 'click', request_location);
 	map.on('moveend zoomend', schedule_map_state_save);
+	map.on('zoomend', update_duplicate_marker_offsets);
 
 	if (cache && cache.members.length > 0) {
 		members = cache.members;

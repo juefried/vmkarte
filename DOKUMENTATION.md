@@ -335,7 +335,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 
 ### 5.6 Frontend `karte.html`
 
-- `karte.html` ist die App-Shell. Styles liegen in `css/app.css`, das JavaScript in `js/app.js` und den Modulen `js/data.js`, `js/storage.js`, `js/status-ui.js`, `js/hashtags.js`, `js/search-suggestions.js` und `js/search-filter.js`.
+- `karte.html` ist die App-Shell. Styles liegen in `css/app.css`, das JavaScript in `js/app.js` und den Modulen `js/data.js`, `js/storage.js`, `js/status-ui.js`, `js/hashtags.js`, `js/search-suggestions.js`, `js/search-filter.js` und `js/marker-offset.js`.
 - Lädt `shared/vmforum_members.json` und `shared/data-status.json`.
 - Speichert den zuletzt geladenen Stand in IndexedDB (`vmkarte`, Store `kv`) und zeigt ihn beim Start sofort an. Ohne lokalen Stand erscheint `Kartendaten werden geladen …`.
 - Gleicht im Hintergrund mit dem Server ab und nutzt ETag/`304`, wenn ein lokaler Stand vorhanden ist. Der manuelle Button `Kartendaten aktualisieren` lädt ohne HTTP-Cache und prüft zusätzlich die App-Version.
@@ -353,6 +353,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
 - Hashtags werden aus dem Freitextfeld `other` erkannt: `#`, danach ein Unicode-Buchstabe und mindestens ein weiteres Unicode-Buchstaben-, Ziffern- oder Unterstrichzeichen. Umlaute, Akzente und nicht-lateinische Buchstaben sind erlaubt.
 - Der Stand wird als Datum (`TT.MM.JJJJ`) aus `profile_updated_at` angezeigt; der exakte Zeitstempel steht im Tooltip. Fehlt der Wert, erscheint `Stand: unbekannt`.
 - Nutzt `radius` beim Hover, um die Unsicherheit der Ortsauflösung als Kreis darzustellen.
+- Pins mit exakt identischer Koordinate werden in der Anzeige auf einem Ring bzw. einer Spirale um den echten Punkt verteilt. Eine dünne Linie verbindet jeden verschobenen Pin mit der exakten Position. Der Versatz ist geografisch auf 100 m begrenzt und wird bei kleinem Zoom unsichtbar, sodass das Clustering erhalten bleibt. Popup, `geo:`-Link, Hover-Radius und Suche verwenden weiterhin die unveränderten Originalkoordinaten.
 - Registriert einen same-origin `geo:`-Protokollhandler auf `/geo-handler?l=%s`. `geo-handler.html` und `js/geo-handler.js` leiten gültige `geo:lat,lon`-Werte zu BRouter weiter; `geo-handler.php` bleibt als Legacy-Datei liegen.
 - Fehler beim Datenabruf werden verständlich angezeigt. Mit lokalem Stand bleibt die Karte bedienbar; ohne lokalen Stand erscheint eine Meldung mit „Erneut versuchen“. Meldungen blenden automatisch aus und lassen sich schließen.
 
@@ -1439,6 +1440,15 @@ Die früheren Nominatim-Korrekturen (User-Agent, Timeout, Negativ-Cache) bleiben
 ---
 
 ## 16. Geänderte Dateien
+
+### 14.11.2026 (Branch `feature/pin-offset-duplicates`)
+
+- `docker/webserver/www_data/js/marker-offset.js`: neues Modul für Duplikatgruppen, Ring-/Spiralpositionen, geografische Versatzbegrenzung und Web-Mercator-Offsets.
+- `docker/webserver/www_data/js/app.js`: Pins mit identischer Koordinate werden in der Anzeige versetzt, mit dünnen Linien zur exakten Position verbunden und bei Zoomänderungen neu berechnet. Originalkoordinaten bleiben für Popups, `geo:`-Links, Hover-Radius und Suche maßgeblich.
+- `docker/webserver/www_data/service-worker.js`: Cache auf `vmkarte-shell-v20` erhöht, `js/marker-offset.js` in die App-Shell aufgenommen.
+- `tests/frontend/marker-offset.test.js`: Unit-Tests für Gruppierung, Ring-/Spiralverteilung, Zoom-Skalierung und Mercator-Offsets.
+- `tests/browser/phase9-cdp.mjs`: Cache-Prüfung auf `v20` aktualisiert.
+- `DOKUMENTATION.md`: Frontend-Verhalten und Dateiliste aktualisiert.
 
 ### 08.11.2026 (Branch `fix/service-worker-cache-v18`)
 
