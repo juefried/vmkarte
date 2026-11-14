@@ -1206,19 +1206,23 @@ func verifyToken(key []byte, token string, now time.Time) bool {
 }
 
 func sanitizeNext(value, fallback string) string {
-	if value == "" {
+	if value == "" || value[0] != '/' {
 		return fallback
 	}
-	if !strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") {
+	if strings.HasPrefix(value, "//") || strings.HasPrefix(value, "/\\") {
 		return fallback
 	}
 	if strings.ContainsAny(value, "\\\r\n") {
 		return fallback
 	}
+	parsed, err := url.Parse(value)
+	if err != nil || parsed.Hostname() != "" || parsed.Scheme != "" {
+		return fallback
+	}
 	if value == "/login" || strings.HasPrefix(value, "/login?") || value == "/logout" {
 		return fallback
 	}
-	return value
+	return parsed.RequestURI()
 }
 
 func isCrossSite(r *http.Request) bool {
