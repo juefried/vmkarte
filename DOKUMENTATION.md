@@ -433,7 +433,10 @@ Damit die Karte aktualisiert wird, muss der Cron-Container zwingend nach `/app/s
   Screenshots.
 - Chrome-Installability-Check: keine Manifest-, Installability- oder
   Screenshot-Warnungen.
-- Phase 10 (Domainumzug) ist noch offen.
+- Phase 10: Die alte Adresse `https://christoph-moder.de/vmforum-karte/` leitet
+  per `302` auf `https://karte.jfr-service.de` weiter. Die Umstellung auf `308`
+  und das Abschalten der alten Instanz stehen noch aus. Details:
+  `docs/upgrade-domain.md`.
 
 ### 5.10 App-Version und Entwicklungsmodus
 

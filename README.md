@@ -249,9 +249,13 @@ Precision-Abfragen nutzen den getrennten Cache-Namespace `precision-v1`; ein alt
 - Dauerhafte, dezente Statusanzeige mit Quelle `Server`/`lokal` und Offline-Badge
 - Service Worker mit App-Shell-Cache, Offline-Reload und kontrolliertem Update-Hinweis
 - PWA-Manifest, Icons und Installierbarkeit
+- [Weiterleitung der alten Kartenadresse auf die neue Domain](docs/upgrade-domain.md)
 
 Dieser Stand ersetzt HTTP Basic Authentication durch einen Go-Auth-Service und
-nginx `auth_request`. Standortfunktion und Domainumzug folgen in Phase 8 und 10.
+nginx `auth_request`. Die alte Adresse
+`https://christoph-moder.de/vmforum-karte/` leitet per `302` auf
+`https://karte.jfr-service.de` weiter; die Umstellung auf `308` und das
+Abschalten der alten Instanz folgen.
 
 ## Upgrade von der Version 20261022
 

@@ -26,7 +26,10 @@ Wiederherstellung von Kartenausschnitt, Zoom und Filtern.
 Enthalten seit Phase 9: App-Version mit Build-Datum, Update-Erkennung,
 Entwicklungsmodus mit Cache-Bypass sowie Deployment- und Rollback-Dokumentation.
 
-Noch nicht enthalten: Domainumzug.
+Enthalten seit Phase 10: Die alte Adresse
+`https://christoph-moder.de/vmforum-karte/` leitet per `302` auf
+`https://karte.jfr-service.de` weiter. Details stehen in
+[upgrade-domain.md](upgrade-domain.md).
 
 ## Voraussetzungen
 
@@ -764,4 +767,7 @@ Falls Basic Auth wieder aktiviert werden soll, den `.htpasswd`-Mount im
   Frontend-Phase entfernt.
 - HSTS wird ausschließlich von Traefik gesetzt.
 - Kodierte Pfadtrenner (`%2F`, `%3F`) werden für die Karte mit `400` abgelehnt.
-- Die alte Domain wird in dieser Ausbaustufe noch nicht weitergeleitet.
+- Die alte Adresse `https://christoph-moder.de/vmforum-karte/` leitet per `302`
+  auf `https://karte.jfr-service.de` weiter. Details stehen in
+  `docs/upgrade-domain.md`. Die Umstellung auf `308` und das Abschalten der
+  alten Instanz stehen noch aus.
