@@ -1209,6 +1209,9 @@ func sanitizeNext(value, fallback string) string {
 	if value == "" || value[0] != '/' {
 		return fallback
 	}
+	if strings.HasPrefix(value, "//") || strings.HasPrefix(value, "/\\") {
+		return fallback
+	}
 	if strings.ContainsAny(value, "\\\r\n") {
 		return fallback
 	}
