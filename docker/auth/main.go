@@ -105,11 +105,14 @@ button:hover { background: #256428; }
 {{if .OAuthEnabled}}
 <p>Bitte über das Velomobil-Forum anmelden.</p>
 <p><a class="forum-login" href="{{.OAuthURL}}">Anmeldung über Velomobil-Forum</a></p>
+{{end}}
+{{if and .OAuthEnabled .LocalEnabled}}
 <p class="hint">Alternativ als Fallback über die bisherigen Zugangsdaten:</p>
-{{else}}
+{{else if .LocalEnabled}}
 <p>Bitte mit dem im Forum kommunizierten Zugang anmelden.</p>
 {{end}}
 {{if .Error}}<p class="error" role="alert">{{.Error}}</p>{{end}}
+{{if .LocalEnabled}}
 <form method="post" action="/login">
 <input type="hidden" name="next" value="{{.Next}}">
 <label>Benutzername
@@ -120,6 +123,7 @@ button:hover { background: #256428; }
 </label>
 <button type="submit">Anmelden</button>
 </form>
+{{end}}
 {{if or .PrivacyURL .ImprintURL}}
 <footer class="legal">
 {{if .PrivacyURL}}<a href="{{.PrivacyURL}}">Datenschutz</a>{{end}}
@@ -192,6 +196,11 @@ type oauthConfig struct {
 	redirectURI  string
 }
 
+type loginMethods struct {
+	local bool
+	oauth bool
+}
+
 type config struct {
 	listenAddr        string
 	passwordFile      string
@@ -201,6 +210,8 @@ type config struct {
 	cookieMaxAge      time.Duration
 	oauth             *oauthConfig
 	oauthAutoRedirect bool
+	loginMethods      loginMethods
+	loginMethodsSet   bool
 	imprintFile       string
 	legalDir          string
 	imprint           *imprint
@@ -237,6 +248,7 @@ type loginData struct {
 	Next         string
 	Username     string
 	OAuthEnabled bool
+	LocalEnabled bool
 	OAuthURL     string
 	PrivacyURL   string
 	ImprintURL   string
@@ -280,6 +292,16 @@ func main() {
 		if !srv.legalPageAvailable("datenschutz.html") {
 			slog.Warn("privacy page disabled: file missing or invalid", "dir", cfg.legalDir)
 		}
+	}
+
+	slog.Info("login methods enabled",
+		"local", srv.localLoginEnabled(),
+		"oauth", srv.oauthLoginEnabled())
+	if !srv.localLoginEnabled() {
+		slog.Warn("local password login is disabled by AUTH_METHODS")
+	}
+	if cfg.oauth != nil && !srv.oauthLoginEnabled() {
+		slog.Warn("OAuth configuration is present but disabled by AUTH_METHODS")
 	}
 
 	mux := http.NewServeMux()
@@ -359,6 +381,11 @@ func loadConfig() (config, error) {
 		return config{}, err
 	}
 
+	methods, methodsSet, err := loadLoginMethods(oauth)
+	if err != nil {
+		return config{}, err
+	}
+
 	autoRedirect, err := parseBool(env("OAUTH_AUTO_REDIRECT", "false"))
 	if err != nil {
 		return config{}, fmt.Errorf("OAUTH_AUTO_REDIRECT: %w", err)
@@ -382,6 +409,8 @@ func loadConfig() (config, error) {
 		cookieMaxAge:      time.Duration(maxAgeDays) * 24 * time.Hour,
 		oauth:             oauth,
 		oauthAutoRedirect: autoRedirect,
+		loginMethods:      methods,
+		loginMethodsSet:   methodsSet,
 		imprintFile:       imprintFile,
 		legalDir:          env("LEGAL_DIR", "/app/legal"),
 		imprint:           imprintData,
@@ -474,6 +503,32 @@ func loadOAuthConfig() (*oauthConfig, error) {
 		scope:        scope,
 		redirectURI:  redirectURI,
 	}, nil
+}
+
+func loadLoginMethods(oauth *oauthConfig) (loginMethods, bool, error) {
+	raw := strings.TrimSpace(os.Getenv("AUTH_METHODS"))
+	if raw == "" || strings.EqualFold(raw, "auto") {
+		return loginMethods{}, false, nil
+	}
+
+	methods := loginMethods{}
+	for _, token := range strings.Split(raw, ",") {
+		switch name := strings.ToLower(strings.TrimSpace(token)); name {
+		case "local":
+			methods.local = true
+		case "oauth":
+			methods.oauth = true
+		case "":
+			return loginMethods{}, false, fmt.Errorf("AUTH_METHODS contains an empty entry")
+		default:
+			return loginMethods{}, false, fmt.Errorf(
+				"AUTH_METHODS: unknown method %q (allowed: auto, local, oauth, local,oauth)", name)
+		}
+	}
+	if methods.oauth && oauth == nil {
+		return loginMethods{}, false, fmt.Errorf("AUTH_METHODS requests oauth login, but OAuth is not configured")
+	}
+	return methods, true, nil
 }
 
 func env(name, fallback string) string {
@@ -657,6 +712,23 @@ func (s *server) legalLinks() (privacyURL, imprintURL string) {
 	return
 }
 
+func (s *server) localLoginEnabled() bool {
+	if !s.cfg.loginMethodsSet {
+		return true
+	}
+	return s.cfg.loginMethods.local
+}
+
+func (s *server) oauthLoginEnabled() bool {
+	if s.oauth == nil {
+		return false
+	}
+	if !s.cfg.loginMethodsSet {
+		return true
+	}
+	return s.cfg.loginMethods.oauth
+}
+
 func (s *server) oauthLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		w.Header().Set("Allow", http.MethodGet)
@@ -665,7 +737,7 @@ func (s *server) oauthLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	next := sanitizeNext(r.URL.Query().Get("next"), "/")
-	if s.oauth == nil {
+	if !s.oauthLoginEnabled() {
 		http.Redirect(w, r, "/login?local=1&next="+url.QueryEscape(next), http.StatusSeeOther)
 		return
 	}
@@ -706,7 +778,7 @@ func (s *server) oauthCallback(w http.ResponseWriter, r *http.Request) {
 	next := sanitizeNext(stateNext, "/")
 	s.clearOAuthStateCookie(w)
 
-	if s.oauth == nil {
+	if !s.oauthLoginEnabled() {
 		s.redirectOAuthError(w, r, next)
 		return
 	}
@@ -950,8 +1022,10 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 			http.Redirect(w, r, next, http.StatusSeeOther)
 			return
 		}
-		if s.cfg.oauthAutoRedirect && s.oauth != nil &&
-			r.URL.Query().Get("local") != "1" && r.URL.Query().Get("error") == "" {
+		localRequested := r.URL.Query().Get("local") == "1" && s.localLoginEnabled()
+		if s.cfg.oauthAutoRedirect && s.oauthLoginEnabled() &&
+			r.URL.Query().Get("loggedout") != "1" &&
+			!localRequested && r.URL.Query().Get("error") == "" {
 			http.Redirect(w, r, "/auth/forum/login?next="+url.QueryEscape(next), http.StatusSeeOther)
 			return
 		}
@@ -962,12 +1036,12 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("error") == "oauth" {
 			data.Error = "Anmeldung über das Velomobilforum derzeit nicht möglich."
 		}
-		if s.oauth != nil {
-			data.OAuthEnabled = true
-			data.OAuthURL = "/auth/forum/login?next=" + url.QueryEscape(next)
-		}
 		s.renderLogin(w, http.StatusOK, data)
 	case http.MethodPost:
+		if !s.localLoginEnabled() {
+			http.Error(w, "local login disabled", http.StatusForbidden)
+			return
+		}
 		if isCrossSite(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
@@ -980,6 +1054,10 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleLoginPost(w http.ResponseWriter, r *http.Request) {
+	if !s.localLoginEnabled() {
+		http.Error(w, "local login disabled", http.StatusForbidden)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, maxLoginBody)
 	if err := r.ParseForm(); err != nil {
 		s.renderLogin(w, http.StatusBadRequest, loginData{
@@ -1083,6 +1161,11 @@ func (s *server) sessionCheck(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) renderLogin(w http.ResponseWriter, status int, data loginData) {
 	data.PrivacyURL, data.ImprintURL = s.legalLinks()
+	data.LocalEnabled = s.localLoginEnabled()
+	data.OAuthEnabled = s.oauthLoginEnabled()
+	if data.OAuthEnabled && data.OAuthURL == "" {
+		data.OAuthURL = "/auth/forum/login?next=" + url.QueryEscape(data.Next)
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Frame-Options", "DENY")
