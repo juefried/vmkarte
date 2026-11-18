@@ -810,3 +810,139 @@ func TestLoadOAuthConfig(t *testing.T) {
 		t.Fatal("OAuth config is enabled without environment values")
 	}
 }
+
+func TestLoadLoginMethods(t *testing.T) {
+	oauth := &oauthConfig{clientID: "test-client"}
+
+	tests := []struct {
+		name    string
+		value   string
+		oauth   *oauthConfig
+		want    loginMethods
+		set     bool
+		wantErr bool
+	}{
+		{name: "default", value: "", oauth: oauth, want: loginMethods{}},
+		{name: "auto", value: "auto", oauth: oauth, want: loginMethods{}},
+		{name: "auto without oauth config", value: "auto", oauth: nil, want: loginMethods{}},
+		{name: "local only", value: "local", oauth: oauth, want: loginMethods{local: true}, set: true},
+		{name: "local without oauth config", value: "local", oauth: nil, want: loginMethods{local: true}, set: true},
+		{name: "oauth only", value: "oauth", oauth: oauth, want: loginMethods{oauth: true}, set: true},
+		{name: "both", value: "local,oauth", oauth: oauth, want: loginMethods{local: true, oauth: true}, set: true},
+		{name: "case and spaces", value: " OAuth , Local ", oauth: oauth, want: loginMethods{local: true, oauth: true}, set: true},
+		{name: "oauth without config", value: "oauth", oauth: nil, wantErr: true},
+		{name: "unknown method", value: "ldap", oauth: oauth, wantErr: true},
+		{name: "empty entry", value: "local,", oauth: oauth, wantErr: true},
+		{name: "auto in list", value: "auto,local", oauth: oauth, wantErr: true},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AUTH_METHODS", tc.value)
+			got, set, err := loadLoginMethods(tc.oauth)
+			if tc.wantErr {
+				if err == nil {
+					t.Fatal("invalid AUTH_METHODS was accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != tc.want {
+				t.Errorf("methods = %+v, want %+v", got, tc.want)
+			}
+			if set != tc.set {
+				t.Errorf("methodsSet = %v, want %v", set, tc.set)
+			}
+		})
+	}
+}
+
+func TestLocalOnlyDisablesOAuth(t *testing.T) {
+	srv := testOAuthServer(t, "https://forum.test/api/oauth2/token", "https://forum.test/api/me/")
+	srv.cfg.loginMethods = loginMethods{local: true}
+	srv.cfg.loginMethodsSet = true
+	srv.cfg.oauthAutoRedirect = true
+
+	req := httptest.NewRequest(http.MethodGet, "/login?next=/karte.html", nil)
+	rec := httptest.NewRecorder()
+	srv.login(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body := rec.Body.String()
+	if strings.Contains(body, "Anmeldung über Velomobil-Forum") {
+		t.Fatal("OAuth login button is present although oauth is disabled")
+	}
+	if !strings.Contains(body, `<form method="post" action="/login">`) {
+		t.Fatal("local login form is missing")
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/auth/forum/login?next=/karte.html", nil)
+	rec = httptest.NewRecorder()
+	srv.oauthLogin(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if got, want := rec.Header().Get("Location"), "/login?local=1&next=%2Fkarte.html"; got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
+	}
+}
+
+func TestOAuthOnlyDisablesLocalLogin(t *testing.T) {
+	srv := testOAuthServer(t, "https://forum.test/api/oauth2/token", "https://forum.test/api/me/")
+	srv.cfg.loginMethods = loginMethods{oauth: true}
+	srv.cfg.loginMethodsSet = true
+
+	req := httptest.NewRequest(http.MethodGet, "/login?local=1&loggedout=1", nil)
+	rec := httptest.NewRecorder()
+	srv.login(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Anmeldung über Velomobil-Forum") {
+		t.Fatal("OAuth login button is missing")
+	}
+	if strings.Contains(body, `<form method="post" action="/login">`) {
+		t.Fatal("local login form is present although local login is disabled")
+	}
+	if !strings.Contains(body, "Du wurdest abgemeldet.") {
+		t.Fatal("logout message is missing")
+	}
+
+	form := url.Values{"username": {"vmkarte"}, "password": {"secret"}}
+	req = httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec = httptest.NewRecorder()
+	srv.login(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+	if findCookie(rec.Result().Cookies(), srv.cfg.cookieName) != nil {
+		t.Fatal("session cookie was set although local login is disabled")
+	}
+}
+
+func TestOAuthOnlyAutoRedirectIgnoresLocalFlag(t *testing.T) {
+	srv := testOAuthServer(t, "https://forum.test/api/oauth2/token", "https://forum.test/api/me/")
+	srv.cfg.loginMethods = loginMethods{oauth: true}
+	srv.cfg.loginMethodsSet = true
+	srv.cfg.oauthAutoRedirect = true
+
+	req := httptest.NewRequest(http.MethodGet, "/login?local=1&next=/karte.html", nil)
+	rec := httptest.NewRecorder()
+	srv.login(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusSeeOther)
+	}
+	if got, want := rec.Header().Get("Location"), "/auth/forum/login?next=%2Fkarte.html"; got != want {
+		t.Fatalf("Location = %q, want %q", got, want)
+	}
+}

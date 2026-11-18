@@ -35,6 +35,9 @@ services:
     environment:
       PASSWORD_FILE: /run/secrets/htpasswd
       SESSION_KEY_FILE: /run/secrets/session_signing_key
+      # Optional: Login-Methoden einschränken.
+      # Erlaubt: auto (Default), local, oauth, local,oauth
+      # AUTH_METHODS: auto
       # Optional: Impressum und Datenschutz. Erst aktivieren, wenn
       # config/impressum.json und config/legal/*.html vorhanden sind.
       # IMPRINT_FILE: /run/secrets/imprint

@@ -88,6 +88,39 @@ secrets:
 `OAUTH_AUTO_REDIRECT` hat den Default `false`. Die Login-Seite erscheint dann
 mit OAuth-Button und lokalem Fallback.
 
+## Login-Methoden einschränken
+
+`AUTH_METHODS` legt fest, welche Anmeldewege der Auth-Service anbietet. Ohne
+die Variable bleibt das bisherige Verhalten erhalten.
+
+| Wert | Lokaler Login | OAuth |
+|---|---|---|
+| unset / `auto` | aktiv | nur bei vollständiger `OAUTH_*`-Konfiguration |
+| `local` | aktiv | aus, auch wenn `OAUTH_*` gesetzt ist |
+| `oauth` | aus | Pflicht; fehlende `OAUTH_*`-Konfiguration bricht den Start ab |
+| `local,oauth` | aktiv | Pflicht; beide Wege werden angeboten |
+
+Beispiele:
+
+```yaml
+services:
+  auth:
+    environment:
+      AUTH_METHODS: "oauth"   # nur Forum-Anmeldung
+```
+
+```yaml
+services:
+  auth:
+    environment:
+      AUTH_METHODS: "local"   # nur Benutzername/Passwort
+```
+
+Bei `AUTH_METHODS: "oauth"` zeigt `/login` zunächst eine Seite mit dem
+Forum-Button. Erst `OAUTH_AUTO_REDIRECT=true` leitet ohne Zwischenseite direkt
+zum Forum weiter. `?local=1` hat in diesem Modus keine Wirkung; der Logout
+zeigt dadurch weiterhin die Login-Seite mit dem OAuth-Button.
+
 ## nginx-Routen
 
 `docker/webserver/default.conf` enthält die öffentlichen Routen:
