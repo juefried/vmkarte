@@ -9,6 +9,7 @@ if str(APP_DIR) not in sys.path:
 
 from libs.location_mapping_rules_lib import (
     analyze_location_for_country,
+    analyze_location_for_postal_code,
     country_code_candidates,
     order_country_codes,
     prepare_location,
@@ -367,6 +368,20 @@ class LocationMappingTests(unittest.TestCase):
 
     def test_south_florida_maps_to_florida(self):
         self.assertEqual(prepare_location('south florida'), 'florida, usa')
+
+    def test_muenchen_nord_maps_to_postcode_area(self):
+        prepared = prepare_location('München Nord')
+        self.assertEqual(prepared, '80997 münchen')
+        self.assertEqual(analyze_location_for_postal_code(prepared), '80997')
+
+    def test_muenchen_nord_as_ascii_maps_to_postcode_area(self):
+        self.assertEqual(prepare_location('Muenchen Nord'), '80997 münchen')
+
+    def test_muenchen_nordfriedhof_is_not_rewritten(self):
+        self.assertEqual(
+            prepare_location('München Nordfriedhof'),
+            'münchen nordfriedhof',
+        )
 
     def test_stockholm_is_recognized_as_sweden(self):
         self.assertEqual(analyze_location_for_country('stockholm'), 'se')
