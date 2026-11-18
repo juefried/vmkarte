@@ -1,3 +1,4 @@
+html, body { overflow: hidden; }
 body { max-width: initial; margin: 0; padding: 0; }
 
 .leaflet-control-zoom a[href]	{ color: black; text-decoration: inherit; }	/* zoom buttons: black, instead of links */
