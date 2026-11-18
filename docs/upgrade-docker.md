@@ -21,7 +21,7 @@ Diese Anleitung beschreibt das Upgrade einer bestehenden Docker-Installation. Di
 - `precision` ist die Standard-Ortsauflösung. Die Crontab kann den Parameter weiterhin explizit nennen:
 
   ```cron
-  33 3 * * * sh -c 'cd /app && /usr/local/bin/python3 /app/data_grabber.py --location-strategy precision'
+  30 1 * * * sh -c 'cd /app && /usr/local/bin/python3 /app/data_grabber.py --location-strategy precision'
   ```
 
 - `--fast` entfällt (war ohnehin wirkungslos).
@@ -158,7 +158,7 @@ docker compose logs --tail=50 cron
 
 ## Ersten Lauf manuell auslösen
 
-Der Cronjob läuft regulär um 03:33 Uhr. Für das Upgrade kann der Lauf direkt im Container gestartet werden:
+Der Cronjob läuft regulär um 01:30 Uhr. Für das Upgrade kann der Lauf direkt im Container gestartet werden:
 
 ```bash
 docker compose exec cron python3 /app/data_grabber.py
