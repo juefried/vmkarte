@@ -84,6 +84,7 @@ def prepare_location(location: str) -> str:
     location = location.replace("black forest", "schwarzwald")
     location = location.replace("s-h", "schleswig-holstein")
     location = location.replace("b. münchen", "")
+    location = re.sub(r'\b(?:münchen|muenchen)[ -]+nord\b', '80997 münchen', location)
     location = location.replace("südhessen", "hessen")
     location = location.replace("nordhessen", "hessen")
     location = location.replace("ostbayern", "bayern")

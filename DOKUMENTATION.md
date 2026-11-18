@@ -561,7 +561,7 @@ Die Karte verwendet nicht die Wohnadresse, sondern die freiwillige Ortsangabe au
 
    - Kleinschreibung und Vereinheitlichung von Leerzeichen.
    - Entfernen führender Füllwörter wie `bei`, `nähe`, `nahe`, `von`, `in`, `im`, `der`.
-   - Ersetzen bekannter Sonderfälle, z. B. `black forest` → `schwarzwald`, `s-h` → `schleswig-holstein`, `südhessen` → `hessen`.
+   - Ersetzen bekannter Sonderfälle, z. B. `black forest` → `schwarzwald`, `s-h` → `schleswig-holstein`, `südhessen` → `hessen`, `München Nord` → `80997 münchen`.
    - `kreis` wird in bestimmten Kontexten zu `landkreis`; `großraum` und `umland` werden entfernt.
    - Kombinationen aus Postleitzahl und Kürzel werden über `kuerzel_mapping.json` aufgelöst, z. B. `90469 n` → `90469 nürnberg`.
    - Besteht die gesamte Angabe nur aus einem 1- bis 3-Buchstaben-Kürzel, wird sie ebenfalls über `kuerzel_mapping.json` ersetzt, z. B. `A` → `Augsburg`.
@@ -662,7 +662,7 @@ Die PLZ-Fläche umfasst in OSM auch den Ebersberger Forst. Deshalb liegt der PLZ
 - Guard: Das Classic-Ergebnis bleibt erhalten, wenn die neue Fläche nicht mit der alten überlappt,
 - Fallback auf die vollständige Angabe, wenn keine strukturierte Variante greift.
 
-Ortsnamen-Sonderkorrekturen stehen in `country_mapping.json` (z. B. `Stockholm` → Schweden) und in `prepare_location()` (z. B. `Franken` → Bayern, `South Florida` → Florida, USA).
+Ortsnamen-Sonderkorrekturen stehen in `country_mapping.json` (z. B. `Stockholm` → Schweden) und in `prepare_location()` (z. B. `Franken` → Bayern, `South Florida` → Florida, USA, `München Nord` → `80997 München`).
 
 `precision` ist Default; `classic` bleibt als Opt-out über `--location-strategy classic` verfügbar. Da sich die Verbesserung nicht automatisch messen lässt, wird sie über eine eingefrorene Baseline und viele manuelle Stichproben in der Karte bewertet.
 

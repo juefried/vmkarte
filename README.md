@@ -205,7 +205,7 @@ Der Report markiert zwei Signale:
 
 Der Guard ist standardmäßig `disjoint`: Er verwirft nur, wenn sich alter und neuer Bereich gar nicht überschneiden. `--precision-guard old-radius` ist strenger, `none` deaktiviert ihn beim Geocoding-Lauf.
 
-Ortsnamen-Korrekturen liegen in `libs/country_mapping.json` und in `prepare_location()` (`libs/location_mapping_rules_lib.py`), z. B. `Stockholm` → Schweden, `Franken` → Bayern, `South Florida` → Florida.
+Ortsnamen-Korrekturen liegen in `libs/country_mapping.json` und in `prepare_location()` (`libs/location_mapping_rules_lib.py`), z. B. `Stockholm` → Schweden, `Franken` → Bayern, `South Florida` → Florida, `München Nord` → `80997 München`.
 
 Für den Radius wird standardmäßig der **klassisch abgeleitete Radius des neuen OSM-Objekts** mit dem alten Radius verglichen (`radius_basis=derived`). Damit erzeugt die geänderte Radiusformel keine Fehlalarme. Ist der klassische Radius nicht ableitbar, wird der Karten-Radius verwendet (`radius_basis=map`); der Report weist die Basis pro Zeile aus.
 
