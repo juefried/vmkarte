@@ -195,6 +195,7 @@ services:
     environment:
       PASSWORD_FILE: /run/secrets/htpasswd
       SESSION_KEY_FILE: /run/secrets/session_signing_key
+      # AUTH_METHODS: auto
     secrets:
       - htpasswd
       - session_signing_key
@@ -219,6 +220,12 @@ secrets:
   session_signing_key:
     file: ./config/session_signing_key
 ```
+
+`AUTH_METHODS` steuert, welche Anmeldewege der Auth-Service anbietet. Ohne
+die Variable (`auto`) bleibt das bisherige Verhalten erhalten: lokaler Login
+ist immer aktiv, OAuth nur bei vollständig gesetzter `OAUTH_*`-Konfiguration.
+Erlaubte Werte: `local`, `oauth`, `local,oauth`. Details siehe
+`docs/upgrade-3.0-oauth.md`.
 
 `auth` bleibt ausschließlich im `default`-Netz. `web` ist in `default` und
 `traefik_proxy`; daher funktioniert `proxy_pass http://auth:8080`.
