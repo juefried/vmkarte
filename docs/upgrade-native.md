@@ -28,7 +28,7 @@ Diese Anleitung beschreibt das Upgrade einer Installation, bei der der Datengrab
 
   ```cron
   VMKARTE_SHARED_DIR=/var/www/vmforum-karte/shared
-  33 3 * * * cd /pfad/zu/vmkarte/src/data_grabber && /pfad/zu/venv/bin/python data_grabber.py --location-strategy precision
+  30 1 * * * cd /pfad/zu/vmkarte/src/data_grabber && /pfad/zu/venv/bin/python data_grabber.py --location-strategy precision
   ```
 
   systemd entsprechend `ExecStart=.../data_grabber.py --location-strategy precision`.
@@ -166,7 +166,7 @@ Die Variable muss in der Umgebung des Cron-/systemd-Laufs gesetzt sein. Beispiel
 
 ```cron
 VMKARTE_SHARED_DIR=/var/www/vmforum-karte/shared
-33 3 * * * cd /pfad/zu/vmkarte/src/data_grabber && /pfad/zu/venv/bin/python data_grabber.py --location-strategy precision
+30 1 * * * cd /pfad/zu/vmkarte/src/data_grabber && /pfad/zu/venv/bin/python data_grabber.py --location-strategy precision
 ```
 
 ```ini

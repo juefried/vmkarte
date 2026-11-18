@@ -371,7 +371,7 @@ Es gibt bewusst kein Fuzzy-Matching. Ähnliche, aber unterschiedliche Modellname
   - `src/data_grabber/cache_config.json` → `/app/cache_config.json` (Default, wird durch den Compose-Mount überschrieben)
 - **Kopiert bewusst nicht** `members.json` oder `vmforum_members.json`. Beide Dateien sind Laufzeitartefakte: `members.json` entsteht durch `get_member_data()`, `vmforum_members.json` durch `examine_locations()`.
 - Voraussetzung dafür ist, dass der Scraper aktiv ist. Das ist seit der Rückkehr zum Masterstand wieder der Fall; siehe Befund C.
-- Cronjob: täglich 03:33 Uhr, `cd /app && python3 /app/data_grabber.py --location-strategy precision` (`docker/cron/crontab:5`). `--fast` entfällt; die Kartenauflösung nutzt die Precision-Strategie mit dem Default-Guard `disjoint`. Der explizite Parameter ist seit dem Default-Wechsel redundant, bleibt aber zur Klarheit in der Crontab. Die erste Ausführung füllt den Precision-Cache und kann mehrere Stunden dauern.
+- Cronjob: täglich 01:30 Uhr, `cd /app && python3 /app/data_grabber.py --location-strategy precision` (`docker/cron/crontab:5`). `--fast` entfällt; die Kartenauflösung nutzt die Precision-Strategie mit dem Default-Guard `disjoint`. Der explizite Parameter ist seit dem Default-Wechsel redundant, bleibt aber zur Klarheit in der Crontab. Die erste Ausführung füllt den Precision-Cache und kann mehrere Stunden dauern.
 
 **Web-Container** (`docker/webserver`)
 
@@ -983,7 +983,7 @@ Geplanter Betrieb: ein Server im Docker-Container, ein zweiter Server direkt auf
 **Konsequenzen:**
 
 - Jede Instanz benötigt eine eigene `config.json`, ein eigenes `cache/`-Verzeichnis und ein beschreibbares Ausgabeverzeichnis. Die Caches werden **nicht** zwischen den Servern geteilt.
-- Der jeweils erste Lauf ist teuer: ca. 345 Mitgliederseiten plus bis zu ca. 6.900 Profilabrufe. Die Laufzeiten sollten versetzt starten (z. B. 03:33 und 04:33), damit Forum und Nominatim nicht gleichzeitig belastet werden.
+- Der jeweils erste Lauf ist teuer: ca. 345 Mitgliederseiten plus bis zu ca. 6.900 Profilabrufe. Die Laufzeiten sollten versetzt starten (z. B. 01:30 und 02:30), damit Forum und Nominatim nicht gleichzeitig belastet werden.
 - Beide Instanzen benötigen einen API-Key mit Lesezugriff auf Mitgliederliste und Profile. Ob derselbe Key auf beiden Servern verwendet werden darf, muss mit dem Forenbetreiber geklärt werden; die Läufe sollten zeitlich versetzt starten, um die API nicht gleichzeitig zu belasten.
 - Damit der Cache die Laufzeit tatsächlich reduziert, müssen die TTLs größer als das jeweilige Cron-Intervall sein. `user_details` (Default 7–14 Tage) und `nominatim` (Default 180–365 Tage) tun das. `members_dict` (23 h) ist bewusst eine Entwicklungshilfe und im täglichen Cron-Betrieb wirkungslos.
 - Beide Server sollten dieselbe `cache_config.json` verwenden, damit die Lastverteilung vergleichbar ist. Die zufällige TTL glättet die Profilabrufe über die Zeit, statt sie in einem 14-Tage-Burst zu bündeln.
