@@ -1024,6 +1024,7 @@ func (s *server) login(w http.ResponseWriter, r *http.Request) {
 		}
 		localRequested := r.URL.Query().Get("local") == "1" && s.localLoginEnabled()
 		if s.cfg.oauthAutoRedirect && s.oauthLoginEnabled() &&
+			r.URL.Query().Get("loggedout") != "1" &&
 			!localRequested && r.URL.Query().Get("error") == "" {
 			http.Redirect(w, r, "/auth/forum/login?next="+url.QueryEscape(next), http.StatusSeeOther)
 			return

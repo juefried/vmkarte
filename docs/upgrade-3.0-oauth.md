@@ -118,8 +118,10 @@ services:
 
 Bei `AUTH_METHODS: "oauth"` zeigt `/login` zunächst eine Seite mit dem
 Forum-Button. Erst `OAUTH_AUTO_REDIRECT=true` leitet ohne Zwischenseite direkt
-zum Forum weiter. `?local=1` hat in diesem Modus keine Wirkung; der Logout
-zeigt dadurch weiterhin die Login-Seite mit dem OAuth-Button.
+zum Forum weiter. `?local=1` hat in diesem Modus keine Wirkung. Nach dem
+Logout (`?loggedout=1`) wird die Login-Seite auch bei
+`OAUTH_AUTO_REDIRECT=true` angezeigt; erst ein Klick auf den Forum-Button
+startet die erneute Anmeldung.
 
 ## nginx-Routen
 

@@ -946,3 +946,28 @@ func TestOAuthOnlyAutoRedirectIgnoresLocalFlag(t *testing.T) {
 		t.Fatalf("Location = %q, want %q", got, want)
 	}
 }
+
+func TestOAuthOnlyAutoRedirectAfterLogoutShowsLoginPage(t *testing.T) {
+	srv := testOAuthServer(t, "https://forum.test/api/oauth2/token", "https://forum.test/api/me/")
+	srv.cfg.loginMethods = loginMethods{oauth: true}
+	srv.cfg.loginMethodsSet = true
+	srv.cfg.oauthAutoRedirect = true
+
+	req := httptest.NewRequest(http.MethodGet, "/login?local=1&loggedout=1", nil)
+	rec := httptest.NewRecorder()
+	srv.login(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusOK)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Du wurdest abgemeldet.") {
+		t.Fatal("logout message is missing")
+	}
+	if !strings.Contains(body, "Anmeldung über Velomobil-Forum") {
+		t.Fatal("OAuth login button is missing")
+	}
+	if strings.Contains(body, `<form method="post" action="/login">`) {
+		t.Fatal("local login form is present although local login is disabled")
+	}
+}
